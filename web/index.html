@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Adi Jaya Cashier - Sistem POS Toko Bangunan by Al Yafi">
+  <title>Adi Jaya Cashier</title>
+  <style>
+    body { background-color: #0F1117; margin: 0; padding: 0; }
+    #loading {
+      display: flex; justify-content: center; align-items: center;
+      height: 100vh; flex-direction: column; color: #FF6B1A;
+      font-family: 'Segoe UI', sans-serif; gap: 16px;
+    }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 3px solid #2C3045;
+      border-top-color: #FF6B1A;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .logo { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+    .sub  { font-size: 13px; color: #9DA3C0; }
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <div class="spinner"></div>
+    <div class="logo">🔧 Adi Jaya Cashier</div>
+    <div class="sub">Memuat sistem kasir...</div>
+  </div>
+
+  <script src="flutter_bootstrap.js" async></script>
+
+  <script>
+    window.addEventListener('flutter-first-frame', function() {
+      document.getElementById('loading').style.display = 'none';
+    });
+  </script>
+</body>
+</html>
