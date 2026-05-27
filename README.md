@@ -1,38 +1,129 @@
-## KonstrukPOS - Construction Store POS System
+# 🔧 KonstrukPOS (Web + Desktop)
 
-**KonstrukPOS** is a modern Point of Sale (POS) application built specifically for construction supply stores and hardware businesses. The system helps streamline sales transactions, inventory management, product tracking, and daily store operations within a single integrated platform. Humanity somehow managed to build skyscrapers before figuring out organized stock management. Inspiring species, truly.
+POS System profesional untuk toko bangunan — Flutter + Hive + Riverpod.
 
-Built with a clean and responsive interface, KonstrukPOS runs on both desktop and web platforms, making it suitable for cashiers, warehouse staff, and business owners alike.
+## ✨ Stack Teknologi
 
-### Key Features
+| Layer | Teknologi |
+|-------|-----------|
+| UI Framework | Flutter 3.x |
+| State Management | Riverpod 2.x |
+| Database Lokal | **Hive** (NoSQL, web + desktop compatible) |
+| Platform | Web (Chrome/Edge) · Windows · macOS · Linux |
 
-* Fast and intuitive cashier system
-* Product and category management
-* Real-time inventory monitoring
-* Low-stock alerts and notifications
-* Transaction history tracking
-* Interactive shopping cart system
-* Daily sales dashboard and analytics
-* Multi-platform support (Web & Desktop)
-* Modern UI with lightweight performance
+## 🚀 Cara Menjalankan
 
-### Technology Stack
+### Prasyarat
+```bash
+flutter --version  # >= 3.10.0
+```
 
-* **Flutter** for cross-platform development
-* **Riverpod** for state management
-* **Local Database Integration** for offline-capable storage
-* Modular and scalable architecture
+### Run di Web (Chrome)
+```bash
+cd konstrukpos
+flutter pub get
+flutter run -d chrome
+```
 
-### Suitable For
+### Run di Desktop (Windows/macOS/Linux)
+```bash
+flutter config --enable-windows-desktop  # atau macos / linux
+flutter run -d windows
+```
 
-KonstrukPOS is ideal for:
+### Build Web Production
+```bash
+flutter build web --release
+# Output: build/web/  → deploy ke Nginx / Firebase Hosting / Vercel
+```
 
-* Construction material stores
-* Hardware and tools shops
-* Building supply distributors
-* Warehouses and inventory centers
-* Construction-related SMEs
+### Build Windows EXE
+```bash
+flutter build windows --release
+# Output: build/windows/x64/runner/Release/konstrukpos.exe
+```
 
-### Development Purpose
+## 📁 Struktur Project
 
-KonstrukPOS was developed to modernize and simplify operational workflows in construction retail businesses through digitalized sales and inventory systems. The application enables business owners to monitor transactions, stock movement, and store performance more efficiently, accurately, and professionally. Because eventually every growing shop reaches the point where “remembering everything manually” becomes a horror genre.
+```
+lib/
+├── core/
+│   ├── constants/    # AppConstants, AppRoutes
+│   ├── errors/       # AppException hierarchy
+│   ├── theme/        # AppTheme, AppColors (dark industrial)
+│   └── utils/        # Formatters (IDR), DecimalUtils
+├── data/
+│   └── hive/
+│       ├── hive_models.dart    # HiveProduct, HiveTransaction + TypeAdapters
+│       └── hive_service.dart   # CRUD ops, seed data, ID counters
+├── features/
+│   ├── cashier/       # Halaman kasir, cart state
+│   ├── inventory/     # Manajemen stok, penyesuaian stok
+│   ├── payment/       # Dialog pembayaran, riwayat transaksi
+│   ├── products/      # CRUD produk, multi-satuan
+│   └── settings/      # Info toko, statistik
+├── shared/
+│   └── widgets/       # Sidebar, CommonWidgets, DataTable, BarcodeListener
+├── app_shell.dart     # Root layout + routing
+└── main.dart          # Init Hive + seed + ProviderScope
+```
+
+## 🗄️ Hive Database
+
+### Box Registry
+| Box Name | Type | Isi |
+|----------|------|-----|
+| `products` | `Box<HiveProduct>` | Semua produk + unit satuan |
+| `transactions` | `Box<HiveTransaction>` | Semua transaksi + item |
+| `meta` | `Box<dynamic>` | ID counters, seed flag |
+
+### TypeAdapter IDs
+| typeId | Class |
+|--------|-------|
+| 0 | HiveProductUnit |
+| 1 | HiveProduct |
+| 2 | HiveTransactionItem |
+| 3 | HiveTransaction |
+
+> ⚠️ Jangan ubah typeId — akan merusak data tersimpan.
+
+## 🔄 Multi-Unit System
+
+```
+Semen Portland (base: kg)
+  ├── kg     → Rp 1.800   (ratio = 1)
+  └── sak    → Rp 75.000  (ratio = 40, 1 sak = 40 kg)
+
+Tali Tambang (base: meter)
+  ├── meter  → Rp 8.500   (ratio = 1)
+  └── roll   → Rp 400.000 (ratio = 50, 1 roll = 50 meter)
+```
+
+Saat checkout, stok dikurangi dalam satuan dasar:
+`stok_dikurangi = qty × conversion_ratio`
+
+## 🎨 Design Tokens
+
+| Token | Hex |
+|-------|-----|
+| Background | `#0F1117` |
+| Surface | `#1A1D27` |
+| Primary (Orange) | `#FF6B1A` |
+| Text Primary | `#F0F2FF` |
+| Success | `#2ECC71` |
+| Warning | `#F39C12` |
+| Error | `#E74C3C` |
+
+## 🐛 FAQ
+
+**Q: Data hilang saat refresh browser?**  
+A: Hive di web menyimpan di IndexedDB browser — data persisten. Jangan clear site data.
+
+**Q: Ganti nama toko?**  
+A: Edit `lib/core/constants/app_constants.dart` → `storeName`, `storeAddress`, `storePhone`.
+
+**Q: Reset semua data?**  
+A: Di browser: DevTools → Application → IndexedDB → hapus `hive`. Di desktop: hapus folder `hive/` di AppData.
+
+**Q: Tambah kategori baru?**  
+A: Edit `AppConstants.categories` di `app_constants.dart`.
