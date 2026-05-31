@@ -1,0 +1,33 @@
+name: konstruksi_pos
+description: Construction Tools POS System
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.1.0 <4.0.0'
+  flutter: '>=3.13.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  firebase_core: ^3.8.0
+  cloud_firestore: ^5.6.12
+  flutter_riverpod: ^3.3.1
+  intl: ^0.20.2
+  uuid: ^4.4.0
+  google_fonts: ^6.2.1
+  fl_chart: 1.0.0
+  collection: ^1.18.0
+  file_picker: ^8.1.7
+  excel: ^4.0.6
+  shared_preferences: ^2.5.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
