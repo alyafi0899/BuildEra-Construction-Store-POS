@@ -297,6 +297,6 @@ For issues, questions, or suggestions:
 
 ---
 
-**Developed by**: [Your Team]  
+**Developed by**: Al Yafi alongside with Claude coding Agent haha
 **Last Updated**: 2026-06-01  
 **Repository**: https://github.com/alyafi0899/Construction-Store-Pos
