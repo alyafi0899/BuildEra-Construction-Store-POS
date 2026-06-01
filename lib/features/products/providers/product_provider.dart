@@ -21,17 +21,70 @@ class ProductRepository {
   }
 
   Future<void> saveProduct(Product p, List<ProductUnit> units) async {
+    // 1. Check for duplicate barcode (if provided)
+    if (p.barcode != null && p.barcode!.trim().isNotEmpty) {
+      final dupBarcode = await _db.collection('products')
+          .where('barcode', isEqualTo: p.barcode!.trim())
+          .limit(1)
+          .get();
+      if (dupBarcode.docs.isNotEmpty && dupBarcode.docs.first.id != p.id) {
+        throw 'Barcode "${p.barcode}" sudah digunakan oleh produk lain';
+      }
+    }
+    
+    // 2. Check for duplicate name (case-insensitive check is hard in Firestore, usually names are unique-ish)
+    final dupName = await _db.collection('products')
+        .where('name', isEqualTo: p.name.trim())
+        .limit(1)
+        .get();
+    if (dupName.docs.isNotEmpty && dupName.docs.first.id != p.id) {
+      throw 'Produk dengan nama "${p.name}" sudah ada';
+    }
+
     final data = p.toMap();
     data['units'] = units.map((u) => u.toMap()).toList();
     await _db.collection('products').doc(p.id).set(data);
   }
 
   Future<void> saveProductsBatch(List<Map<Product, List<ProductUnit>>> productsWithUnits) async {
+    // To prevent duplicates during batch import, we fetch current state first
+    final existing = await getAllProducts();
+    final existingBarcodes = existing.map((e) => e.barcode?.trim()).whereType<String>().toSet();
+    final existingNames = existing.map((e) => e.name.trim().toLowerCase()).toSet();
+
+    final toImport = <Map<Product, List<ProductUnit>>>[];
+    final seenBarcodesInBatch = <String>{};
+    final seenNamesInBatch = <String>{};
+
+    for (final item in productsWithUnits) {
+      final p = item.keys.first;
+      final nameLower = p.name.trim().toLowerCase();
+      final barcode = p.barcode?.trim();
+
+      // Check if duplicate name
+      if (existingNames.contains(nameLower) || seenNamesInBatch.contains(nameLower)) {
+        continue; // Skip duplicates
+      }
+      
+      // Check if duplicate barcode
+      if (barcode != null && barcode.isNotEmpty) {
+        if (existingBarcodes.contains(barcode) || seenBarcodesInBatch.contains(barcode)) {
+          continue; // Skip duplicates
+        }
+        seenBarcodesInBatch.add(barcode);
+      }
+      
+      seenNamesInBatch.add(nameLower);
+      toImport.add(item);
+    }
+
+    if (toImport.isEmpty) return;
+
     // Firestore batch limit is 500
     const int batchSize = 500;
-    for (var i = 0; i < productsWithUnits.length; i += batchSize) {
-      final end = (i + batchSize < productsWithUnits.length) ? i + batchSize : productsWithUnits.length;
-      final chunk = productsWithUnits.sublist(i, end);
+    for (var i = 0; i < toImport.length; i += batchSize) {
+      final end = (i + batchSize < toImport.length) ? i + batchSize : toImport.length;
+      final chunk = toImport.sublist(i, end);
       
       final batch = _db.batch();
       for (final item in chunk) {
