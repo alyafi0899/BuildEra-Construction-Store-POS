@@ -4,7 +4,10 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/models/transaction.dart';
 import '../../../../shared/widgets/common_widgets.dart';
+import '../../../../core/utils/invoice_helper.dart';
+import '../../../settings/providers/settings_provider.dart';
 import '../../providers/transaction_provider.dart';
+import '../../../cashier/models/cart_item.dart';
 
 class TransactionsPage extends ConsumerStatefulWidget {
   const TransactionsPage({super.key});
@@ -136,18 +139,33 @@ class _TxCard extends StatelessWidget {
   }
 }
 
-class _TxDetail extends StatelessWidget {
+class _TxDetail extends ConsumerWidget {
   final Transaction tx;
   const _TxDetail({required this.tx});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+
     return Column(children: [
       Container(
         padding: const EdgeInsets.all(20),
         decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppTheme.border))),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Detail Transaksi', style: Theme.of(context).textTheme.titleLarge),
+          Row(
+            children: [
+              Text('Detail Transaksi', style: Theme.of(context).textTheme.titleLarge),
+              const Spacer(),
+              IconButton(
+                onPressed: () => InvoiceHelper.printInvoice(tx, settings),
+                icon: const Icon(Icons.print_rounded, size: 20, color: AppTheme.accent),
+              ),
+              IconButton(
+                onPressed: () => InvoiceHelper.shareInvoice(tx, settings),
+                icon: const Icon(Icons.share_rounded, size: 20, color: AppTheme.accent),
+              ),
+            ],
+          ),
           const SizedBox(height: 4),
           Text(tx.invoiceNumber,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontFamily: 'monospace', color: AppTheme.accent)),
@@ -160,33 +178,72 @@ class _TxDetail extends StatelessWidget {
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (tx.customerName != null) ...[
+                _infoRow(context, 'Pelanggan', tx.customerName!),
+                const SizedBox(height: 4),
+              ],
+              _infoRow(context, 'Kasir', tx.cashierName ?? 'Admin'),
+              const Divider(color: AppTheme.border, height: 32),
+              
               Text('Item', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppTheme.accent)),
               const SizedBox(height: 12),
               ...tx.items.map((item) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: Row(children: [
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(item.productName, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13)),
-                    Text('${Formatters.decimal(item.quantity)} ${item.unitName} × ${Formatters.currency(item.unitPrice)}',
-                        style: Theme.of(context).textTheme.bodySmall),
-                  ])),
-                  Text(Formatters.currency(item.subtotal), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13)),
-                ]),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Expanded(child: Text(item.productName, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13))),
+                      Text(Formatters.currency(item.subtotal), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13)),
+                    ]),
+                    Row(children: [
+                      Text('${Formatters.decimal(item.quantity)} ${item.unitName} × ${Formatters.currency(item.soldPrice)}',
+                          style: Theme.of(context).textTheme.bodySmall),
+                      const Spacer(),
+                      if (item.soldPrice != item.originalPrice)
+                        Text('(Harga Kurang)', style: const TextStyle(color: AppTheme.warning, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ]),
+                    if (item.discountValue > 0)
+                      Text('Potongan Item: -${Formatters.currency(item.discountValue)}${item.discountType == DiscountType.percentage ? '%' : ''}',
+                          style: const TextStyle(color: AppTheme.success, fontSize: 10)),
+                  ],
+                ),
               )),
+              
               const Divider(color: AppTheme.border, height: 24),
-              _row(context, 'Subtotal', Formatters.currency(tx.subtotal)),
-              if (tx.discount > 0) _row(context, 'Diskon', '- ${Formatters.currency(tx.discount)}', AppTheme.success),
-              if (tx.taxAmount > 0) _row(context, 'PPN', Formatters.currency(tx.taxAmount)),
+              _row(context, 'Subtotal Item', Formatters.currency(tx.subtotal)),
+              if (tx.itemDiscountTotal > 0) 
+                _row(context, 'Total Pot. Item', '- ${Formatters.currency(tx.itemDiscountTotal)}', AppTheme.success),
+              if (tx.transDiscountAmount > 0) 
+                _row(context, 'Diskon Transaksi', '- ${Formatters.currency(tx.transDiscountAmount)}', AppTheme.success),
+              if (tx.taxAmount > 0) 
+                _row(context, 'PPN (11%)', Formatters.currency(tx.taxAmount)),
+                
               const SizedBox(height: 8),
-              _row(context, 'TOTAL', Formatters.currency(tx.total), AppTheme.accent),
+              _row(context, 'TOTAL', Formatters.currency(tx.total), AppTheme.accent, true),
+              
               const Divider(color: AppTheme.border, height: 24),
               _row(context, 'Metode', tx.paymentMethod),
               _row(context, 'Dibayar', Formatters.currency(tx.amountPaid)),
               _row(context, 'Kembalian', Formatters.currency(tx.changeAmount), AppTheme.success),
+              
+              if (tx.notes != null) ...[
+                const Divider(color: AppTheme.border, height: 24),
+                Text('Catatan:', style: Theme.of(context).textTheme.bodySmall),
+                Text(tx.notes!, style: Theme.of(context).textTheme.bodyMedium),
+              ],
             ]),
           ),
         ),
       ),
+    ]);
+  }
+
+  Widget _infoRow(BuildContext context, String label, String value) {
+    return Row(children: [
+      Text('$label:', style: Theme.of(context).textTheme.bodySmall),
+      const SizedBox(width: 8),
+      Text(value, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
     ]);
   }
 

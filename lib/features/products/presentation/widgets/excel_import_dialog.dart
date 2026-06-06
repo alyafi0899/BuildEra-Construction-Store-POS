@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
@@ -69,6 +68,7 @@ class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
             name: name,
             category: category,
             barcode: barcode,
+            costPrice: 0, // Default to 0 on import if not in excel
             basePrice: basePrice,
             baseUnit: baseUnit,
             stock: stock,

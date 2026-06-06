@@ -1,3 +1,5 @@
+import '../../features/cashier/models/cart_item.dart';
+
 class TransactionItem {
   final String id;
   final String transactionId;
@@ -6,7 +8,11 @@ class TransactionItem {
   final String unitName;
   final double conversionRate;
   final double quantity;
-  final double unitPrice;
+  final double costPrice;
+  final double originalPrice;
+  final double soldPrice;
+  final double discountValue;
+  final DiscountType discountType;
   final double subtotal;
 
   const TransactionItem({
@@ -17,7 +23,11 @@ class TransactionItem {
     required this.unitName,
     required this.conversionRate,
     required this.quantity,
-    required this.unitPrice,
+    required this.costPrice,
+    required this.originalPrice,
+    required this.soldPrice,
+    required this.discountValue,
+    required this.discountType,
     required this.subtotal,
   });
 
@@ -29,7 +39,11 @@ class TransactionItem {
         unitName:       m['unit_name'] as String,
         conversionRate: (m['conversion_rate'] as num).toDouble(),
         quantity:       (m['quantity'] as num).toDouble(),
-        unitPrice:      (m['unit_price'] as num).toDouble(),
+        costPrice:      (m['cost_price'] as num? ?? 0).toDouble(),
+        originalPrice:  (m['original_price'] as num? ?? m['unit_price'] ?? 0).toDouble(),
+        soldPrice:      (m['sold_price'] as num? ?? m['unit_price'] ?? 0).toDouble(),
+        discountValue:  (m['discount_value'] as num? ?? 0).toDouble(),
+        discountType:   DiscountType.values.firstWhere((e) => e.name == (m['discount_type'] ?? 'fixed'), orElse: () => DiscountType.fixed),
         subtotal:       (m['subtotal'] as num).toDouble(),
       );
 
@@ -41,7 +55,11 @@ class TransactionItem {
         'unit_name':       unitName,
         'conversion_rate': conversionRate,
         'quantity':        quantity,
-        'unit_price':      unitPrice,
+        'cost_price':      costPrice,
+        'original_price':  originalPrice,
+        'sold_price':      soldPrice,
+        'discount_value':  discountValue,
+        'discount_type':   discountType.name,
         'subtotal':        subtotal,
       };
 }
@@ -49,8 +67,13 @@ class TransactionItem {
 class Transaction {
   final String id;
   final String invoiceNumber;
-  final double subtotal;
-  final double discount;
+  final String? customerName;
+  final String? cashierName;
+  final double subtotal; // Sum of items subtotal
+  final double itemDiscountTotal; // Total of all item-level discounts
+  final double transDiscountValue;
+  final DiscountType transDiscountType;
+  final double transDiscountAmount;
   final double taxRate;
   final double taxAmount;
   final double total;
@@ -64,8 +87,13 @@ class Transaction {
   const Transaction({
     required this.id,
     required this.invoiceNumber,
+    this.customerName,
+    this.cashierName,
     required this.subtotal,
-    required this.discount,
+    required this.itemDiscountTotal,
+    required this.transDiscountValue,
+    required this.transDiscountType,
+    required this.transDiscountAmount,
     required this.taxRate,
     required this.taxAmount,
     required this.total,
@@ -79,33 +107,43 @@ class Transaction {
 
   factory Transaction.fromMap(Map<String, dynamic> m, {List<TransactionItem> items = const []}) =>
       Transaction(
-        id:            m['id'] as String,
-        invoiceNumber: m['invoice_number'] as String,
-        subtotal:      (m['subtotal'] as num).toDouble(),
-        discount:      (m['discount'] as num).toDouble(),
-        taxRate:       (m['tax_rate'] as num).toDouble(),
-        taxAmount:     (m['tax_amount'] as num).toDouble(),
-        total:         (m['total'] as num).toDouble(),
-        paymentMethod: m['payment_method'] as String,
-        amountPaid:    (m['amount_paid'] as num).toDouble(),
-        changeAmount:  (m['change_amount'] as num).toDouble(),
-        notes:         m['notes'] as String?,
-        createdAt:     DateTime.parse(m['created_at'] as String),
-        items:         items,
+        id:                 m['id'] as String,
+        invoiceNumber:      m['invoice_number'] as String,
+        customerName:       m['customer_name'] as String?,
+        cashierName:        m['cashier_name'] as String?,
+        subtotal:           (m['subtotal'] as num).toDouble(),
+        itemDiscountTotal:  (m['item_discount_total'] as num? ?? 0).toDouble(),
+        transDiscountValue: (m['trans_discount_value'] as num? ?? m['discount'] ?? 0).toDouble(),
+        transDiscountType:  DiscountType.values.firstWhere((e) => e.name == (m['trans_discount_type'] ?? 'fixed'), orElse: () => DiscountType.fixed),
+        transDiscountAmount:(m['trans_discount_amount'] as num? ?? m['discount'] ?? 0).toDouble(),
+        taxRate:            (m['tax_rate'] as num).toDouble(),
+        taxAmount:          (m['tax_amount'] as num).toDouble(),
+        total:              (m['total'] as num).toDouble(),
+        paymentMethod:      m['payment_method'] as String,
+        amountPaid:         (m['amount_paid'] as num).toDouble(),
+        changeAmount:       (m['change_amount'] as num).toDouble(),
+        notes:              m['notes'] as String?,
+        createdAt:          DateTime.parse(m['created_at'] as String),
+        items:              items,
       );
 
   Map<String, dynamic> toMap() => {
-        'id':             id,
-        'invoice_number': invoiceNumber,
-        'subtotal':       subtotal,
-        'discount':       discount,
-        'tax_rate':       taxRate,
-        'tax_amount':     taxAmount,
-        'total':          total,
-        'payment_method': paymentMethod,
-        'amount_paid':    amountPaid,
-        'change_amount':  changeAmount,
-        'notes':          notes,
-        'created_at':     createdAt.toIso8601String(),
+        'id':                    id,
+        'invoice_number':        invoiceNumber,
+        'customer_name':         customerName,
+        'cashier_name':          cashierName,
+        'subtotal':              subtotal,
+        'item_discount_total':   itemDiscountTotal,
+        'trans_discount_value':  transDiscountValue,
+        'trans_discount_type':   transDiscountType.name,
+        'trans_discount_amount': transDiscountAmount,
+        'tax_rate':              taxRate,
+        'tax_amount':            taxAmount,
+        'total':                 total,
+        'payment_method':        paymentMethod,
+        'amount_paid':           amountPaid,
+        'change_amount':         changeAmount,
+        'notes':                 notes,
+        'created_at':            createdAt.toIso8601String(),
       };
 }

@@ -50,21 +50,23 @@ class AnalyticsPage extends ConsumerWidget {
                         label:   'Total Pendapatan',
                         value:   Formatters.currency(summary.totalRevenue),
                         icon:    Icons.attach_money_rounded,
-                        subtitle: 'Semua waktu',
+                        subtitle: 'Omzet Gross',
                       )),
                       const SizedBox(width: 16),
                       Expanded(child: StatCard(
-                        label:       'Total Transaksi',
-                        value:       summary.totalTransactions.toString(),
-                        icon:        Icons.receipt_long_rounded,
+                        label:   'Total Laba Kotor',
+                        value:   Formatters.currency(summary.totalGrossProfit),
+                        icon:    Icons.trending_up_rounded,
                         accentColor: AppTheme.info,
+                        subtitle: 'Profit Potensial',
                       )),
                       const SizedBox(width: 16),
                       Expanded(child: StatCard(
-                        label:       'Rata-rata Order',
-                        value:       Formatters.currency(summary.avgOrderValue),
-                        icon:        Icons.trending_up_rounded,
+                        label:   'Total Laba Bersih',
+                        value:   Formatters.currency(summary.totalNetProfit),
+                        icon:    Icons.auto_graph_rounded,
                         accentColor: AppTheme.success,
+                        subtitle: 'Profit Aktual',
                       )),
                       const SizedBox(width: 16),
                       Expanded(child: StatCard(
@@ -72,7 +74,7 @@ class AnalyticsPage extends ConsumerWidget {
                         value:       summary.topProducts.length.toString(),
                         icon:        Icons.inventory_2_rounded,
                         accentColor: AppTheme.warning,
-                        subtitle:    'SKU aktif',
+                        subtitle:    'SKU Aktif',
                       )),
                     ]),
                     const SizedBox(height: 24),
@@ -217,50 +219,40 @@ class AnalyticsPage extends ConsumerWidget {
                     AppCard(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         const SectionHeader(
-                          title: 'Rincian Per Hari',
+                          title: 'Laporan Detail Harian',
                           icon:  Icons.calendar_today_rounded,
                         ),
                         const SizedBox(height: 16),
-                        if (summary.revenueByDay.isEmpty)
+                        if (summary.dailyDetails.isEmpty)
                           const Padding(
                             padding: EdgeInsets.symmetric(vertical: 24),
-                            child: Center(child: Text('Belum ada data', style: TextStyle(color: AppTheme.textMuted))),
+                            child: Center(child: Text('Belum ada data harian', style: TextStyle(color: AppTheme.textMuted))),
                           )
                         else ...[
-                          // Header
+                          // Table Header
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                             decoration: BoxDecoration(
                               color:        AppTheme.surfaceAlt,
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                             child: Row(children: [
-                              Expanded(child: Text('Tanggal', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700))),
-                              Text('Total Pendapatan', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700)),
+                              Expanded(flex: 2, child: Text('Tanggal', style: _tableHeaderStyle)),
+                              Expanded(child: Text('Transaksi', textAlign: TextAlign.center, style: _tableHeaderStyle)),
+                              Expanded(flex: 2, child: Text('Pendapatan', textAlign: TextAlign.right, style: _tableHeaderStyle)),
+                              Expanded(flex: 2, child: Text('Laba Kotor', textAlign: TextAlign.right, style: _tableHeaderStyle)),
+                              Expanded(flex: 2, child: Text('Laba Bersih', textAlign: TextAlign.right, style: _tableHeaderStyle)),
+                              const SizedBox(width: 40), // Space for arrow
                             ]),
                           ),
-                          const SizedBox(height: 4),
-                          ...(() {
-                            final sorted = summary.revenueByDay.entries.toList()
-                              ..sort((a, b) => b.key.compareTo(a.key));
-                            return sorted.map((e) => Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              decoration: const BoxDecoration(
-                                border: Border(bottom: BorderSide(color: AppTheme.border, width: 0.5)),
-                              ),
-                              child: Row(children: [
-                                Expanded(child: Text(e.key, style: Theme.of(context).textTheme.bodyMedium)),
-                                Text(
-                                  Formatters.currency(e.value),
-                                  style: const TextStyle(
-                                    color:      AppTheme.accent,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize:   13,
-                                  ),
-                                ),
-                              ]),
-                            ));
-                          })(),
+                          const SizedBox(height: 8),
+                          ListView.separated(
+                            shrinkWrap:  true,
+                            physics:     const NeverScrollableScrollPhysics(),
+                            itemCount:   summary.dailyDetails.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 4),
+                            itemBuilder: (_, i) => _DailyExpandableRow(summary: summary.dailyDetails[i]),
+                          ),
                         ],
                       ]),
                     ),
@@ -272,6 +264,76 @@ class AnalyticsPage extends ConsumerWidget {
         ),
       ]),
     );
+  }
+
+  static const _tableHeaderStyle = TextStyle(
+    color:      AppTheme.textSecondary,
+    fontSize:   11,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0.5,
+  );
+}
+
+class _DailyExpandableRow extends StatefulWidget {
+  final DailySummary summary;
+  const _DailyExpandableRow({required this.summary});
+
+  @override
+  State<_DailyExpandableRow> createState() => _DailyExpandableRowState();
+}
+
+class _DailyExpandableRowState extends State<_DailyExpandableRow> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.summary;
+    return Column(children: [
+      InkWell(
+        onTap: () => setState(() => _expanded = !_expanded),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color:        _expanded ? AppTheme.accent.withValues(alpha: 0.05) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border:       Border.all(color: _expanded ? AppTheme.accent.withValues(alpha: 0.2) : Colors.transparent),
+          ),
+          child: Row(children: [
+            Expanded(flex: 2, child: Text(s.date, style: const TextStyle(fontWeight: FontWeight.w600))),
+            Expanded(child: Text('${s.transactionCount}', textAlign: TextAlign.center)),
+            Expanded(flex: 2, child: Text(Formatters.currency(s.revenue), textAlign: TextAlign.right, style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold))),
+            Expanded(flex: 2, child: Text(Formatters.currency(s.grossProfit), textAlign: TextAlign.right, style: const TextStyle(color: AppTheme.info, fontWeight: FontWeight.bold))),
+            Expanded(flex: 2, child: Text(Formatters.currency(s.netProfit), textAlign: TextAlign.right, style: const TextStyle(color: AppTheme.success, fontWeight: FontWeight.bold))),
+            const SizedBox(width: 8),
+            Icon(_expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, size: 20, color: AppTheme.textMuted),
+          ]),
+        ),
+      ),
+      if (_expanded)
+        Container(
+          margin: const EdgeInsets.only(top: 4, bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color:        AppTheme.surfaceAlt.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Daftar Transaksi:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textSecondary)),
+            const SizedBox(height: 8),
+            ...s.transactions.map((t) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(children: [
+                Text(t.invoiceNumber, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+                const SizedBox(width: 12),
+                Text(t.paymentMethod, style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                const Spacer(),
+                Text(Formatters.currency(t.total), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+              ]),
+            )),
+          ]),
+        ),
+    ]);
   }
 }
 

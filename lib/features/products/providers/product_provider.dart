@@ -155,6 +155,7 @@ Product blankProduct() => Product(
       id: _uuid.v4(),
       name: '',
       category: '',
+      costPrice: 0,
       basePrice: 0,
       baseUnit: 'pcs',
       stock: 0,

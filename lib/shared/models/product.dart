@@ -48,6 +48,7 @@ class Product {
   final String name;
   final String category;
   final String? barcode;
+  final double costPrice;
   final double basePrice;
   final String baseUnit;
   final double stock;
@@ -61,6 +62,7 @@ class Product {
     required this.name,
     required this.category,
     this.barcode,
+    required this.costPrice,
     required this.basePrice,
     required this.baseUnit,
     required this.stock,
@@ -76,6 +78,7 @@ class Product {
         name:      m['name'] as String,
         category:  m['category'] as String,
         barcode:   m['barcode'] as String?,
+        costPrice: (m['cost_price'] as num? ?? 0).toDouble(),
         basePrice: (m['base_price'] as num).toDouble(),
         baseUnit:  m['base_unit'] as String,
         stock:     (m['stock'] as num).toDouble(),
@@ -86,16 +89,17 @@ class Product {
       );
 
   Map<String, dynamic> toMap() => {
-        'id':         id,
-        'name':       name,
-        'category':   category,
-        'barcode':    barcode,
-        'base_price': basePrice,
-        'base_unit':  baseUnit,
-        'stock':      stock,
-        'image_path': imagePath,
-        'created_at': createdAt.toIso8601String(),
-        'updated_at': updatedAt.toIso8601String(),
+        'id':          id,
+        'name':        name,
+        'category':    category,
+        'barcode':     barcode,
+        'cost_price':  costPrice,
+        'base_price':  basePrice,
+        'base_unit':   baseUnit,
+        'stock':       stock,
+        'image_path':  imagePath,
+        'created_at':  createdAt.toIso8601String(),
+        'updated_at':  updatedAt.toIso8601String(),
       };
 
   bool get isLowStock => stock <= 10;
@@ -115,6 +119,7 @@ class Product {
     String? name,
     String? category,
     String? barcode,
+    double? costPrice,
     double? basePrice,
     String? baseUnit,
     double? stock,
@@ -126,6 +131,7 @@ class Product {
         name:      name ?? this.name,
         category:  category ?? this.category,
         barcode:   barcode ?? this.barcode,
+        costPrice: costPrice ?? this.costPrice,
         basePrice: basePrice ?? this.basePrice,
         baseUnit:  baseUnit ?? this.baseUnit,
         stock:     stock ?? this.stock,

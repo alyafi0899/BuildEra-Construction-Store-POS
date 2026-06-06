@@ -27,7 +27,7 @@ class ProductFormDialog extends ConsumerStatefulWidget {
 
 class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _name, _barcode, _basePrice, _stock;
+  late final TextEditingController _name, _barcode, _costPrice, _basePrice, _stock;
   late String _category, _baseUnit;
   late List<_UnitEntry> _units;
   bool _saving = false;
@@ -38,6 +38,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
     final p = widget.product;
     _name      = TextEditingController(text: p?.name ?? '');
     _barcode   = TextEditingController(text: p?.barcode ?? '');
+    _costPrice = TextEditingController(text: p != null ? p.costPrice.toStringAsFixed(0) : '');
     _basePrice = TextEditingController(text: p != null ? p.basePrice.toStringAsFixed(0) : '');
     _stock     = TextEditingController(text: p != null ? p.stock.toStringAsFixed(0) : '0');
     _category  = p?.category.isNotEmpty == true ? p!.category : AppConstants.categories.first;
@@ -51,6 +52,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   void dispose() {
     _name.dispose();
     _barcode.dispose();
+    _costPrice.dispose();
     _basePrice.dispose();
     _stock.dispose();
     super.dispose();
@@ -73,6 +75,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
         name:      _name.text.trim(),
         category:  _category,
         barcode:   _barcode.text.trim().isEmpty ? null : _barcode.text.trim(),
+        costPrice: double.tryParse(_costPrice.text) ?? 0,
         basePrice: double.tryParse(_basePrice.text) ?? 0,
         baseUnit:  _baseUnit,
         stock:     double.tryParse(_stock.text) ?? 0,
@@ -176,7 +179,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                       ]),
                       const SizedBox(height: 16),
 
-                      // Row 2: category + base unit + base price + stock
+                      // Row 2: category + base unit + stock
                       Row(children: [
                         Expanded(
                           child: DropdownButtonFormField<String>(
@@ -205,10 +208,23 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                         const SizedBox(width: 16),
                         Expanded(
                           child: TextFormField(
-                            controller:   _basePrice,
+                            controller:   _stock,
+                            decoration:   const InputDecoration(labelText: 'Stok Awal'),
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          ),
+                        ),
+                      ]),
+                      const SizedBox(height: 16),
+
+                      // Row 3: cost price + base price
+                      Row(children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller:   _costPrice,
                             decoration:   const InputDecoration(
-                              labelText:  'Harga Dasar (Rp) *',
+                              labelText:  'Harga Modal (Rp) *',
                               prefixText: 'Rp ',
+                              helperText: 'Harga beli dari supplier',
                             ),
                             keyboardType: TextInputType.number,
                             validator:    (v) =>
@@ -218,9 +234,15 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                         const SizedBox(width: 16),
                         Expanded(
                           child: TextFormField(
-                            controller:   _stock,
-                            decoration:   const InputDecoration(labelText: 'Stok Awal'),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            controller:   _basePrice,
+                            decoration:   const InputDecoration(
+                              labelText:  'Harga Jual Dasar (Rp) *',
+                              prefixText: 'Rp ',
+                              helperText: 'Harga jual default untuk satuan dasar',
+                            ),
+                            keyboardType: TextInputType.number,
+                            validator:    (v) =>
+                                (double.tryParse(v ?? '') == null) ? 'Masukkan angka valid' : null,
                           ),
                         ),
                       ]),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/constants/app_constants.dart';
+import '../../features/settings/providers/settings_provider.dart';
 
 class _NavItem {
   final IconData icon;
@@ -15,9 +17,10 @@ const _navItems = [
   _NavItem(Icons.warehouse_rounded,           'Inventori',   2),
   _NavItem(Icons.receipt_long_rounded,        'Transaksi',   3),
   _NavItem(Icons.bar_chart_rounded,           'Analitik',    4),
+  _NavItem(Icons.settings_rounded,            'Pengaturan',  5),
 ];
 
-class AppSidebar extends StatelessWidget {
+class AppSidebar extends ConsumerWidget {
   final int      selectedIndex;
   final ValueChanged<int> onItemSelected;
 
@@ -28,7 +31,10 @@ class AppSidebar extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+    final businessName = settings.businessName.isEmpty ? 'KONST.POS' : settings.businessName.toUpperCase();
+
     return Container(
       width: 220,
       color: AppTheme.surface,
@@ -50,17 +56,21 @@ class AppSidebar extends StatelessWidget {
                 child: const Icon(Icons.construction, color: Colors.white, size: 20),
               ),
               const SizedBox(width: 10),
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('KONST.POS',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color:       AppTheme.accent,
-                          fontSize:    14,
-                          fontWeight:  FontWeight.w800,
-                          letterSpacing: 1.5,
-                        )),
-                Text('v${AppConstants.appVersion}',
-                    style: Theme.of(context).textTheme.bodySmall),
-              ]),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(businessName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color:       AppTheme.accent,
+                            fontSize:    13,
+                            fontWeight:  FontWeight.w800,
+                            letterSpacing: 1.2,
+                          )),
+                  Text('v${AppConstants.appVersion}',
+                      style: Theme.of(context).textTheme.bodySmall),
+                ]),
+              ),
             ]),
           ]),
         ),
@@ -103,10 +113,15 @@ class AppSidebar extends StatelessWidget {
               child: Icon(Icons.person, color: Colors.white, size: 18),
             ),
             const SizedBox(width: 10),
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Admin', style: Theme.of(context).textTheme.titleMedium),
-              Text('Kasir', style: Theme.of(context).textTheme.bodySmall),
-            ]),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(settings.ownerName.isEmpty ? 'Admin' : settings.ownerName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium),
+                Text('Owner', style: Theme.of(context).textTheme.bodySmall),
+              ]),
+            ),
           ]),
         ),
       ]),

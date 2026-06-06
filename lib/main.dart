@@ -9,6 +9,7 @@ import 'features/products/presentation/pages/products_page.dart';
 import 'features/inventory/presentation/pages/inventory_page.dart';
 import 'features/payment/presentation/pages/transactions_page.dart';
 import 'features/analytics/presentation/pages/analytics_page.dart';
+import 'features/settings/presentation/pages/settings_page.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 Future<void> main() async {
@@ -68,6 +69,7 @@ class _MainShellState extends State<MainShell> {
     InventoryPage(),
     TransactionsPage(),
     AnalyticsPage(),
+    SettingsPage(),
   ];
 
   @override

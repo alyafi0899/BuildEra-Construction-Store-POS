@@ -5,8 +5,11 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/common_widgets.dart';
+import '../../../../shared/models/transaction.dart';
 import '../../providers/cart_provider.dart';
 import '../../../payment/providers/transaction_provider.dart';
+import '../../../../core/utils/invoice_helper.dart';
+import '../../../settings/providers/settings_provider.dart';
 
 class PaymentDialog extends ConsumerStatefulWidget {
   const PaymentDialog({super.key});
@@ -27,7 +30,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   final   _notesCtrl  = TextEditingController();
   bool    _processing = false;
   bool    _success    = false;
-  String  _invoice    = '';
+  Transaction? _tx;
 
   double get _paid =>
       double.tryParse(_amountCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
@@ -52,14 +55,14 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
         amountPaid:    _method == AppConstants.paymentCash ? _paid : cart.total,
         notes:         _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
       );
-      // Invoice number is now in the refreshed provider state
+      
+      // The transaction is now in the list
       final txList = ref.read(transactionsProvider).asData?.value ?? [];
-      final tx     = txList.firstWhereOrNull((t) => t.id == txId) ??
-                    (txList.isNotEmpty ? txList.first : null);
+      final tx     = txList.firstWhereOrNull((t) => t.id == txId);
       
       if (tx == null) throw StateError('Transaction not found');
 
-      setState(() { _success = true; _invoice = tx.invoiceNumber; });
+      setState(() { _success = true; _tx = tx; });
     } catch (e) {
       if (mounted) showError(context, 'Gagal memproses: $e');
     } finally {
@@ -82,39 +85,55 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   // ── Success ───────────────────────────────────────────────────────────────
 
   Widget _successPanel(BuildContext context) {
+    final settings = ref.read(settingsProvider);
+    final tx = _tx!;
+
     return Padding(
-      padding: const EdgeInsets.all(48),
+      padding: const EdgeInsets.all(40),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Container(
-          width: 80, height: 80,
+          width: 70, height: 70,
           decoration: const BoxDecoration(color: AppTheme.success, shape: BoxShape.circle),
-          child: const Icon(Icons.check_rounded, color: Colors.white, size: 48),
+          child: const Icon(Icons.check_rounded, color: Colors.white, size: 40),
         ),
-        const SizedBox(height: 24),
-        Text('Pembayaran Berhasil!', style: Theme.of(context).textTheme.headlineLarge),
+        const SizedBox(height: 20),
+        Text('Pembayaran Berhasil!', style: Theme.of(context).textTheme.headlineMedium),
         const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color:        AppTheme.surfaceAlt,
-            borderRadius: BorderRadius.circular(8),
-            border:       Border.all(color: AppTheme.border),
-          ),
-          child: Text(
-            _invoice,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: AppTheme.accent, letterSpacing: 1,
-            ),
-          ),
-        ),
+        Text(tx.invoiceNumber, style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold, letterSpacing: 1)),
         const SizedBox(height: 32),
+        
+        // Actions
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _ActionBtn(
+              icon: Icons.print_rounded, 
+              label: 'Print', 
+              onTap: () => InvoiceHelper.printInvoice(tx, settings)
+            ),
+            const SizedBox(width: 12),
+            _ActionBtn(
+              icon: Icons.share_rounded, 
+              label: 'Share', 
+              onTap: () => InvoiceHelper.shareInvoice(tx, settings)
+            ),
+            const SizedBox(width: 12),
+            _ActionBtn(
+              icon: Icons.download_rounded, 
+              label: 'Simpan', 
+              onTap: () => InvoiceHelper.saveInvoice(tx, settings)
+            ),
+          ],
+        ),
+        
+        const SizedBox(height: 40),
         SizedBox(
           width: double.infinity,
-          height: 46,
-          child: ElevatedButton.icon(
+          height: 50,
+          child: ElevatedButton(
             onPressed: () => Navigator.of(context).pop(),
-            icon:  const Icon(Icons.add_shopping_cart_rounded),
-            label: const Text('Transaksi Baru'),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.surfaceAlt, foregroundColor: Colors.white),
+            child: const Text('TUTUP'),
           ),
         ),
       ]),
@@ -174,15 +193,22 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(children: [
               Expanded(
-                child: Text('${i.product.name} (${i.selectedUnit.unitName})',
-                    style:    Theme.of(context).textTheme.bodyMedium,
-                    overflow: TextOverflow.ellipsis),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(i.product.name,
+                        style:    Theme.of(context).textTheme.bodyMedium,
+                        overflow: TextOverflow.ellipsis),
+                    if (i.isOverridden)
+                      const Text('Harga Override', style: TextStyle(color: AppTheme.warning, fontSize: 10, fontWeight: FontWeight.bold)),
+                  ],
+                ),
               ),
               const SizedBox(width: 8),
               Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                 Text(
                   '${Formatters.decimal(i.quantity)} × '
-                  '${Formatters.currency(i.selectedUnit.sellPrice)}',
+                  '${Formatters.currency(i.soldPrice)}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 Text(Formatters.currency(i.subtotal),
@@ -194,9 +220,12 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
             ]),
           )),
       const Divider(color: AppTheme.border, height: 24),
-      _row(context, 'Subtotal', Formatters.currency(cart.subtotal)),
-      if (cart.discount > 0)
-        _row(context, 'Diskon', '− ${Formatters.currency(cart.discount)}',
+      _row(context, 'Subtotal Item', Formatters.currency(cart.grossSubtotal)),
+      if (cart.itemDiscountTotal > 0)
+        _row(context, 'Potongan Item', '− ${Formatters.currency(cart.itemDiscountTotal)}',
+            color: AppTheme.success),
+      if (cart.transDiscountAmount > 0)
+        _row(context, 'Diskon Transaksi', '− ${Formatters.currency(cart.transDiscountAmount)}',
             color: AppTheme.success),
       if (cart.taxEnabled)
         _row(context, 'PPN (11%)', Formatters.currency(cart.taxAmount)),
@@ -411,5 +440,34 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
       case AppConstants.paymentDebit: return Icons.credit_card_rounded;
       default:                        return Icons.payment;
     }
+  }
+}
+
+class _ActionBtn extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _ActionBtn({required this.icon, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 80,
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceAlt,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.border),
+        ),
+        child: Column(children: [
+          Icon(icon, color: AppTheme.accent, size: 24),
+          const SizedBox(height: 4),
+          Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+        ]),
+      ),
+    );
   }
 }
