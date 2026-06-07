@@ -1,6 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' as firestore hide Transaction;
+import 'package:firebase_storage/firebase_storage.dart' as storage;
+import 'dart:typed_data';
+import '../../../core/utils/image_helper.dart';
 import '../../../shared/models/product.dart';
 
 final _uuid = Uuid();
@@ -9,15 +12,38 @@ final _uuid = Uuid();
 
 class ProductRepository {
   final _db = firestore.FirebaseFirestore.instance;
+  final _storage = storage.FirebaseStorage.instance;
 
   Future<List<Product>> getAllProducts() async {
-    final snapshot = await _db.collection('products').orderBy('name').get();
-    return snapshot.docs.map((doc) {
-      final data = doc.data();
-      final unitsData = data['units'] as List? ?? [];
-      final units = unitsData.map((u) => ProductUnit.fromMap(u as Map<String, dynamic>)).toList();
-      return Product.fromMap(data, units: units);
-    }).toList();
+    try {
+      final snapshot = await _db.collection('products').orderBy('name').get();
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        final unitsData = data['units'] as List? ?? [];
+        final units = unitsData
+            .whereType<Map<String, dynamic>>()
+            .map((u) => ProductUnit.fromMap(u))
+            .toList();
+        return Product.fromMap(data, units: units);
+      }).toList();
+    } catch (e) {
+      // Log or handle the error
+      return [];
+    }
+  }
+
+  Future<String?> uploadProductImage(String productId, Uint8List bytes) async {
+    try {
+      // 1. Compress image first
+      final compressedBytes = await ImageHelper.compressImage(bytes);
+
+      // 2. Upload to Firebase Storage
+      final ref = _storage.ref().child('products/$productId.jpg');
+      await ref.putData(compressedBytes, storage.SettableMetadata(contentType: 'image/jpeg'));
+      return await ref.getDownloadURL();
+    } catch (e) {
+      return null;
+    }
   }
 
   Future<void> saveProduct(Product p, List<ProductUnit> units) async {
@@ -106,7 +132,15 @@ class ProductRepository {
   }
 
   Future<void> deleteProduct(String id) async {
+    // 1. Delete from Firestore
     await _db.collection('products').doc(id).delete();
+    
+    // 2. Delete from Storage (if exists)
+    try {
+      await _storage.ref().child('products/$id.jpg').delete();
+    } catch (_) {
+      // Ignore errors if file doesn't exist
+    }
   }
 }
 
@@ -133,14 +167,23 @@ class ProductsNotifier extends AsyncNotifier<List<Product>> {
     await refresh();
   }
 
+  Future<String?> uploadImage(String productId, Uint8List bytes) async {
+    return await _repo.uploadProductImage(productId, bytes);
+  }
+
   Future<void> importProducts(List<Map<Product, List<ProductUnit>>> products) async {
     await _repo.saveProductsBatch(products);
     await refresh();
   }
 
   Future<void> deleteProduct(String id) async {
-    await _repo.deleteProduct(id);
-    await refresh();
+    try {
+      await _repo.deleteProduct(id);
+      await refresh();
+    } catch (e) {
+      // Re-throw so UI can catch and show error
+      rethrow;
+    }
   }
 
   Future<void> adjustStock(String productId, double delta) async {

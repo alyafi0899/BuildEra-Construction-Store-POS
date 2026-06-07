@@ -76,7 +76,26 @@ class CartNotifier extends Notifier<CartState> {
   CartState build() => const CartState();
 
   void addProduct(Product product, {ProductUnit? unit}) {
-    final u = unit ?? (product.units.isNotEmpty ? product.units.first : _defaultUnit(product));
+    ProductUnit u;
+    if (unit != null) {
+      u = unit;
+    } else {
+      // Find default unit if set
+      final defName = product.defaultUnitName;
+      if (defName != null && defName.isNotEmpty) {
+        if (defName == product.baseUnit) {
+          u = product.baseProductUnit;
+        } else {
+          u = product.units.firstWhere(
+            (un) => un.unitName == defName,
+            orElse: () => product.allUnits.first,
+          );
+        }
+      } else {
+        // Fallback to first available unit (usually base unit)
+        u = product.allUnits.first;
+      }
+    }
     
     final existing = state.items.indexWhere(
       (i) => i.product.id == product.id && i.selectedUnit.unitName == u.unitName,
@@ -165,14 +184,6 @@ class CartNotifier extends Notifier<CartState> {
   void setTaxRate(double r)  => state = state.copyWith(taxRate: r);
 
   void clear() => state = const CartState();
-
-  ProductUnit _defaultUnit(Product p) => ProductUnit(
-        id:             '',
-        productId:      p.id,
-        unitName:       p.baseUnit,
-        conversionRate: 1,
-        sellPrice:      p.basePrice,
-      );
 }
 
 final cartProvider = NotifierProvider<CartNotifier, CartState>(CartNotifier.new);

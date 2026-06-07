@@ -14,11 +14,11 @@ class ProductUnit {
   });
 
   factory ProductUnit.fromMap(Map<String, dynamic> m) => ProductUnit(
-        id:             m['id'] as String,
-        productId:      m['product_id'] as String,
-        unitName:       m['unit_name'] as String,
-        conversionRate: (m['conversion_rate'] as num).toDouble(),
-        sellPrice:      (m['sell_price'] as num).toDouble(),
+        id:             m['id'] as String? ?? '',
+        productId:      m['product_id'] as String? ?? '',
+        unitName:       m['unit_name'] as String? ?? '',
+        conversionRate: (m['conversion_rate'] as num? ?? 1).toDouble(),
+        sellPrice:      (m['sell_price'] as num? ?? 0).toDouble(),
       );
 
   Map<String, dynamic> toMap() => {
@@ -51,6 +51,7 @@ class Product {
   final double costPrice;
   final double basePrice;
   final String baseUnit;
+  final String? defaultUnitName;
   final double stock;
   final String? imagePath;
   final DateTime createdAt;
@@ -65,6 +66,7 @@ class Product {
     required this.costPrice,
     required this.basePrice,
     required this.baseUnit,
+    this.defaultUnitName,
     required this.stock,
     this.imagePath,
     required this.createdAt,
@@ -74,17 +76,18 @@ class Product {
 
   factory Product.fromMap(Map<String, dynamic> m, {List<ProductUnit> units = const []}) =>
       Product(
-        id:        m['id'] as String,
-        name:      m['name'] as String,
-        category:  m['category'] as String,
+        id:        m['id'] as String? ?? '',
+        name:      m['name'] as String? ?? 'Produk Tanpa Nama',
+        category:  m['category'] as String? ?? 'Lainnya',
         barcode:   m['barcode'] as String?,
         costPrice: (m['cost_price'] as num? ?? 0).toDouble(),
-        basePrice: (m['base_price'] as num).toDouble(),
-        baseUnit:  m['base_unit'] as String,
-        stock:     (m['stock'] as num).toDouble(),
+        basePrice: (m['base_price'] as num? ?? 0).toDouble(),
+        baseUnit:  m['base_unit'] as String? ?? 'pcs',
+        defaultUnitName: m['default_unit_name'] as String?,
+        stock:     (m['stock'] as num? ?? 0).toDouble(),
         imagePath: m['image_path'] as String?,
-        createdAt: DateTime.parse(m['created_at'] as String),
-        updatedAt: DateTime.parse(m['updated_at'] as String),
+        createdAt: DateTime.tryParse(m['created_at'] as String? ?? '') ?? DateTime.now(),
+        updatedAt: DateTime.tryParse(m['updated_at'] as String? ?? '') ?? DateTime.now(),
         units:     units,
       );
 
@@ -96,6 +99,7 @@ class Product {
         'cost_price':  costPrice,
         'base_price':  basePrice,
         'base_unit':   baseUnit,
+        'default_unit_name': defaultUnitName,
         'stock':       stock,
         'image_path':  imagePath,
         'created_at':  createdAt.toIso8601String(),
@@ -103,6 +107,18 @@ class Product {
       };
 
   bool get isLowStock => stock <= 10;
+
+  /// Returns the base unit as a ProductUnit object
+  ProductUnit get baseProductUnit => ProductUnit(
+    id:             'base',
+    productId:      id,
+    unitName:       baseUnit,
+    conversionRate: 1,
+    sellPrice:      basePrice,
+  );
+
+  /// Returns all available units for this product, including the base unit.
+  List<ProductUnit> get allUnits => [baseProductUnit, ...units];
 
   /// Sell price for a given unit (from the units list)
   double priceForUnit(String unitName) {
@@ -122,6 +138,7 @@ class Product {
     double? costPrice,
     double? basePrice,
     String? baseUnit,
+    String? defaultUnitName,
     double? stock,
     String? imagePath,
     List<ProductUnit>? units,
@@ -134,6 +151,7 @@ class Product {
         costPrice: costPrice ?? this.costPrice,
         basePrice: basePrice ?? this.basePrice,
         baseUnit:  baseUnit ?? this.baseUnit,
+        defaultUnitName: defaultUnitName ?? this.defaultUnitName,
         stock:     stock ?? this.stock,
         imagePath: imagePath ?? this.imagePath,
         createdAt: createdAt,

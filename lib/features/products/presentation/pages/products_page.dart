@@ -5,6 +5,7 @@ import '../../../../core/utils/formatters.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../shared/models/product.dart';
 import '../../../../shared/widgets/common_widgets.dart';
+import '../../../../shared/widgets/product_image.dart';
 import '../../providers/product_provider.dart';
 import '../widgets/product_form_dialog.dart';
 import '../widgets/excel_import_dialog.dart';
@@ -199,14 +200,7 @@ class _ProductRow extends ConsumerWidget {
       child: Row(children: [
         // Product name + icon
         Expanded(flex: 4, child: Row(children: [
-          Container(
-            width: 36, height: 36,
-            decoration: BoxDecoration(
-              color:        AppTheme.accent.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(Icons.inventory_2_outlined, color: AppTheme.accent, size: 18),
-          ),
+          ProductImage(imagePath: product.imagePath, size: 36),
           const SizedBox(width: 12),
           Flexible(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(product.name, style: Theme.of(context).textTheme.titleMedium, overflow: TextOverflow.ellipsis),
@@ -230,7 +224,27 @@ class _ProductRow extends ConsumerWidget {
             ),
           ),
         ])),
-        Expanded(flex: 2, child: Text(Formatters.currency(product.basePrice), textAlign: TextAlign.right, style: Theme.of(context).textTheme.bodyMedium)),
+        Expanded(flex: 2, child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Text(Formatters.currency(product.basePrice), style: Theme.of(context).textTheme.bodyMedium),
+            if (product.defaultUnitName != null && product.defaultUnitName != product.baseUnit) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceAlt,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: AppTheme.border),
+                ),
+                child: Text(
+                  product.defaultUnitName!,
+                  style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ],
+        )),
         Expanded(flex: 3, child: Wrap(
           spacing: 4, runSpacing: 4,
           children: product.units.map((u) => Container(
@@ -256,8 +270,12 @@ class _ProductRow extends ConsumerWidget {
                   content: 'Yakin hapus "${product.name}"? Data tidak dapat dipulihkan.');
               if (!context.mounted) return;
               if (ok) {
-                await ref.read(productsProvider.notifier).deleteProduct(product.id);
-                showSuccess(context, 'Produk dihapus');
+                try {
+                  await ref.read(productsProvider.notifier).deleteProduct(product.id);
+                  if (context.mounted) showSuccess(context, 'Produk dihapus');
+                } catch (e) {
+                  if (context.mounted) showError(context, 'Gagal menghapus produk: $e');
+                }
               }
             },
             icon: const Icon(Icons.delete_rounded, size: 16, color: AppTheme.danger),

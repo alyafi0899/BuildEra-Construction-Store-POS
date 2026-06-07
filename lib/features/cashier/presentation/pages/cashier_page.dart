@@ -4,6 +4,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/models/product.dart';
 import '../../../../shared/widgets/common_widgets.dart';
+import '../../../../shared/widgets/product_image.dart';
 import '../../../products/providers/product_provider.dart';
 import '../../models/cart_item.dart';
 import '../../providers/cart_provider.dart';
@@ -219,14 +220,7 @@ class _ProductCard extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(children: [
-                    Container(
-                      width: 40, height: 40,
-                      decoration: BoxDecoration(
-                        color:        AppTheme.accent.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.inventory_2_rounded, color: AppTheme.accent, size: 22),
-                    ),
+                    ProductImage(imagePath: product.imagePath),
                     const Spacer(),
                     if (isLow)
                       Container(
@@ -541,19 +535,19 @@ class _CartItemTileState extends ConsumerState<_CartItemTile> {
         const SizedBox(height: 8),
         Row(children: [
           // Unit selector
-          if (item.product.units.length > 1)
+          if (item.product.allUnits.length > 1)
             DropdownButton<String>(
               value:     item.selectedUnit.unitName,
               isDense:   true,
               underline: const SizedBox(),
               dropdownColor: AppTheme.surfaceAlt,
               style: const TextStyle(color: AppTheme.accent, fontSize: 12, fontWeight: FontWeight.w600),
-              items: item.product.units.map((u) => DropdownMenuItem(
+              items: item.product.allUnits.map((u) => DropdownMenuItem(
                 value: u.unitName,
                 child: Text(u.unitName),
               )).toList(),
               onChanged: (v) {
-                final u = item.product.units.firstWhere((u) => u.unitName == v);
+                final u = item.product.allUnits.firstWhere((u) => u.unitName == v);
                 notifier.updateUnit(item.id, u);
               },
             )

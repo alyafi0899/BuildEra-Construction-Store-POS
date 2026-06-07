@@ -1,8 +1,11 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/image_helper.dart';
 import '../../../../shared/models/product.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../providers/product_provider.dart';
@@ -29,7 +32,10 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _name, _barcode, _costPrice, _basePrice, _stock;
   late String _category, _baseUnit;
+  String? _defaultUnitName;
   late List<_UnitEntry> _units;
+  Uint8List? _imageBytes;
+  String? _existingImagePath;
   bool _saving = false;
 
   @override
@@ -43,9 +49,9 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
     _stock     = TextEditingController(text: p != null ? p.stock.toStringAsFixed(0) : '0');
     _category  = p?.category.isNotEmpty == true ? p!.category : AppConstants.categories.first;
     _baseUnit  = p?.baseUnit ?? 'pcs';
-    _units     = p?.units.isNotEmpty == true
-        ? p!.units.map((u) => _UnitEntry.fromUnit(u)).toList()
-        : [_UnitEntry(id: _uuid.v4(), productId: p?.id ?? '')];
+    _defaultUnitName = p?.defaultUnitName;
+    _existingImagePath = p?.imagePath;
+    _units     = p?.units.map((u) => _UnitEntry.fromUnit(u)).toList() ?? [];
   }
 
   @override
@@ -58,18 +64,41 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
     super.dispose();
   }
 
+  Future<void> _pickImage() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      withData: true,
+    );
+    if (result != null && result.files.first.bytes != null) {
+      setState(() => _imageBytes = result.files.first.bytes);
+    }
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    // Validate units
+    
+    // Process units: ignore rows with empty names
+    final validUnits = <ProductUnit>[];
+    final productId = widget.product?.id ?? _uuid.v4();
+
     for (final u in _units) {
-      if (u.unitName.trim().isEmpty) {
-        showError(context, 'Nama satuan tidak boleh kosong');
-        return;
+      if (u.unitName.trim().isNotEmpty) {
+        validUnits.add(u.toUnit(productId));
       }
     }
+
     setState(() => _saving = true);
     try {
-      final productId = widget.product?.id ?? _uuid.v4();
+      String? imagePath = _existingImagePath;
+      if (_imageBytes != null) {
+        // 1. Save locally for instant access (if not on web)
+        final localPath = await ImageHelper.saveLocally(productId, _imageBytes!);
+        if (localPath != null) imagePath = localPath;
+
+        // 2. Upload to Firebase Storage with compression
+        imagePath = await ref.read(productsProvider.notifier).uploadImage(productId, _imageBytes!);
+      }
+
       final product = Product(
         id:        productId,
         name:      _name.text.trim(),
@@ -78,13 +107,14 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
         costPrice: double.tryParse(_costPrice.text) ?? 0,
         basePrice: double.tryParse(_basePrice.text) ?? 0,
         baseUnit:  _baseUnit,
+        defaultUnitName: _defaultUnitName,
         stock:     double.tryParse(_stock.text) ?? 0,
-        imagePath: widget.product?.imagePath,
+        imagePath: imagePath,
         createdAt: widget.product?.createdAt ?? DateTime.now(),
         updatedAt: DateTime.now(),
       );
-      final units = _units.map((e) => e.toUnit(productId)).toList();
-      await ref.read(productsProvider.notifier).saveProduct(product, units);
+
+      await ref.read(productsProvider.notifier).saveProduct(product, validUnits);
       if (mounted) {
         Navigator.of(context).pop();
         showSuccess(
@@ -150,6 +180,47 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Image Picker
+                      Center(
+                        child: Column(
+                          children: [
+                            GestureDetector(
+                              onTap: _pickImage,
+                              child: Container(
+                                width: 120,
+                                height: 120,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.surfaceAlt,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: AppTheme.border),
+                                  image: _imageBytes != null 
+                                    ? DecorationImage(image: MemoryImage(_imageBytes!), fit: BoxFit.cover)
+                                    : (_existingImagePath != null 
+                                        ? DecorationImage(image: NetworkImage(_existingImagePath!), fit: BoxFit.cover)
+                                        : null),
+                                ),
+                                child: (_imageBytes == null && _existingImagePath == null)
+                                    ? const Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.add_a_photo_rounded, color: AppTheme.textSecondary, size: 32),
+                                          SizedBox(height: 8),
+                                          Text('Tambah Foto', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                                        ],
+                                      )
+                                    : null,
+                              ),
+                            ),
+                            if (_imageBytes != null || _existingImagePath != null)
+                              TextButton(
+                                onPressed: () => setState(() { _imageBytes = null; _existingImagePath = null; }),
+                                child: const Text('Hapus Foto', style: TextStyle(color: AppTheme.danger, fontSize: 11)),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
                       // Section label
                       _sectionLabel(context, 'Informasi Produk'),
                       const SizedBox(height: 16),
@@ -248,9 +319,8 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                       ]),
                       const SizedBox(height: 28),
 
-                      // ── Units section ──────────────────────────────────
                       Row(children: [
-                        _sectionLabel(context, 'Satuan Jual & Harga'),
+                        _sectionLabel(context, 'Satuan Jual & Harga (Opsional)'),
                         const Spacer(),
                         TextButton.icon(
                           onPressed: _addUnit,
@@ -260,46 +330,83 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                       ]),
                       const SizedBox(height: 12),
 
-                      Container(
-                        decoration: BoxDecoration(
-                          border:       Border.all(color: AppTheme.border),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Column(children: [
-                          // Table header
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                            decoration: const BoxDecoration(
-                              color:        AppTheme.surfaceAlt,
-                              borderRadius: BorderRadius.vertical(top: Radius.circular(9)),
-                            ),
-                            child: Row(children: [
-                              Expanded(flex: 2, child: _th('Nama Satuan')),
-                              Expanded(flex: 3, child: _th('Konversi (1 satuan = ? satuan dasar)')),
-                              Expanded(flex: 2, child: _th('Harga Jual (Rp)')),
-                              const SizedBox(width: 36),
-                            ]),
+                      if (_units.isEmpty)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppTheme.surfaceAlt.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: AppTheme.border.withValues(alpha: 0.5)),
                           ),
-                          ..._units.asMap().entries.map((e) => _UnitRowWidget(
-                                key:      ValueKey(e.value.id),
-                                entry:    e.value,
-                                baseUnit: _baseUnit,
-                                isLast:   e.key == _units.length - 1,
-                                canDelete: _units.length > 1,
-                                onChanged: (updated) => _updateUnit(e.key, updated),
-                                onDelete:  () => _removeUnit(e.key),
-                              )),
-                        ]),
-                      ),
-
-                      const SizedBox(height: 8),
-                      Text(
-                        'Contoh: 1 roll = 50 meter · 1 sack = 40 kg · 1 box = 6 pcs',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppTheme.textMuted,
-                          fontStyle: FontStyle.italic,
+                          child: const Text(
+                            'Hanya gunakan Satuan Dasar untuk penjualan ini. Klik "Tambah Satuan" jika ingin menjual dalam satuan lain (seperti Box, Dus, dll).',
+                            style: TextStyle(color: AppTheme.textMuted, fontSize: 12, fontStyle: FontStyle.italic),
+                          ),
+                        )
+                      else
+                        Container(
+                          decoration: BoxDecoration(
+                            border:       Border.all(color: AppTheme.border),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Column(children: [
+                            // Table header
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              decoration: const BoxDecoration(
+                                color:        AppTheme.surfaceAlt,
+                                borderRadius: BorderRadius.vertical(top: Radius.circular(9)),
+                              ),
+                              child: Row(children: [
+                                Expanded(flex: 2, child: _th('Nama Satuan')),
+                                Expanded(flex: 3, child: _th('Konversi (1 satuan = ? satuan dasar)')),
+                                Expanded(flex: 2, child: _th('Harga Jual (Rp)')),
+                                const SizedBox(width: 36),
+                              ]),
+                            ),
+                            ..._units.asMap().entries.map((e) => _UnitRowWidget(
+                                  key:      ValueKey(e.value.id),
+                                  entry:    e.value,
+                                  baseUnit: _baseUnit,
+                                  isLast:   e.key == _units.length - 1,
+                                  canDelete: true,
+                                  onChanged: (updated) => _updateUnit(e.key, updated),
+                                  onDelete:  () => _removeUnit(e.key),
+                                )),
+                          ]),
                         ),
-                      ),
+
+                      if (_units.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        _sectionLabel(context, 'Pengaturan Default'),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String?>(
+                          value: _defaultUnitName,
+                          decoration: const InputDecoration(
+                            labelText: 'Satuan Default di Kasir',
+                            helperText: 'Satuan ini akan otomatis terpilih saat produk discan/diklik',
+                          ),
+                          dropdownColor: AppTheme.surfaceAlt,
+                          items: [
+                            DropdownMenuItem(value: null, child: Text('Default (Satuan Pertama)')),
+                            DropdownMenuItem(value: _baseUnit, child: Text('Satuan Dasar ($_baseUnit)')),
+                            ..._units.where((u) => u.unitName.isNotEmpty).map((u) => DropdownMenuItem(
+                              value: u.unitName,
+                              child: Text(u.unitName),
+                            )),
+                          ],
+                          onChanged: (v) => setState(() => _defaultUnitName = v),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Contoh: 1 roll = 50 meter · 1 sack = 40 kg · 1 box = 6 pcs',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: AppTheme.textMuted,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
