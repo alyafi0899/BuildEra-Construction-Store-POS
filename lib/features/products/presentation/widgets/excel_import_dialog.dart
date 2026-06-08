@@ -56,11 +56,12 @@ class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
           final name = row[0]?.value?.toString() ?? '';
           if (name.isEmpty) continue;
 
-          final category = row[1]?.value?.toString() ?? 'Lainnya';
-          final barcode = row[2]?.value?.toString();
-          final basePrice = double.tryParse(row[3]?.value?.toString() ?? '0') ?? 0;
-          final baseUnit = row[4]?.value?.toString() ?? 'pcs';
-          final stock = double.tryParse(row[5]?.value?.toString() ?? '0') ?? 0;
+          final barcode  = (row.length > 1) ? row[1]?.value?.toString() : null;
+          final category = (row.length > 2) ? row[2]?.value?.toString() ?? 'Lainnya' : 'Lainnya';
+          final baseUnit = (row.length > 3) ? row[3]?.value?.toString() ?? 'pcs' : 'pcs';
+          final stock    = (row.length > 4) ? double.tryParse(row[4]?.value?.toString() ?? '0') ?? 0.0 : 0.0;
+          final costPrice = (row.length > 5) ? double.tryParse(row[5]?.value?.toString() ?? '0') ?? 0 : 0.0;
+          final basePrice = (row.length > 6) ? double.tryParse(row[6]?.value?.toString() ?? '0') ?? 0 : 0.0;
           
           final productId = _uuid.v4();
           final product = Product(
@@ -68,7 +69,7 @@ class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
             name: name,
             category: category,
             barcode: barcode,
-            costPrice: 0, // Default to 0 on import if not in excel
+            costPrice: costPrice,
             basePrice: basePrice,
             baseUnit: baseUnit,
             stock: stock,
@@ -76,34 +77,9 @@ class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
             updatedAt: DateTime.now(),
           );
 
+          // Note: We only import base product info. 
+          // Additional units can be added manually via 'Edit Produk' in the UI.
           final units = <ProductUnit>[];
-          // Add default unit based on base price
-          units.add(ProductUnit(
-            id: _uuid.v4(),
-            productId: productId,
-            unitName: baseUnit,
-            conversionRate: 1,
-            sellPrice: basePrice,
-          ));
-
-          // Handle additional units from column G (index 6)
-          // Format: Name:Rate:Price;Name:Rate:Price
-          final additionalUnitsStr = row.length > 6 ? row[6]?.value?.toString() : null;
-          if (additionalUnitsStr != null && additionalUnitsStr.isNotEmpty) {
-            final unitParts = additionalUnitsStr.split(';');
-            for (var part in unitParts) {
-              final details = part.split(':');
-              if (details.length >= 3) {
-                units.add(ProductUnit(
-                  id: _uuid.v4(),
-                  productId: productId,
-                  unitName: details[0].trim(),
-                  conversionRate: double.tryParse(details[1]) ?? 1,
-                  sellPrice: double.tryParse(details[2]) ?? 0,
-                ));
-              }
-            }
-          }
 
           productsToImport.add({product: units});
         }
@@ -114,7 +90,7 @@ class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
       }
 
       setState(() => _status = 'Mengunggah ${productsToImport.length} produk...');
-      await ref.read(productsProvider.notifier).importProducts(productsToImport);
+      await ref.read(productsActionProvider).importProducts(productsToImport);
 
       if (mounted) {
         Navigator.pop(context);
@@ -160,19 +136,14 @@ class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('A: Nama Produk (Wajib)', style: TextStyle(fontSize: 12)),
-                  Text('B: Kategori', style: TextStyle(fontSize: 12)),
-                  Text('C: Barcode', style: TextStyle(fontSize: 12)),
-                  Text('D: Harga Dasar (Angka)', style: TextStyle(fontSize: 12)),
-                  Text('E: Satuan Dasar (e.g. kg, pcs)', style: TextStyle(fontSize: 12)),
-                  Text('F: Stok Awal (Angka)', style: TextStyle(fontSize: 12)),
-                  Text('G: Satuan Lain (Format: Nama:Konversi:Harga;...)', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                  Text('B: Barcode', style: TextStyle(fontSize: 12)),
+                  Text('C: Kategori', style: TextStyle(fontSize: 12)),
+                  Text('D: Satuan Dasar (e.g. kg, pcs)', style: TextStyle(fontSize: 12)),
+                  Text('E: Stok Awal', style: TextStyle(fontSize: 12)),
+                  Text('F: Harga Modal (Rp)', style: TextStyle(fontSize: 12, color: AppTheme.accent)),
+                  Text('G: Harga Jual Dasar (Rp)', style: TextStyle(fontSize: 12)),
                 ],
               ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Contoh kolom G: roll:50:380000;box:6:540000',
-              style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: AppTheme.textMuted),
             ),
             const SizedBox(height: 24),
             if (_status != null)

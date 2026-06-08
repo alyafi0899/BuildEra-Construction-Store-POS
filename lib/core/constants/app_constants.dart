@@ -30,9 +30,10 @@ class AppConstants {
   static const double lowStockThreshold = 10;
 
   // Payment methods
-  static const String paymentCash  = 'Tunai';
-  static const String paymentQris  = 'QRIS';
-  static const String paymentDebit = 'Debit';
+  static const String paymentCash     = 'Tunai';
+  static const String paymentQris     = 'QRIS';
+  static const String paymentDebit    = 'Debit';
+  static const String paymentTransfer = 'Transfer Bank';
 
-  static const List<String> paymentMethods = [paymentCash, paymentQris, paymentDebit];
+  static const List<String> paymentMethods = [paymentCash, paymentQris, paymentDebit, paymentTransfer];
 }

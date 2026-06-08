@@ -247,6 +247,8 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   }
 
   Widget _paymentPanel(BuildContext context, CartState cart, double change) {
+    final settings = ref.watch(settingsProvider);
+    
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text('Metode Pembayaran',
           style: Theme.of(context)
@@ -255,6 +257,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
               ?.copyWith(color: AppTheme.accent)),
       const SizedBox(height: 12),
       ...AppConstants.paymentMethods.map((m) => _methodTile(context, m)),
+      
       if (_method == AppConstants.paymentCash) ...[
         const SizedBox(height: 16),
         TextField(
@@ -319,8 +322,52 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
           ),
         ],
       ],
+      
+      if (_method == AppConstants.paymentTransfer) ...[
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceAlt,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.account_balance_wallet_rounded, color: AppTheme.accent, size: 18),
+                  SizedBox(width: 8),
+                  Text('Tujuan Transfer:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (settings.bankAccounts.isEmpty)
+                const Text('Belum ada rekening diatur di Pengaturan', 
+                  style: TextStyle(color: AppTheme.danger, fontSize: 11, fontStyle: FontStyle.italic))
+              else
+                ...settings.bankAccounts.map((acc) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(acc.bankName, style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold, fontSize: 12)),
+                      Text(acc.accountNumber, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                      Text('a/n ${acc.accountHolder}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                      const Divider(height: 16, color: AppTheme.border),
+                    ],
+                  ),
+                )),
+              const Text('Pastikan dana sudah diterima sebelum konfirmasi', 
+                style: TextStyle(color: AppTheme.warning, fontSize: 11, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      ],
+      
       // QRIS / Debit mock panel
-      if (_method != AppConstants.paymentCash)
+      if (_method == AppConstants.paymentQris || _method == AppConstants.paymentDebit)
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 16),
           child: Container(
@@ -435,10 +482,11 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
 
   IconData _icon(String m) {
     switch (m) {
-      case AppConstants.paymentCash:  return Icons.payments_rounded;
-      case AppConstants.paymentQris:  return Icons.qr_code_rounded;
-      case AppConstants.paymentDebit: return Icons.credit_card_rounded;
-      default:                        return Icons.payment;
+      case AppConstants.paymentCash:     return Icons.payments_rounded;
+      case AppConstants.paymentQris:     return Icons.qr_code_rounded;
+      case AppConstants.paymentDebit:    return Icons.credit_card_rounded;
+      case AppConstants.paymentTransfer: return Icons.account_balance_rounded;
+      default:                           return Icons.payment;
     }
   }
 }

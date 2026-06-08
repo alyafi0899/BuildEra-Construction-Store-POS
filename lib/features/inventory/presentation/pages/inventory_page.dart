@@ -159,7 +159,7 @@ class _InventoryRowState extends ConsumerState<_InventoryRow> {
   final _adjCtrl = TextEditingController();
 
   Future<void> _adjust(double delta) async {
-    await ref.read(productsProvider.notifier).adjustStock(widget.product.id, delta);
+    await ref.read(productsActionProvider).adjustStock(widget.product.id, delta);
     _adjCtrl.clear();
     if (mounted) showSuccess(context, 'Stok diperbarui');
   }

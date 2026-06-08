@@ -22,6 +22,7 @@ class _CashierPageState extends ConsumerState<CashierPage> {
   final _searchCtrl = TextEditingController();
   String _search = '';
   String? _category;
+  bool _autoAdd = true;
 
   @override
   void dispose() { _searchCtrl.dispose(); super.dispose(); }
@@ -31,6 +32,28 @@ class _CashierPageState extends ConsumerState<CashierPage> {
     return Scaffold(
       backgroundColor: AppTheme.bg,
       body: BarcodeListener(
+        autoAdd: _autoAdd,
+        onBarcodeScanned: (barcode) {
+          // If in "Cari Produk" mode, update the search field with the scanned barcode
+          if (!_autoAdd) {
+            setState(() {
+              _search = barcode;
+              _searchCtrl.text = barcode;
+              // Move cursor to end
+              _searchCtrl.selection = TextSelection.fromPosition(
+                TextPosition(offset: barcode.length),
+              );
+            });
+          }
+        },
+        onProductFound: (_) {
+          if (_autoAdd && _search.isNotEmpty) {
+            setState(() {
+              _search = '';
+              _searchCtrl.clear();
+            });
+          }
+        },
         child: Row(children: [
           // ── Left: Product Search & Grid ──────────────────────────────────
           Expanded(
@@ -46,6 +69,30 @@ class _CashierPageState extends ConsumerState<CashierPage> {
                     const SizedBox(width: 10),
                     Text('Kasir', style: Theme.of(context).textTheme.headlineMedium),
                     const Spacer(),
+                    // Scan Mode Toggle
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _autoAdd ? AppTheme.accent.withValues(alpha: 0.1) : AppTheme.surfaceAlt,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: _autoAdd ? AppTheme.accent : AppTheme.border),
+                      ),
+                      child: Row(children: [
+                        Icon(_autoAdd ? Icons.bolt_rounded : Icons.search_rounded, 
+                             size: 16, color: _autoAdd ? AppTheme.accent : AppTheme.textSecondary),
+                        const SizedBox(width: 8),
+                        Text(_autoAdd ? 'Jual Langsung' : 'Cari Produk', 
+                             style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, 
+                             color: _autoAdd ? AppTheme.accent : AppTheme.textSecondary)),
+                        const SizedBox(width: 8),
+                        Switch.adaptive(
+                          value: _autoAdd,
+                          onChanged: (v) => setState(() => _autoAdd = v),
+                          activeColor: AppTheme.accent,
+                        ),
+                      ]),
+                    ),
+                    const SizedBox(width: 16),
                     Text(Formatters.date(DateTime.now()), style: Theme.of(context).textTheme.bodyMedium),
                   ]),
                   const SizedBox(height: 16),

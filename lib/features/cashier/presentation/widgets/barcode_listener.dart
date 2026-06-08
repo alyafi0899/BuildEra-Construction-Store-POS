@@ -8,10 +8,14 @@ import '../../../../shared/models/product.dart';
 class BarcodeListener extends ConsumerStatefulWidget {
   final Widget child;
   final Function(Product)? onProductFound;
+  final Function(String)? onBarcodeScanned;
+  final bool autoAdd;
 
   const BarcodeListener({
     required this.child,
     this.onProductFound,
+    this.onBarcodeScanned,
+    this.autoAdd = true,
     super.key,
   });
 
@@ -73,6 +77,11 @@ class _BarcodeListenerState extends ConsumerState<BarcodeListener> {
     // Clear any existing snackbars to avoid queuing and "slow" feeling
     ScaffoldMessenger.of(context).clearSnackBars();
 
+    // Trigger raw barcode callback (useful for global search mode)
+    if (widget.onBarcodeScanned != null) {
+      widget.onBarcodeScanned!(barcode);
+    }
+
     final products = ref.read(productsProvider).asData?.value ?? [];
     final matching = products.firstWhere(
       (p) => p.barcode?.trim() == barcode.trim(),
@@ -91,33 +100,44 @@ class _BarcodeListenerState extends ConsumerState<BarcodeListener> {
 
     if (matching.id.isEmpty) {
       // Product not found
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Barcode tidak terdaftar'),
-          duration: Duration(milliseconds: 1000),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      // Only show error if we are in auto-add mode
+      if (widget.autoAdd) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Barcode tidak terdaftar'),
+            duration: Duration(milliseconds: 1000),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
       return;
     }
 
-    // 1. ADD TO CART FIRST (Instant Update)
-    ref.read(cartProvider.notifier).addProduct(matching);
+    // If autoAdd is true, add to cart immediately
+    if (widget.autoAdd) {
+      // 1. ADD TO CART FIRST (Instant Update)
+      ref.read(cartProvider.notifier).addProduct(matching);
 
-    // 2. Clear Search in UI
-    if (widget.onProductFound != null) {
-      widget.onProductFound!(matching);
+      // 2. Clear Search in UI
+      if (widget.onProductFound != null) {
+        widget.onProductFound!(matching);
+      }
+
+      // 3. Very brief success feedback
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${matching.name} ditambahkan'),
+          duration: const Duration(milliseconds: 400),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: const Color(0xFF4CAF50),
+        ),
+      );
+    } else {
+      // Notify found even if not adding (to handle UI logic if needed)
+      if (widget.onProductFound != null) {
+        widget.onProductFound!(matching);
+      }
     }
-
-    // 3. Very brief success feedback
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${matching.name} ditambahkan'),
-        duration: const Duration(milliseconds: 400),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: const Color(0xFF4CAF50),
-      ),
-    );
   }
 }

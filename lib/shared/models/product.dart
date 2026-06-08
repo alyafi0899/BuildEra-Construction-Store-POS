@@ -118,7 +118,13 @@ class Product {
   );
 
   /// Returns all available units for this product, including the base unit.
-  List<ProductUnit> get allUnits => [baseProductUnit, ...units];
+  /// Filters out duplicates to prevent UI crashes.
+  List<ProductUnit> get allUnits {
+    final base = baseProductUnit;
+    // Only include additional units that don't have the same name as the base unit
+    final additional = units.where((u) => u.unitName.toLowerCase() != baseUnit.toLowerCase());
+    return [base, ...additional];
+  }
 
   /// Sell price for a given unit (from the units list)
   double priceForUnit(String unitName) {

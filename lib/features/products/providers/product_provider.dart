@@ -14,6 +14,20 @@ class ProductRepository {
   final _db = firestore.FirebaseFirestore.instance;
   final _storage = storage.FirebaseStorage.instance;
 
+  Stream<List<Product>> getProductsStream() {
+    return _db.collection('products').orderBy('name').snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        final unitsData = data['units'] as List? ?? [];
+        final units = unitsData
+            .whereType<Map<String, dynamic>>()
+            .map((u) => ProductUnit.fromMap(u))
+            .toList();
+        return Product.fromMap(data, units: units);
+      }).toList();
+    });
+  }
+
   Future<List<Product>> getAllProducts() async {
     try {
       final snapshot = await _db.collection('products').orderBy('name').get();
@@ -27,17 +41,13 @@ class ProductRepository {
         return Product.fromMap(data, units: units);
       }).toList();
     } catch (e) {
-      // Log or handle the error
       return [];
     }
   }
 
   Future<String?> uploadProductImage(String productId, Uint8List bytes) async {
     try {
-      // 1. Compress image first
       final compressedBytes = await ImageHelper.compressImage(bytes);
-
-      // 2. Upload to Firebase Storage
       final ref = _storage.ref().child('products/$productId.jpg');
       await ref.putData(compressedBytes, storage.SettableMetadata(contentType: 'image/jpeg'));
       return await ref.getDownloadURL();
@@ -47,7 +57,6 @@ class ProductRepository {
   }
 
   Future<void> saveProduct(Product p, List<ProductUnit> units) async {
-    // 1. Check for duplicate barcode (if provided)
     if (p.barcode != null && p.barcode!.trim().isNotEmpty) {
       final dupBarcode = await _db.collection('products')
           .where('barcode', isEqualTo: p.barcode!.trim())
@@ -58,7 +67,6 @@ class ProductRepository {
       }
     }
     
-    // 2. Check for duplicate name (case-insensitive check is hard in Firestore, usually names are unique-ish)
     final dupName = await _db.collection('products')
         .where('name', isEqualTo: p.name.trim())
         .limit(1)
@@ -73,7 +81,6 @@ class ProductRepository {
   }
 
   Future<void> saveProductsBatch(List<Map<Product, List<ProductUnit>>> productsWithUnits) async {
-    // To prevent duplicates during batch import, we fetch current state first
     final existing = await getAllProducts();
     final existingBarcodes = existing.map((e) => e.barcode?.trim()).whereType<String>().toSet();
     final existingNames = existing.map((e) => e.name.trim().toLowerCase()).toSet();
@@ -87,15 +94,13 @@ class ProductRepository {
       final nameLower = p.name.trim().toLowerCase();
       final barcode = p.barcode?.trim();
 
-      // Check if duplicate name
       if (existingNames.contains(nameLower) || seenNamesInBatch.contains(nameLower)) {
-        continue; // Skip duplicates
+        continue;
       }
       
-      // Check if duplicate barcode
       if (barcode != null && barcode.isNotEmpty) {
         if (existingBarcodes.contains(barcode) || seenBarcodesInBatch.contains(barcode)) {
-          continue; // Skip duplicates
+          continue;
         }
         seenBarcodesInBatch.add(barcode);
       }
@@ -106,7 +111,6 @@ class ProductRepository {
 
     if (toImport.isEmpty) return;
 
-    // Firestore batch limit is 500
     const int batchSize = 500;
     for (var i = 0; i < toImport.length; i += batchSize) {
       final end = (i + batchSize < toImport.length) ? i + batchSize : toImport.length;
@@ -132,15 +136,10 @@ class ProductRepository {
   }
 
   Future<void> deleteProduct(String id) async {
-    // 1. Delete from Firestore
     await _db.collection('products').doc(id).delete();
-    
-    // 2. Delete from Storage (if exists)
     try {
       await _storage.ref().child('products/$id.jpg').delete();
-    } catch (_) {
-      // Ignore errors if file doesn't exist
-    }
+    } catch (_) {}
   }
 }
 
@@ -148,23 +147,21 @@ class ProductRepository {
 
 final productRepositoryProvider = Provider((_) => ProductRepository());
 
-final productsProvider = AsyncNotifierProvider<ProductsNotifier, List<Product>>(
-    ProductsNotifier.new);
+final productsProvider = StreamProvider<List<Product>>((ref) {
+  return ref.watch(productRepositoryProvider).getProductsStream();
+});
 
-class ProductsNotifier extends AsyncNotifier<List<Product>> {
-  ProductRepository get _repo => ref.read(productRepositoryProvider);
+// Since we switched to StreamProvider, we need a separate Notifier for actions
+final productsActionProvider = Provider((ref) => ProductsActionNotifier(ref));
 
-  @override
-  Future<List<Product>> build() => _repo.getAllProducts();
+class ProductsActionNotifier {
+  final Ref _ref;
+  ProductsActionNotifier(this._ref);
 
-  Future<void> refresh() async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(_repo.getAllProducts);
-  }
+  ProductRepository get _repo => _ref.read(productRepositoryProvider);
 
   Future<void> saveProduct(Product product, List<ProductUnit> units) async {
     await _repo.saveProduct(product, units);
-    await refresh();
   }
 
   Future<String?> uploadImage(String productId, Uint8List bytes) async {
@@ -173,22 +170,14 @@ class ProductsNotifier extends AsyncNotifier<List<Product>> {
 
   Future<void> importProducts(List<Map<Product, List<ProductUnit>>> products) async {
     await _repo.saveProductsBatch(products);
-    await refresh();
   }
 
   Future<void> deleteProduct(String id) async {
-    try {
-      await _repo.deleteProduct(id);
-      await refresh();
-    } catch (e) {
-      // Re-throw so UI can catch and show error
-      rethrow;
-    }
+    await _repo.deleteProduct(id);
   }
 
   Future<void> adjustStock(String productId, double delta) async {
     await _repo.updateStock(productId, delta);
-    await refresh();
   }
 }
 

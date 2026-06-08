@@ -1,5 +1,33 @@
 import 'dart:convert';
 
+class BankAccount {
+  final String bankName;
+  final String accountNumber;
+  final String accountHolder;
+
+  const BankAccount({
+    required this.bankName,
+    required this.accountNumber,
+    required this.accountHolder,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'bankName': bankName,
+      'accountNumber': accountNumber,
+      'accountHolder': accountHolder,
+    };
+  }
+
+  factory BankAccount.fromMap(Map<String, dynamic> map) {
+    return BankAccount(
+      bankName: map['bankName'] ?? '',
+      accountNumber: map['accountNumber'] ?? '',
+      accountHolder: map['accountHolder'] ?? '',
+    );
+  }
+}
+
 class StoreSettings {
   final String businessName;
   final String ownerName;
@@ -7,9 +35,7 @@ class StoreSettings {
   final String email;
   final String address;
   final String description;
-  final String bankName;
-  final String bankAccount;
-  final String bankHolder;
+  final List<BankAccount> bankAccounts;
   final String? logoUrl;
 
   const StoreSettings({
@@ -19,9 +45,7 @@ class StoreSettings {
     this.email = '',
     this.address = '',
     this.description = '',
-    this.bankName = '',
-    this.bankAccount = '',
-    this.bankHolder = '',
+    this.bankAccounts = const [],
     this.logoUrl,
   });
 
@@ -33,9 +57,7 @@ class StoreSettings {
       'email': email,
       'address': address,
       'description': description,
-      'bankName': bankName,
-      'bankAccount': bankAccount,
-      'bankHolder': bankHolder,
+      'bankAccounts': bankAccounts.map((x) => x.toMap()).toList(),
       'logoUrl': logoUrl,
     };
   }
@@ -48,9 +70,10 @@ class StoreSettings {
       email: map['email'] ?? '',
       address: map['address'] ?? '',
       description: map['description'] ?? '',
-      bankName: map['bankName'] ?? '',
-      bankAccount: map['bankAccount'] ?? '',
-      bankHolder: map['bankHolder'] ?? '',
+      bankAccounts: (map['bankAccounts'] as List?)
+              ?.map((x) => BankAccount.fromMap(x as Map<String, dynamic>))
+              .toList() ??
+          [],
       logoUrl: map['logoUrl'],
     );
   }
@@ -66,9 +89,7 @@ class StoreSettings {
     String? email,
     String? address,
     String? description,
-    String? bankName,
-    String? bankAccount,
-    String? bankHolder,
+    List<BankAccount>? bankAccounts,
     String? logoUrl,
   }) {
     return StoreSettings(
@@ -78,9 +99,7 @@ class StoreSettings {
       email: email ?? this.email,
       address: address ?? this.address,
       description: description ?? this.description,
-      bankName: bankName ?? this.bankName,
-      bankAccount: bankAccount ?? this.bankAccount,
-      bankHolder: bankHolder ?? this.bankHolder,
+      bankAccounts: bankAccounts ?? this.bankAccounts,
       logoUrl: logoUrl ?? this.logoUrl,
     );
   }

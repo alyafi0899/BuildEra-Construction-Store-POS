@@ -271,7 +271,7 @@ class _ProductRow extends ConsumerWidget {
               if (!context.mounted) return;
               if (ok) {
                 try {
-                  await ref.read(productsProvider.notifier).deleteProduct(product.id);
+                  await ref.read(productsActionProvider).deleteProduct(product.id);
                   if (context.mounted) showSuccess(context, 'Produk dihapus');
                 } catch (e) {
                   if (context.mounted) showError(context, 'Gagal menghapus produk: $e');

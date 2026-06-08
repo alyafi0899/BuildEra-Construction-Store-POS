@@ -96,7 +96,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
         if (localPath != null) imagePath = localPath;
 
         // 2. Upload to Firebase Storage with compression
-        imagePath = await ref.read(productsProvider.notifier).uploadImage(productId, _imageBytes!);
+        imagePath = await ref.read(productsActionProvider).uploadImage(productId, _imageBytes!);
       }
 
       final product = Product(
@@ -114,7 +114,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
         updatedAt: DateTime.now(),
       );
 
-      await ref.read(productsProvider.notifier).saveProduct(product, validUnits);
+      await ref.read(productsActionProvider).saveProduct(product, validUnits);
       if (mounted) {
         Navigator.of(context).pop();
         showSuccess(

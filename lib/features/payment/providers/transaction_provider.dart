@@ -263,7 +263,6 @@ class TransactionsNotifier extends AsyncNotifier<List<Transaction>> {
 
     ref.read(cartProvider.notifier).clear();
     // Wait for the state to be updated before returning
-    await ref.read(productsProvider.notifier).refresh();
     await refresh();
     return id;
   }

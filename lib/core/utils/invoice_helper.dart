@@ -62,11 +62,11 @@ class InvoiceHelper {
                       pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
-                          pw.Text(i.productName, style: const pw.TextStyle(fontSize: 8)),
+                          pw.Text(i.productName, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
                           pw.Text('${Formatters.decimal(i.quantity)} ${i.unitName} x ${Formatters.currency(i.soldPrice)}', 
                             style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700)),
                           if (i.discountValue > 0)
-                            pw.Text('Disc: ${Formatters.currency(i.discountValue)}${i.discountType.name == 'percentage' ? '%' : ''}', 
+                            pw.Text('Pot: ${Formatters.currency(i.discountValue)}${i.discountType.name == 'percentage' ? '%' : ''}', 
                               style: const pw.TextStyle(fontSize: 7, color: PdfColors.green)),
                         ]
                       ),
@@ -108,12 +108,16 @@ class InvoiceHelper {
                 child: pw.Text('Terima Kasih atas Kunjungan Anda', 
                   style: pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic)),
               ),
-              if (settings.bankName.isNotEmpty) ...[
-                pw.SizedBox(height: 5),
-                pw.Center(
-                  child: pw.Text('Pembayaran via ${settings.bankName}: ${settings.bankAccount}', 
+              
+              if (settings.bankAccounts.isNotEmpty) ...[
+                pw.SizedBox(height: 8),
+                pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+                pw.Text('PEMBAYARAN TRANSFER:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                ...settings.bankAccounts.map((acc) => pw.Padding(
+                  padding: const pw.EdgeInsets.only(top: 2),
+                  child: pw.Text('${acc.bankName}: ${acc.accountNumber} a/n ${acc.accountHolder}', 
                     style: const pw.TextStyle(fontSize: 7)),
-                ),
+                )),
               ],
             ],
           );
@@ -149,7 +153,6 @@ class InvoiceHelper {
     final pdfBytes = await generatePdf(tx, settings);
     
     if (kIsWeb) {
-      // Web doesn't support share_plus for files easily, so we just download
       await Printing.sharePdf(bytes: pdfBytes, filename: 'Invoice-${tx.invoiceNumber}.pdf');
     } else {
       final tempDir = await getTemporaryDirectory();
@@ -161,7 +164,6 @@ class InvoiceHelper {
 
   static Future<void> saveInvoice(Transaction tx, StoreSettings settings) async {
     final pdfBytes = await generatePdf(tx, settings);
-    // On web, this triggers download. On desktop/mobile, it shows printer dialog (most direct way to save as PDF)
     await Printing.sharePdf(bytes: pdfBytes, filename: 'Invoice-${tx.invoiceNumber}.pdf');
   }
 }

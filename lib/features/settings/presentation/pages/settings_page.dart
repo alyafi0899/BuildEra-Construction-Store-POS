@@ -20,9 +20,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   late TextEditingController _emailCtrl;
   late TextEditingController _addressCtrl;
   late TextEditingController _descriptionCtrl;
-  late TextEditingController _bankNameCtrl;
-  late TextEditingController _bankAccountCtrl;
-  late TextEditingController _bankHolderCtrl;
+
+  List<BankAccount> _bankAccounts = [];
 
   @override
   void initState() {
@@ -34,9 +33,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     _emailCtrl = TextEditingController(text: settings.email);
     _addressCtrl = TextEditingController(text: settings.address);
     _descriptionCtrl = TextEditingController(text: settings.description);
-    _bankNameCtrl = TextEditingController(text: settings.bankName);
-    _bankAccountCtrl = TextEditingController(text: settings.bankAccount);
-    _bankHolderCtrl = TextEditingController(text: settings.bankHolder);
+    _bankAccounts = List.from(settings.bankAccounts);
   }
 
   @override
@@ -47,10 +44,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     _emailCtrl.dispose();
     _addressCtrl.dispose();
     _descriptionCtrl.dispose();
-    _bankNameCtrl.dispose();
-    _bankAccountCtrl.dispose();
-    _bankHolderCtrl.dispose();
     super.dispose();
+  }
+
+  void _addBankAccount() {
+    setState(() {
+      _bankAccounts.add(const BankAccount(bankName: '', accountNumber: '', accountHolder: ''));
+    });
+  }
+
+  void _removeBankAccount(int index) {
+    setState(() {
+      _bankAccounts.removeAt(index);
+    });
   }
 
   void _save() {
@@ -62,9 +68,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         email: _emailCtrl.text,
         address: _addressCtrl.text,
         description: _descriptionCtrl.text,
-        bankName: _bankNameCtrl.text,
-        bankAccount: _bankAccountCtrl.text,
-        bankHolder: _bankHolderCtrl.text,
+        bankAccounts: _bankAccounts,
       );
       
       ref.read(settingsProvider.notifier).updateSettings(settings);
@@ -81,7 +85,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     ref.listen(settingsProvider, (prev, next) {
-      // If controllers are empty and we just got data, fill them
       if (_businessNameCtrl.text.isEmpty && next.businessName.isNotEmpty) {
         _businessNameCtrl.text = next.businessName;
         _ownerNameCtrl.text = next.ownerName;
@@ -89,9 +92,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         _emailCtrl.text = next.email;
         _addressCtrl.text = next.address;
         _descriptionCtrl.text = next.description;
-        _bankNameCtrl.text = next.bankName;
-        _bankAccountCtrl.text = next.bankAccount;
-        _bankHolderCtrl.text = next.bankHolder;
+        setState(() {
+          _bankAccounts = List.from(next.bankAccounts);
+        });
       }
     });
 
@@ -99,7 +102,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       backgroundColor: AppTheme.bg,
       body: Column(
         children: [
-          // Header
           Container(
             padding: const EdgeInsets.all(24),
             color: AppTheme.surface,
@@ -117,7 +119,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               ],
             ),
           ),
-          
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
@@ -129,97 +130,50 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _SectionTitle(title: 'Informasi Bisnis'),
-                        const SizedBox(height: 16),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: _buildTextField(
-                                label: 'Nama Bisnis',
-                                controller: _businessNameCtrl,
-                                icon: Icons.store_rounded,
-                                validator: (v) => v!.isEmpty ? 'Nama bisnis wajib diisi' : null,
-                              ),
-                            ),
-                            const SizedBox(width: 20),
-                            Expanded(
-                              child: _buildTextField(
-                                label: 'Nama Pemilik',
-                                controller: _ownerNameCtrl,
-                                icon: Icons.person_rounded,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildTextField(
-                                label: 'Nomor Telepon',
-                                controller: _phoneCtrl,
-                                icon: Icons.phone_rounded,
-                              ),
-                            ),
-                            const SizedBox(width: 20),
-                            Expanded(
-                              child: _buildTextField(
-                                label: 'Email',
-                                controller: _emailCtrl,
-                                icon: Icons.email_rounded,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        _buildTextField(
-                          label: 'Alamat',
-                          controller: _addressCtrl,
-                          icon: Icons.location_on_rounded,
-                          maxLines: 2,
-                        ),
-                        const SizedBox(height: 20),
-                        _buildTextField(
-                          label: 'Deskripsi Toko',
-                          controller: _descriptionCtrl,
-                          icon: Icons.description_rounded,
-                          maxLines: 3,
-                        ),
-                        
-                        const SizedBox(height: 40),
-                        _SectionTitle(title: 'Informasi Pembayaran (Bank)'),
+                        const _SectionTitle(title: 'Informasi Bisnis'),
                         const SizedBox(height: 16),
                         Row(
                           children: [
-                            Expanded(
-                              child: _buildTextField(
-                                label: 'Nama Bank',
-                                controller: _bankNameCtrl,
-                                icon: Icons.account_balance_rounded,
-                                hint: 'Contoh: BCA, Mandiri, BRI',
-                              ),
-                            ),
+                            Expanded(child: _buildInput('Nama Bisnis', _businessNameCtrl, Icons.store_rounded)),
                             const SizedBox(width: 20),
-                            Expanded(
-                              child: _buildTextField(
-                                label: 'Nomor Rekening',
-                                controller: _bankAccountCtrl,
-                                icon: Icons.numbers_rounded,
-                              ),
-                            ),
+                            Expanded(child: _buildInput('Nama Pemilik', _ownerNameCtrl, Icons.person_rounded)),
                           ],
                         ),
                         const SizedBox(height: 20),
-                        _buildTextField(
-                          label: 'Nama Pemilik Rekening',
-                          controller: _bankHolderCtrl,
-                          icon: Icons.person_outline_rounded,
+                        Row(
+                          children: [
+                            Expanded(child: _buildInput('Nomor Telepon', _phoneCtrl, Icons.phone_rounded)),
+                            const SizedBox(width: 20),
+                            Expanded(child: _buildInput('Email', _emailCtrl, Icons.email_rounded)),
+                          ],
                         ),
-                        
+                        const SizedBox(height: 20),
+                        _buildInput('Alamat', _addressCtrl, Icons.location_on_rounded, maxLines: 2),
+                        const SizedBox(height: 20),
+                        _buildInput('Deskripsi Toko', _descriptionCtrl, Icons.description_rounded, maxLines: 3),
                         const SizedBox(height: 40),
-                        // Logo Section could go here, but for now just a placeholder
-                        // since file handling in web/desktop needs specific setup.
+                        Row(
+                          children: [
+                            const _SectionTitle(title: 'Daftar Rekening Bank'),
+                            const Spacer(),
+                            TextButton.icon(
+                              onPressed: _addBankAccount,
+                              icon: const Icon(Icons.add_circle_outline, size: 18),
+                              label: const Text('Tambah Rekening'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Column(
+                          children: [
+                            if (_bankAccounts.isEmpty)
+                              const Center(child: Text('Belum ada rekening', style: TextStyle(color: AppTheme.textSecondary)))
+                            else
+                              for (int i = 0; i < _bankAccounts.length; i++)
+                                _buildBankCard(i),
+                          ],
+                        ),
+                        const SizedBox(height: 40),
                       ],
                     ),
                   ),
@@ -232,28 +186,79 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-  Widget _buildTextField({
-    required String label,
-    required TextEditingController controller,
-    required IconData icon,
-    String? hint,
-    int maxLines = 1,
-    String? Function(String?)? validator,
-  }) {
+  Widget _buildInput(String label, TextEditingController ctrl, IconData icon, {int maxLines = 1}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppTheme.textSecondary)),
+        Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
         const SizedBox(height: 8),
         TextFormField(
-          controller: controller,
+          controller: ctrl,
           maxLines: maxLines,
-          validator: validator,
           decoration: InputDecoration(
-            hintText: hint,
             prefixIcon: Icon(icon, size: 20, color: AppTheme.accent.withValues(alpha: 0.7)),
           ),
           style: const TextStyle(fontSize: 14),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBankCard(int i) {
+    final account = _bankAccounts[i];
+    return Container(
+      key: ValueKey('bank_card_$i'),
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceAlt,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _buildSmallInput('Nama Bank', account.bankName, (v) {
+                  setState(() => _bankAccounts[i] = BankAccount(bankName: v, accountNumber: account.accountNumber, accountHolder: account.accountHolder));
+                }),
+              ),
+              IconButton(onPressed: () => _removeBankAccount(i), icon: const Icon(Icons.delete_outline, color: AppTheme.danger)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildSmallInput('Nomor Rekening', account.accountNumber, (v) {
+                  setState(() => _bankAccounts[i] = BankAccount(bankName: account.bankName, accountNumber: v, accountHolder: account.accountHolder));
+                }),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildSmallInput('Pemilik', account.accountHolder, (v) {
+                  setState(() => _bankAccounts[i] = BankAccount(bankName: account.bankName, accountNumber: account.accountNumber, accountHolder: v));
+                }),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSmallInput(String label, String initial, ValueChanged<String> onChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+        const SizedBox(height: 4),
+        TextFormField(
+          initialValue: initial,
+          onChanged: onChanged,
+          decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
+          style: const TextStyle(fontSize: 13),
         ),
       ],
     );
@@ -269,10 +274,7 @@ class _SectionTitle extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-          color: AppTheme.accent,
-          fontWeight: FontWeight.bold,
-        )),
+        Text(title, style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: AppTheme.accent, fontWeight: FontWeight.bold)),
         const Divider(color: AppTheme.border, height: 24),
       ],
     );
