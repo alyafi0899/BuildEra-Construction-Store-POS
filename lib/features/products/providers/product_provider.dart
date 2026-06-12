@@ -141,6 +141,21 @@ class ProductRepository {
       await _storage.ref().child('products/$id.jpg').delete();
     } catch (_) {}
   }
+
+  Future<void> deleteProductsBatch(List<String> ids) async {
+    final batch = _db.batch();
+    for (final id in ids) {
+      batch.delete(_db.collection('products').doc(id));
+    }
+    await batch.commit();
+
+    // Delete images (Storage doesn't support batch delete)
+    for (final id in ids) {
+      try {
+        await _storage.ref().child('products/$id.jpg').delete();
+      } catch (_) {}
+    }
+  }
 }
 
 // ── Providers ─────────────────────────────────────────────────────────────
@@ -174,6 +189,10 @@ class ProductsActionNotifier {
 
   Future<void> deleteProduct(String id) async {
     await _repo.deleteProduct(id);
+  }
+
+  Future<void> deleteProductsBatch(List<String> ids) async {
+    await _repo.deleteProductsBatch(ids);
   }
 
   Future<void> adjustStock(String productId, double delta) async {

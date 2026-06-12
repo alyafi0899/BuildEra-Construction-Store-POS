@@ -21,9 +21,53 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
   final _searchCtrl = TextEditingController();
   String _search = '';
   String? _categoryFilter;
+  final Set<String> _selectedIds = {};
 
   @override
   void dispose() { _searchCtrl.dispose(); super.dispose(); }
+
+  void _toggleSelectAll(List<Product> products) {
+    setState(() {
+      final allVisibleSelected = products.every((p) => _selectedIds.contains(p.id));
+      if (allVisibleSelected) {
+        for (final p in products) {
+          _selectedIds.remove(p.id);
+        }
+      } else {
+        for (final p in products) {
+          _selectedIds.add(p.id);
+        }
+      }
+    });
+  }
+
+  void _toggleSelect(String id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  Future<void> _bulkDelete() async {
+    final count = _selectedIds.length;
+    final ok = await showConfirmDialog(context,
+        title: 'Hapus Massal',
+        content: 'Yakin hapus $count produk terpilih? Data tidak dapat dipulihkan.');
+    
+    if (!mounted) return;
+    if (ok) {
+      try {
+        await ref.read(productsActionProvider).deleteProductsBatch(_selectedIds.toList());
+        setState(() => _selectedIds.clear());
+        if (mounted) showSuccess(context, '$count produk dihapus');
+      } catch (e) {
+        if (mounted) showError(context, 'Gagal menghapus produk: $e');
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -87,6 +131,14 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                 onChanged: (v) => setState(() => _categoryFilter = v),
               ),
             ),
+            const SizedBox(width: 16),
+            if (_selectedIds.isNotEmpty)
+              ElevatedButton.icon(
+                onPressed: _bulkDelete,
+                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
+                icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+                label: Text('Hapus (${_selectedIds.length})'),
+              ),
             const Spacer(),
             productsAsync.when(
               data: (p) => Text('${p.length} produk', style: Theme.of(context).textTheme.bodyMedium),
@@ -117,7 +169,12 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
               );
             }
 
-            return _ProductTable(products: filtered);
+            return _ProductTable(
+              products: filtered,
+              selectedIds: _selectedIds,
+              onToggleSelect: _toggleSelect,
+              onSelectAll: () => _toggleSelectAll(filtered),
+            );
           },
         )),
       ]),
@@ -127,10 +184,21 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
 
 class _ProductTable extends ConsumerWidget {
   final List<Product> products;
-  const _ProductTable({required this.products});
+  final Set<String> selectedIds;
+  final ValueChanged<String> onToggleSelect;
+  final VoidCallback onSelectAll;
+
+  const _ProductTable({
+    required this.products,
+    required this.selectedIds,
+    required this.onToggleSelect,
+    required this.onSelectAll,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final allSelected = products.isNotEmpty && products.every((p) => selectedIds.contains(p.id));
+
     return Scrollbar(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -144,6 +212,15 @@ class _ProductTable extends ConsumerWidget {
               border:       Border.all(color: AppTheme.border),
             ),
             child: Row(children: [
+              SizedBox(
+                width: 40,
+                child: Checkbox(
+                  value: allSelected,
+                  onChanged: (_) => onSelectAll(),
+                  activeColor: AppTheme.accent,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                ),
+              ),
               _th('Produk',    flex: 4),
               _th('Kategori',  flex: 2),
               _th('Barcode',   flex: 2),
@@ -157,6 +234,8 @@ class _ProductTable extends ConsumerWidget {
           ...products.asMap().entries.map((e) => _ProductRow(
                 product: e.value,
                 isEven:  e.key.isEven,
+                isSelected: selectedIds.contains(e.value.id),
+                onToggleSelect: () => onToggleSelect(e.value.id),
               )),
         ]),
       ),
@@ -183,21 +262,40 @@ class _ProductTable extends ConsumerWidget {
 class _ProductRow extends ConsumerWidget {
   final Product product;
   final bool    isEven;
-  const _ProductRow({required this.product, required this.isEven});
+  final bool    isSelected;
+  final VoidCallback onToggleSelect;
+
+  const _ProductRow({
+    required this.product,
+    required this.isEven,
+    required this.isSelected,
+    required this.onToggleSelect,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color:  isEven ? AppTheme.card : AppTheme.surface,
-        border: const Border(
-          left:   BorderSide(color: AppTheme.border),
-          right:  BorderSide(color: AppTheme.border),
+        color:  isSelected 
+          ? AppTheme.accent.withValues(alpha: 0.05) 
+          : (isEven ? AppTheme.card : AppTheme.surface),
+        border: Border(
+          left:   BorderSide(color: isSelected ? AppTheme.accent : AppTheme.border),
+          right:  BorderSide(color: isSelected ? AppTheme.accent : AppTheme.border),
           bottom: BorderSide(color: AppTheme.border),
         ),
       ),
       child: Row(children: [
+        SizedBox(
+          width: 40,
+          child: Checkbox(
+            value: isSelected,
+            onChanged: (_) => onToggleSelect(),
+            activeColor: AppTheme.accent,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+          ),
+        ),
         // Product name + icon
         Expanded(flex: 4, child: Row(children: [
           ProductImage(imagePath: product.imagePath, size: 36),
@@ -268,10 +366,11 @@ class _ProductRow extends ConsumerWidget {
               final ok = await showConfirmDialog(context,
                   title: 'Hapus Produk',
                   content: 'Yakin hapus "${product.name}"? Data tidak dapat dipulihkan.');
-              if (!context.mounted) return;
               if (ok) {
                 try {
                   await ref.read(productsActionProvider).deleteProduct(product.id);
+                  // No need to check mounted here as we use top level showSuccess
+                  // but for safety with context:
                   if (context.mounted) showSuccess(context, 'Produk dihapus');
                 } catch (e) {
                   if (context.mounted) showError(context, 'Gagal menghapus produk: $e');
