@@ -312,28 +312,84 @@ class _DailyExpandableRowState extends State<_DailyExpandableRow> {
       ),
       if (_expanded)
         Container(
-          margin: const EdgeInsets.only(top: 4, bottom: 8),
-          padding: const EdgeInsets.all(12),
+          margin: const EdgeInsets.only(top: 4, bottom: 12),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color:        AppTheme.surfaceAlt.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(12),
+            border:       Border.all(color: AppTheme.border),
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Daftar Transaksi:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textSecondary)),
-            const SizedBox(height: 8),
-            ...s.transactions.map((t) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(children: [
-                Text(t.invoiceNumber, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
-                const SizedBox(width: 12),
-                Text(t.paymentMethod, style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
-                const Spacer(),
-                Text(Formatters.currency(t.total), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-              ]),
+            Row(children: [
+              const Icon(Icons.receipt_long_rounded, size: 14, color: AppTheme.accent),
+              const SizedBox(width: 8),
+              Text('RINCIAN TRANSAKSI & PRODUK', 
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.bold, 
+                  letterSpacing: 1.1,
+                  color: AppTheme.accent,
+                )),
+            ]),
+            const SizedBox(height: 16),
+            ...s.transactions.map((t) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Transaction Header
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(children: [
+                    Text(t.invoiceNumber, style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(width: 12),
+                    StatusChip(label: t.paymentMethod, color: AppTheme.textMuted),
+                    const Spacer(),
+                    Text('Total: ${Formatters.currency(t.total)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  ]),
+                ),
+                // Items Table for this transaction
+                Padding(
+                  padding: const EdgeInsets.only(left: 10, top: 8, bottom: 20),
+                  child: Column(children: [
+                    // Item Header
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6, right: 10),
+                      child: Row(children: [
+                        Expanded(flex: 3, child: _smallTh('Produk')),
+                        Expanded(child: _smallTh('Qty', TextAlign.center)),
+                        Expanded(flex: 2, child: _smallTh('Modal', TextAlign.right)),
+                        Expanded(flex: 2, child: _smallTh('Jual', TextAlign.right)),
+                        Expanded(flex: 2, child: _smallTh('Profit', TextAlign.right)),
+                      ]),
+                    ),
+                    const Divider(height: 1, color: AppTheme.border),
+                    // Item Rows
+                    ...t.items.map((item) {
+                      final itemProfit = item.subtotal - (item.costPrice * item.quantity);
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
+                        child: Row(children: [
+                          Expanded(flex: 3, child: Text(item.productName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
+                          Expanded(child: Text('${Formatters.decimal(item.quantity)} ${item.unitName}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 11))),
+                          Expanded(flex: 2, child: Text(Formatters.currency(item.costPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary))),
+                          Expanded(flex: 2, child: Text(Formatters.currency(item.soldPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11))),
+                          Expanded(flex: 2, child: Text(Formatters.currency(itemProfit), textAlign: TextAlign.right, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: itemProfit >= 0 ? AppTheme.success : AppTheme.danger))),
+                        ]),
+                      );
+                    }),
+                  ]),
+                ),
+              ],
             )),
           ]),
         ),
     ]);
+  }
+
+  Widget _smallTh(String label, [TextAlign align = TextAlign.left]) {
+    return Text(label, textAlign: align, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textMuted));
   }
 }
 
