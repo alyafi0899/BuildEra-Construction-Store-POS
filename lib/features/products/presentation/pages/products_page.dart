@@ -21,6 +21,8 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
   final _searchCtrl = TextEditingController();
   String _search = '';
   String? _categoryFilter;
+  String _sortBy = 'name'; // 'name', 'category', 'cost', 'price', 'stock'
+  bool _sortAsc = true;
   final Set<String> _selectedIds = {};
 
   @override
@@ -103,13 +105,13 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
           ]),
         ),
 
-        // Filters
+        // Filters & Sorting
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           color:   AppTheme.surface,
           child:   Row(children: [
             SizedBox(
-              width: 300,
+              width: 260,
               child: AppSearchField(
                 controller: _searchCtrl,
                 hintText:   'Cari produk atau barcode...',
@@ -119,10 +121,10 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
             ),
             const SizedBox(width: 16),
             SizedBox(
-              width: 200,
+              width: 180,
               child: DropdownButtonFormField<String?>(
                 value:          _categoryFilter,
-                decoration:     const InputDecoration(labelText: 'Kategori'),
+                decoration:     const InputDecoration(labelText: 'Kategori', isDense: true),
                 dropdownColor:  AppTheme.surfaceAlt,
                 items: [
                   const DropdownMenuItem(value: null, child: Text('Semua Kategori')),
@@ -130,6 +132,29 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                 ],
                 onChanged: (v) => setState(() => _categoryFilter = v),
               ),
+            ),
+            const SizedBox(width: 16),
+            SizedBox(
+              width: 180,
+              child: DropdownButtonFormField<String>(
+                value:          _sortBy,
+                decoration:     const InputDecoration(labelText: 'Urutkan', isDense: true),
+                dropdownColor:  AppTheme.surfaceAlt,
+                items: const [
+                  DropdownMenuItem(value: 'name',     child: Text('Nama (A-Z)')),
+                  DropdownMenuItem(value: 'category', child: Text('Kategori')),
+                  DropdownMenuItem(value: 'stock',    child: Text('Stok')),
+                  DropdownMenuItem(value: 'cost',     child: Text('Harga Modal')),
+                  DropdownMenuItem(value: 'price',    child: Text('Harga Jual')),
+                ],
+                onChanged: (v) => setState(() => _sortBy = v!),
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              onPressed: () => setState(() => _sortAsc = !_sortAsc),
+              icon: Icon(_sortAsc ? Icons.south_rounded : Icons.north_rounded, color: AppTheme.accent),
+              tooltip: _sortAsc ? 'Ascending' : 'Descending',
             ),
             const SizedBox(width: 16),
             if (_selectedIds.isNotEmpty)
@@ -141,7 +166,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
               ),
             const Spacer(),
             productsAsync.when(
-              data: (p) => Text('${p.length} produk', style: Theme.of(context).textTheme.bodyMedium),
+              data: (p) => Text('${p.length} produk', style: Theme.of(context).textTheme.bodySmall),
               loading: () => const SizedBox(),
               error: (_, __) => const SizedBox(),
             ),
@@ -153,13 +178,27 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
           loading: () => const AppLoading(),
           error:   (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: AppTheme.danger))),
           data:    (products) {
-            final filtered = products.where((p) {
+            // Apply Search & Category Filter
+            var filtered = products.where((p) {
               final matchSearch = _search.isEmpty ||
                   p.name.toLowerCase().contains(_search.toLowerCase()) ||
                   (p.barcode?.contains(_search) ?? false);
               final matchCat = _categoryFilter == null || p.category == _categoryFilter;
               return matchSearch && matchCat;
             }).toList();
+
+            // Apply Sorting
+            filtered.sort((a, b) {
+              int cmp;
+              switch (_sortBy) {
+                case 'category': cmp = a.category.compareTo(b.category); break;
+                case 'stock':    cmp = a.stock.compareTo(b.stock); break;
+                case 'cost':     cmp = a.costPrice.compareTo(b.costPrice); break;
+                case 'price':    cmp = a.basePrice.compareTo(b.basePrice); break;
+                default:         cmp = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+              }
+              return _sortAsc ? cmp : -cmp;
+            });
 
             if (filtered.isEmpty) {
               return const EmptyState(
@@ -225,7 +264,8 @@ class _ProductTable extends ConsumerWidget {
               _th('Kategori',  flex: 2),
               _th('Barcode',   flex: 2),
               _th('Stok',      flex: 1, align: TextAlign.right),
-              _th('Harga Dasar', flex: 2, align: TextAlign.right),
+              _th('Harga Modal', flex: 2, align: TextAlign.right),
+              _th('Harga Jual',  flex: 2, align: TextAlign.right),
               _th('Satuan Jual', flex: 3),
               _th('Aksi',      flex: 2, align: TextAlign.center),
             ]),
@@ -322,10 +362,11 @@ class _ProductRow extends ConsumerWidget {
             ),
           ),
         ])),
+        Expanded(flex: 2, child: Text(Formatters.currency(product.costPrice), textAlign: TextAlign.right, style: Theme.of(context).textTheme.bodySmall)),
         Expanded(flex: 2, child: Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            Text(Formatters.currency(product.basePrice), style: Theme.of(context).textTheme.bodyMedium),
+            Text(Formatters.currency(product.basePrice), style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
             if (product.defaultUnitName != null && product.defaultUnitName != product.baseUnit) ...[
               const SizedBox(width: 6),
               Container(
