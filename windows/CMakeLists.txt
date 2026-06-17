@@ -1,5 +1,9 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.14)
+
+# Fix for CMake 4.x compatibility
+set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
+
 project(konstruksi_pos LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
