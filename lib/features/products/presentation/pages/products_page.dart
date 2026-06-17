@@ -1,11 +1,16 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:excel/excel.dart' hide Border;
+import 'package:printing/printing.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../shared/models/product.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../../../shared/widgets/product_image.dart';
+import '../../../../core/utils/barcode_helper.dart';
+import '../../providers/barcode_history_provider.dart';
 import '../../providers/product_provider.dart';
 import '../widgets/product_form_dialog.dart';
 import '../widgets/excel_import_dialog.dart';
@@ -71,6 +76,97 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     }
   }
 
+  Future<void> _generateMissingBarcodes(List<Product> allProducts) async {
+    final missing = allProducts.where((p) => p.barcode == null || p.barcode!.isEmpty).toList();
+    if (missing.isEmpty) {
+      showSuccess(context, 'Semua produk sudah memiliki barcode.');
+      return;
+    }
+
+    final ok = await showConfirmDialog(context,
+        title: 'Generate Barcode Massal',
+        content: 'Akan membuat barcode unik untuk ${missing.length} produk. Lanjutkan?');
+    
+    if (!mounted || !ok) return;
+
+    setState(() {}); // Show some loading if needed
+
+    try {
+      final historyRepo = ref.read(barcodeHistoryRepositoryProvider);
+      final productsAction = ref.read(productsActionProvider);
+      int count = 0;
+
+      for (final product in missing) {
+        String newBarcode = '';
+        bool isUnique = false;
+        int attempts = 0;
+
+        while (!isUnique && attempts < 10) {
+          final rawData = BarcodeHelper.generateRandomEAN13Data();
+          newBarcode = BarcodeHelper.getEAN13WithCheckDigit(rawData);
+          final used = await historyRepo.isBarcodeUsed(newBarcode);
+          if (!used) isUnique = true;
+          attempts++;
+        }
+
+        if (isUnique) {
+          await productsAction.saveProduct(product.copyWith(barcode: newBarcode), product.units);
+          count++;
+        }
+      }
+
+      if (mounted) showSuccess(context, 'Berhasil membuat $count barcode baru.');
+    } catch (e) {
+      if (mounted) showError(context, 'Gagal generate barcode: $e');
+    }
+  }
+
+  Future<void> _exportToExcel(List<Product> products) async {
+    try {
+      final excel = Excel.createExcel();
+      final sheet = excel['Sheet1'];
+
+      // Header row matching the import format
+      sheet.appendRow([
+        TextCellValue('Nama Produk'),
+        TextCellValue('Barcode'),
+        TextCellValue('Kategori'),
+        TextCellValue('Satuan Dasar'),
+        TextCellValue('Stok Awal'),
+        TextCellValue('Harga Modal (Rp)'),
+        TextCellValue('Harga Jual Dasar (Rp)'),
+      ]);
+
+      // Data rows
+      for (final p in products) {
+        sheet.appendRow([
+          TextCellValue(p.name),
+          TextCellValue(p.barcode ?? ''),
+          TextCellValue(p.category),
+          TextCellValue(p.baseUnit),
+          DoubleCellValue(p.stock),
+          DoubleCellValue(p.costPrice),
+          DoubleCellValue(p.basePrice),
+        ]);
+      }
+
+      final bytes = excel.save();
+      if (bytes == null) return;
+
+      final now = DateTime.now();
+      final fileName = 'Backup_Produk_${now.year}${now.month}${now.day}_${now.hour}${now.minute}.xlsx';
+
+      await Printing.sharePdf(
+        bytes: Uint8List.fromList(bytes),
+        filename: fileName,
+      );
+
+      if (mounted) showSuccess(context, 'Backup berhasil diekspor');
+    } catch (e) {
+      if (mounted) showError(context, 'Gagal ekspor: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsProvider);
@@ -92,9 +188,21 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
             ]),
             const Spacer(),
             OutlinedButton.icon(
+              onPressed: () => productsAsync.whenData((p) => _generateMissingBarcodes(p)),
+              icon:  const Icon(Icons.auto_fix_high_rounded, size: 18),
+              label: const Text('Generate Missing'),
+            ),
+            const SizedBox(width: 12),
+            OutlinedButton.icon(
               onPressed: () => ExcelImportDialog.show(context),
               icon:  const Icon(Icons.file_upload_outlined, size: 18),
               label: const Text('Import Excel'),
+            ),
+            const SizedBox(width: 12),
+            OutlinedButton.icon(
+              onPressed: () => productsAsync.whenData((p) => _exportToExcel(p)),
+              icon:  const Icon(Icons.file_download_outlined, size: 18),
+              label: const Text('Export Excel'),
             ),
             const SizedBox(width: 12),
             ElevatedButton.icon(
@@ -123,7 +231,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
             SizedBox(
               width: 180,
               child: DropdownButtonFormField<String?>(
-                value:          _categoryFilter,
+                initialValue:   _categoryFilter,
                 decoration:     const InputDecoration(labelText: 'Kategori', isDense: true),
                 dropdownColor:  AppTheme.surfaceAlt,
                 items: [
@@ -137,7 +245,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
             SizedBox(
               width: 180,
               child: DropdownButtonFormField<String>(
-                value:          _sortBy,
+                initialValue:   _sortBy,
                 decoration:     const InputDecoration(labelText: 'Urutkan', isDense: true),
                 dropdownColor:  AppTheme.surfaceAlt,
                 items: const [
@@ -146,6 +254,8 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                   DropdownMenuItem(value: 'stock',    child: Text('Stok')),
                   DropdownMenuItem(value: 'cost',     child: Text('Harga Modal')),
                   DropdownMenuItem(value: 'price',    child: Text('Harga Jual')),
+                  DropdownMenuItem(value: 'created',  child: Text('Tanggal Dibuat')),
+                  DropdownMenuItem(value: 'updated',  child: Text('Terakhir Diubah')),
                 ],
                 onChanged: (v) => setState(() => _sortBy = v!),
               ),
@@ -195,6 +305,8 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                 case 'stock':    cmp = a.stock.compareTo(b.stock); break;
                 case 'cost':     cmp = a.costPrice.compareTo(b.costPrice); break;
                 case 'price':    cmp = a.basePrice.compareTo(b.basePrice); break;
+                case 'created':  cmp = a.createdAt.compareTo(b.createdAt); break;
+                case 'updated':  cmp = a.updatedAt.compareTo(b.updatedAt); break;
                 default:         cmp = a.name.toLowerCase().compareTo(b.name.toLowerCase());
               }
               return _sortAsc ? cmp : -cmp;
@@ -221,7 +333,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
   }
 }
 
-class _ProductTable extends ConsumerWidget {
+class _ProductTable extends StatefulWidget {
   final List<Product> products;
   final Set<String> selectedIds;
   final ValueChanged<String> onToggleSelect;
@@ -235,11 +347,29 @@ class _ProductTable extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final allSelected = products.isNotEmpty && products.every((p) => selectedIds.contains(p.id));
+  State<_ProductTable> createState() => _ProductTableState();
+}
+
+class _ProductTableState extends State<_ProductTable> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final allSelected = widget.products.isNotEmpty && 
+                        widget.products.every((p) => widget.selectedIds.contains(p.id));
 
     return Scrollbar(
+      controller: _scrollController,
+      thumbVisibility: true,
+      trackVisibility: true,
       child: SingleChildScrollView(
+        controller: _scrollController,
         padding: const EdgeInsets.all(24),
         child: Column(children: [
           // Table header
@@ -255,7 +385,7 @@ class _ProductTable extends ConsumerWidget {
                 width: 40,
                 child: Checkbox(
                   value: allSelected,
-                  onChanged: (_) => onSelectAll(),
+                  onChanged: (_) => widget.onSelectAll(),
                   activeColor: AppTheme.accent,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                 ),
@@ -271,11 +401,11 @@ class _ProductTable extends ConsumerWidget {
             ]),
           ),
           // Rows
-          ...products.asMap().entries.map((e) => _ProductRow(
+          ...widget.products.asMap().entries.map((e) => _ProductRow(
                 product: e.value,
                 isEven:  e.key.isEven,
-                isSelected: selectedIds.contains(e.value.id),
-                onToggleSelect: () => onToggleSelect(e.value.id),
+                isSelected: widget.selectedIds.contains(e.value.id),
+                onToggleSelect: () => widget.onToggleSelect(e.value.id),
               )),
         ]),
       ),
@@ -410,8 +540,6 @@ class _ProductRow extends ConsumerWidget {
               if (ok) {
                 try {
                   await ref.read(productsActionProvider).deleteProduct(product.id);
-                  // No need to check mounted here as we use top level showSuccess
-                  // but for safety with context:
                   if (context.mounted) showSuccess(context, 'Produk dihapus');
                 } catch (e) {
                   if (context.mounted) showError(context, 'Gagal menghapus produk: $e');

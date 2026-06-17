@@ -18,6 +18,13 @@ class TransactionsPage extends ConsumerStatefulWidget {
 
 class _TransactionsPageState extends ConsumerState<TransactionsPage> {
   Transaction? _selected;
+  final ScrollController _listScrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _listScrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,14 +63,19 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
                     subtitle: 'Transaksi akan muncul di sini setelah pembayaran selesai',
                   );
                 }
-                return ListView.separated(
-                  padding:   const EdgeInsets.all(20),
-                  itemCount: txs.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (_, i) => _TxCard(
-                    tx:       txs[i],
-                    selected: _selected?.id == txs[i].id,
-                    onTap:    () => setState(() => _selected = _selected?.id == txs[i].id ? null : txs[i]),
+                return Scrollbar(
+                  controller: _listScrollController,
+                  thumbVisibility: true,
+                  child: ListView.separated(
+                    controller: _listScrollController,
+                    padding:   const EdgeInsets.all(20),
+                    itemCount: txs.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (_, i) => _TxCard(
+                      tx:       txs[i],
+                      selected: _selected?.id == txs[i].id,
+                      onTap:    () => setState(() => _selected = _selected?.id == txs[i].id ? null : txs[i]),
+                    ),
                   ),
                 );
               },
@@ -139,104 +151,125 @@ class _TxCard extends StatelessWidget {
   }
 }
 
-class _TxDetail extends ConsumerWidget {
+class _TxDetail extends StatefulWidget {
   final Transaction tx;
   const _TxDetail({required this.tx});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(settingsProvider);
+  State<_TxDetail> createState() => _TxDetailState();
+}
 
-    return Column(children: [
-      Container(
-        padding: const EdgeInsets.all(20),
-        decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppTheme.border))),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(
-            children: [
-              Text('Detail Transaksi', style: Theme.of(context).textTheme.titleLarge),
-              const Spacer(),
-              IconButton(
-                onPressed: () => InvoiceHelper.printInvoice(tx, settings),
-                icon: const Icon(Icons.print_rounded, size: 20, color: AppTheme.accent),
-              ),
-              IconButton(
-                onPressed: () => InvoiceHelper.shareInvoice(tx, settings),
-                icon: const Icon(Icons.share_rounded, size: 20, color: AppTheme.accent),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(tx.invoiceNumber,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontFamily: 'monospace', color: AppTheme.accent)),
-          const SizedBox(height: 4),
-          Text(Formatters.dateTime(tx.createdAt), style: Theme.of(context).textTheme.bodySmall),
-        ]),
-      ),
-      Expanded(
-        child: Scrollbar(
-          child: SingleChildScrollView(
+class _TxDetailState extends State<_TxDetail> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer(
+      builder: (context, ref, child) {
+        final settings = ref.watch(settingsProvider);
+        final tx = widget.tx;
+
+        return Column(children: [
+          Container(
             padding: const EdgeInsets.all(20),
+            decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppTheme.border))),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              if (tx.customerName != null) ...[
-                _infoRow(context, 'Pelanggan', tx.customerName!),
-                const SizedBox(height: 4),
-              ],
-              _infoRow(context, 'Kasir', tx.cashierName ?? 'Admin'),
-              const Divider(color: AppTheme.border, height: 32),
-              
-              Text('Item', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppTheme.accent)),
-              const SizedBox(height: 12),
-              ...tx.items.map((item) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(children: [
-                      Expanded(child: Text(item.productName, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13))),
-                      Text(Formatters.currency(item.subtotal), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13)),
-                    ]),
-                    Row(children: [
-                      Text('${Formatters.decimal(item.quantity)} ${item.unitName} × ${Formatters.currency(item.soldPrice)}',
-                          style: Theme.of(context).textTheme.bodySmall),
-                      const Spacer(),
-                      if (item.soldPrice != item.originalPrice)
-                        Text('(Harga Kurang)', style: const TextStyle(color: AppTheme.warning, fontSize: 10, fontWeight: FontWeight.bold)),
-                    ]),
-                    if (item.discountValue > 0)
-                      Text('Potongan Item: -${Formatters.currency(item.discountValue)}${item.discountType == DiscountType.percentage ? '%' : ''}',
-                          style: const TextStyle(color: AppTheme.success, fontSize: 10)),
-                  ],
-                ),
-              )),
-              
-              const Divider(color: AppTheme.border, height: 24),
-              _row(context, 'Subtotal Item', Formatters.currency(tx.subtotal)),
-              if (tx.itemDiscountTotal > 0) 
-                _row(context, 'Total Pot. Item', '- ${Formatters.currency(tx.itemDiscountTotal)}', AppTheme.success),
-              if (tx.transDiscountAmount > 0) 
-                _row(context, 'Diskon Transaksi', '- ${Formatters.currency(tx.transDiscountAmount)}', AppTheme.success),
-              if (tx.taxAmount > 0) 
-                _row(context, 'PPN (11%)', Formatters.currency(tx.taxAmount)),
-                
-              const SizedBox(height: 8),
-              _row(context, 'TOTAL', Formatters.currency(tx.total), AppTheme.accent, true),
-              
-              const Divider(color: AppTheme.border, height: 24),
-              _row(context, 'Metode', tx.paymentMethod),
-              _row(context, 'Dibayar', Formatters.currency(tx.amountPaid)),
-              _row(context, 'Kembalian', Formatters.currency(tx.changeAmount), AppTheme.success),
-              
-              if (tx.notes != null) ...[
-                const Divider(color: AppTheme.border, height: 24),
-                Text('Catatan:', style: Theme.of(context).textTheme.bodySmall),
-                Text(tx.notes!, style: Theme.of(context).textTheme.bodyMedium),
-              ],
+              Row(
+                children: [
+                  Text('Detail Transaksi', style: Theme.of(context).textTheme.titleLarge),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => InvoiceHelper.printInvoice(tx, settings),
+                    icon: const Icon(Icons.print_rounded, size: 20, color: AppTheme.accent),
+                  ),
+                  IconButton(
+                    onPressed: () => InvoiceHelper.shareInvoice(tx, settings),
+                    icon: const Icon(Icons.share_rounded, size: 20, color: AppTheme.accent),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(tx.invoiceNumber,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontFamily: 'monospace', color: AppTheme.accent)),
+              const SizedBox(height: 4),
+              Text(Formatters.dateTime(tx.createdAt), style: Theme.of(context).textTheme.bodySmall),
             ]),
           ),
-        ),
-      ),
-    ]);
+          Expanded(
+            child: Scrollbar(
+              controller: _scrollController,
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                padding: const EdgeInsets.all(20),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  if (tx.customerName != null) ...[
+                    _infoRow(context, 'Pelanggan', tx.customerName!),
+                    const SizedBox(height: 4),
+                  ],
+                  _infoRow(context, 'Kasir', tx.cashierName ?? 'Admin'),
+                  const Divider(color: AppTheme.border, height: 32),
+                  
+                  Text('Item', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppTheme.accent)),
+                  const SizedBox(height: 12),
+                  ...tx.items.map((item) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          Expanded(child: Text(item.productName, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13))),
+                          Text(Formatters.currency(item.subtotal), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13)),
+                        ]),
+                        Row(children: [
+                          Text('${Formatters.decimal(item.quantity)} ${item.unitName} × ${Formatters.currency(item.soldPrice)}',
+                              style: Theme.of(context).textTheme.bodySmall),
+                          const Spacer(),
+                          if (item.soldPrice != item.originalPrice)
+                            Text('(Harga Kurang)', style: const TextStyle(color: AppTheme.warning, fontSize: 10, fontWeight: FontWeight.bold)),
+                        ]),
+                        if (item.discountValue > 0)
+                          Text('Potongan Item: -${Formatters.currency(item.discountValue)}${item.discountType == DiscountType.percentage ? '%' : ''}',
+                              style: const TextStyle(color: AppTheme.success, fontSize: 10)),
+                      ],
+                    ),
+                  )),
+                  
+                  const Divider(color: AppTheme.border, height: 24),
+                  _row(context, 'Subtotal Item', Formatters.currency(tx.subtotal)),
+                  if (tx.itemDiscountTotal > 0) 
+                    _row(context, 'Total Pot. Item', '- ${Formatters.currency(tx.itemDiscountTotal)}', AppTheme.success),
+                  if (tx.transDiscountAmount > 0) 
+                    _row(context, 'Diskon Transaksi', '- ${Formatters.currency(tx.transDiscountAmount)}', AppTheme.success),
+                  if (tx.taxAmount > 0) 
+                    _row(context, 'PPN (11%)', Formatters.currency(tx.taxAmount)),
+                    
+                  const SizedBox(height: 8),
+                  _row(context, 'TOTAL', Formatters.currency(tx.total), AppTheme.accent, true),
+                  
+                  const Divider(color: AppTheme.border, height: 24),
+                  _row(context, 'Metode', tx.paymentMethod),
+                  _row(context, 'Dibayar', Formatters.currency(tx.amountPaid)),
+                  _row(context, 'Kembalian', Formatters.currency(tx.changeAmount), AppTheme.success),
+                  
+                  if (tx.notes != null) ...[
+                    const Divider(color: AppTheme.border, height: 24),
+                    Text('Catatan:', style: Theme.of(context).textTheme.bodySmall),
+                    Text(tx.notes!, style: Theme.of(context).textTheme.bodyMedium),
+                  ],
+                ]),
+              ),
+            ),
+          ),
+        ]);
+      },
+    );
   }
 
   Widget _infoRow(BuildContext context, String label, String value) {

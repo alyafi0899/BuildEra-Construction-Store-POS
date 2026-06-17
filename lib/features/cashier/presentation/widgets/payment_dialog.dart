@@ -28,6 +28,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   String  _method     = AppConstants.paymentCash;
   final   _amountCtrl = TextEditingController();
   final   _notesCtrl  = TextEditingController();
+  final   ScrollController _scrollController = ScrollController();
   bool    _processing = false;
   bool    _success    = false;
   Transaction? _tx;
@@ -39,6 +40,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   void dispose() {
     _amountCtrl.dispose();
     _notesCtrl.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -150,13 +152,18 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
 
       // Body — two columns
       Flexible(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Expanded(child: _orderSummary(context, cart)),
-            const SizedBox(width: 32),
-            Expanded(child: _paymentPanel(context, cart, change)),
-          ]),
+        child: Scrollbar(
+          controller: _scrollController,
+          thumbVisibility: true,
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            padding: const EdgeInsets.all(24),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: _orderSummary(context, cart)),
+              const SizedBox(width: 32),
+              Expanded(child: _paymentPanel(context, cart, change)),
+            ]),
+          ),
         ),
       ),
 

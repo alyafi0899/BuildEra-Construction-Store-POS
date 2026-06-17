@@ -88,7 +88,7 @@ class _CashierPageState extends ConsumerState<CashierPage> {
                         Switch.adaptive(
                           value: _autoAdd,
                           onChanged: (v) => setState(() => _autoAdd = v),
-                          activeColor: AppTheme.accent,
+                          activeTrackColor: AppTheme.accent,
                         ),
                       ]),
                     ),
@@ -196,23 +196,36 @@ class _Chip extends StatelessWidget {
 
 // ── Product Grid ───────────────────────────────────────────────────────────
 
-class _ProductGrid extends ConsumerWidget {
+class _ProductGrid extends ConsumerStatefulWidget {
   final String  search;
   final String? category;
   const _ProductGrid({required this.search, this.category});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ProductGrid> createState() => _ProductGridState();
+}
+
+class _ProductGridState extends ConsumerState<_ProductGrid> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return ref.watch(productsProvider).when(
       loading: () => const AppLoading(),
       error:   (e, _) => Center(child: Text('Error: $e')),
       data: (products) {
         final filtered = products.where((p) {
-          final q = search.toLowerCase();
+          final q = widget.search.toLowerCase();
           final matchSearch = q.isEmpty ||
               p.name.toLowerCase().contains(q) ||
               (p.barcode?.contains(q) ?? false);
-          final matchCat = category == null || p.category == category;
+          final matchCat = widget.category == null || p.category == widget.category;
           return matchSearch && matchCat;
         }).toList();
 
@@ -223,16 +236,21 @@ class _ProductGrid extends ConsumerWidget {
           );
         }
 
-        return GridView.builder(
-          padding:     const EdgeInsets.all(20),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 180,
-            mainAxisExtent:     180,
-            crossAxisSpacing:   12,
-            mainAxisSpacing:    12,
+        return Scrollbar(
+          controller: _scrollController,
+          thumbVisibility: true,
+          child: GridView.builder(
+            controller:  _scrollController,
+            padding:     const EdgeInsets.all(20),
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 180,
+              mainAxisExtent:     180,
+              crossAxisSpacing:   12,
+              mainAxisSpacing:    12,
+            ),
+            itemCount:   filtered.length,
+            itemBuilder: (_, i) => _ProductCard(product: filtered[i]),
           ),
-          itemCount:   filtered.length,
-          itemBuilder: (_, i) => _ProductCard(product: filtered[i]),
         );
       },
     );
@@ -312,11 +330,24 @@ class _ProductCard extends ConsumerWidget {
 
 // ── Cart Panel ─────────────────────────────────────────────────────────────
 
-class _CartPanel extends ConsumerWidget {
+class _CartPanel extends ConsumerStatefulWidget {
   const _CartPanel();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_CartPanel> createState() => _CartPanelState();
+}
+
+class _CartPanelState extends ConsumerState<_CartPanel> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider);
 
     return Column(children: [
@@ -366,13 +397,21 @@ class _CartPanel extends ConsumerWidget {
                 title:    'Keranjang kosong',
                 subtitle: 'Pilih produk untuk ditambahkan',
               )
-            : ListView.separated(
-                padding:  const EdgeInsets.all(16),
-                itemCount: cart.items.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder:      (_, i) => _CartItemTile(item: cart.items[i]),
+            : Scrollbar(
+                controller: _scrollController,
+                thumbVisibility: true,
+                child: ListView.separated(
+                  controller: _scrollController,
+                  padding:  const EdgeInsets.all(16),
+                  itemCount: cart.items.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder:      (_, i) => _CartItemTile(item: cart.items[i]),
+                ),
               ),
       ),
+      
+      // Totals & checkout
+      // ...
 
       // Totals & checkout
       Container(
@@ -447,7 +486,7 @@ class _CartPanel extends ConsumerWidget {
             Switch.adaptive(
               value:     cart.taxEnabled,
               onChanged: (_) => ref.read(cartProvider.notifier).toggleTax(),
-              activeColor: AppTheme.accent,
+              activeTrackColor: AppTheme.accent,
             ),
             const SizedBox(width: 8),
             SizedBox(
@@ -735,7 +774,7 @@ class _ItemEditDialogState extends ConsumerState<_ItemEditDialog> {
               Expanded(
                 flex: 2,
                 child: DropdownButtonFormField<DiscountType>(
-                  value: _discountType,
+                  initialValue: _discountType,
                   decoration: const InputDecoration(labelText: 'Tipe'),
                   items: [
                     DropdownMenuItem(value: DiscountType.fixed, child: Text('Rp')),

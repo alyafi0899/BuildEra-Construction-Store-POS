@@ -6,6 +6,8 @@ import 'dart:typed_data';
 import '../../../core/utils/image_helper.dart';
 import '../../../shared/models/product.dart';
 
+import '../providers/barcode_history_provider.dart';
+
 final _uuid = Uuid();
 
 // ── Repository ────────────────────────────────────────────────────────────
@@ -13,6 +15,9 @@ final _uuid = Uuid();
 class ProductRepository {
   final _db = firestore.FirebaseFirestore.instance;
   final _storage = storage.FirebaseStorage.instance;
+  final BarcodeHistoryRepository _historyRepo;
+
+  ProductRepository(this._historyRepo);
 
   Stream<List<Product>> getProductsStream() {
     return _db.collection('products').orderBy('name').snapshots().map((snapshot) {
@@ -58,12 +63,24 @@ class ProductRepository {
 
   Future<void> saveProduct(Product p, List<ProductUnit> units) async {
     if (p.barcode != null && p.barcode!.trim().isNotEmpty) {
-      final dupBarcode = await _db.collection('products')
-          .where('barcode', isEqualTo: p.barcode!.trim())
-          .limit(1)
-          .get();
-      if (dupBarcode.docs.isNotEmpty && dupBarcode.docs.first.id != p.id) {
-        throw 'Barcode "${p.barcode}" sudah digunakan oleh produk lain';
+      final isUsed = await _historyRepo.isBarcodeUsed(p.barcode!);
+      
+      // If editing an existing product, check if it's the SAME product's barcode
+      if (isUsed) {
+        final existing = await _db.collection('products')
+            .where('barcode', isEqualTo: p.barcode!.trim())
+            .limit(1)
+            .get();
+        
+        if (existing.docs.isNotEmpty && existing.docs.first.id != p.id) {
+          throw 'Barcode "${p.barcode}" sudah digunakan atau pernah digunakan sebelumnya.';
+        }
+        
+        // If it's in history but not in active products (archived), it still counts as used per requirement
+        final historyDoc = await _db.collection('barcode_history').doc(p.barcode!.trim()).get();
+        if (historyDoc.exists && historyDoc.data()?['productId'] != p.id) {
+          throw 'Barcode "${p.barcode}" pernah digunakan sebelumnya (diarsipkan).';
+        }
       }
     }
     
@@ -78,6 +95,11 @@ class ProductRepository {
     final data = p.toMap();
     data['units'] = units.map((u) => u.toMap()).toList();
     await _db.collection('products').doc(p.id).set(data);
+
+    // Log the barcode in history
+    if (p.barcode != null && p.barcode!.trim().isNotEmpty) {
+      await _historyRepo.logBarcode(p.barcode!, p.name, p.id);
+    }
   }
 
   Future<void> saveProductsBatch(List<Map<Product, List<ProductUnit>>> productsWithUnits) async {
@@ -136,7 +158,16 @@ class ProductRepository {
   }
 
   Future<void> deleteProduct(String id) async {
+    // Get product to archive its barcode
+    final doc = await _db.collection('products').doc(id).get();
+    final barcode = doc.data()?['barcode'] as String?;
+
     await _db.collection('products').doc(id).delete();
+    
+    if (barcode != null && barcode.isNotEmpty) {
+      await _historyRepo.archiveBarcode(barcode);
+    }
+
     try {
       await _storage.ref().child('products/$id.jpg').delete();
     } catch (_) {}
@@ -160,7 +191,10 @@ class ProductRepository {
 
 // ── Providers ─────────────────────────────────────────────────────────────
 
-final productRepositoryProvider = Provider((_) => ProductRepository());
+final productRepositoryProvider = Provider((ref) {
+  final historyRepo = ref.read(barcodeHistoryRepositoryProvider);
+  return ProductRepository(historyRepo);
+});
 
 final productsProvider = StreamProvider<List<Product>>((ref) {
   return ref.watch(productRepositoryProvider).getProductsStream();

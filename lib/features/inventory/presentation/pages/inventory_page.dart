@@ -15,11 +15,16 @@ class InventoryPage extends ConsumerStatefulWidget {
 
 class _InventoryPageState extends ConsumerState<InventoryPage> {
   final _searchCtrl = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   String _search = '';
   bool _lowOnly = false;
 
   @override
-  void dispose() { _searchCtrl.dispose(); super.dispose(); }
+  void dispose() { 
+    _searchCtrl.dispose(); 
+    _scrollController.dispose();
+    super.dispose(); 
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -103,7 +108,11 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
             if (filtered.isEmpty) return const EmptyState(icon: Icons.inventory_2_outlined, title: 'Tidak ada data inventori');
 
             return Scrollbar(
+              controller: _scrollController,
+              thumbVisibility: true,
+              trackVisibility: true,
               child: SingleChildScrollView(
+                controller: _scrollController,
                 padding: const EdgeInsets.all(24),
                 child: Column(children: [
                   _tableHeader(context),

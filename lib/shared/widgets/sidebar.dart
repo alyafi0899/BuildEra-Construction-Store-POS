@@ -77,7 +77,7 @@ class AppSidebar extends ConsumerWidget {
 
         // Nav items
         Expanded(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

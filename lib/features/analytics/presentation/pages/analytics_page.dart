@@ -6,263 +6,278 @@ import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../../payment/providers/transaction_provider.dart';
 
-class AnalyticsPage extends ConsumerWidget {
+class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final summaryAsync = ref.watch(salesSummaryProvider);
+  State<AnalyticsPage> createState() => _AnalyticsPageState();
+}
 
-    return Scaffold(
-      backgroundColor: AppTheme.bg,
-      body: Column(children: [
-        // Header
-        Container(
-          padding: const EdgeInsets.all(24),
-          color:   AppTheme.surface,
-          child: Row(children: [
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Analitik Penjualan', style: Theme.of(context).textTheme.headlineLarge),
-              Text('Ringkasan performa toko secara keseluruhan', style: Theme.of(context).textTheme.bodyMedium),
-            ]),
-            const Spacer(),
-            OutlinedButton.icon(
-              onPressed: () => ref.refresh(salesSummaryProvider),
-              icon:  const Icon(Icons.refresh_rounded, size: 16),
-              label: const Text('Refresh'),
+class _AnalyticsPageState extends State<AnalyticsPage> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer(
+      builder: (context, ref, child) {
+        final summaryAsync = ref.watch(salesSummaryProvider);
+
+        return Scaffold(
+          backgroundColor: AppTheme.bg,
+          body: Column(children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(24),
+              color:   AppTheme.surface,
+              child: Row(children: [
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Analitik Penjualan', style: Theme.of(context).textTheme.headlineLarge),
+                  Text('Ringkasan performa toko secara keseluruhan', style: Theme.of(context).textTheme.bodyMedium),
+                ]),
+                const Spacer(),
+                OutlinedButton.icon(
+                  onPressed: () => ref.refresh(salesSummaryProvider),
+                  icon:  const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Refresh'),
+                ),
+              ]),
             ),
-          ]),
-        ),
 
-        Expanded(
-          child: summaryAsync.when(
-            loading: () => const AppLoading(),
-            error:   (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: AppTheme.danger))),
-            data: (summary) => Scrollbar(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ── KPI Row ────────────────────────────────────────────
-                    Row(children: [
-                      Expanded(child: StatCard(
-                        label:   'Total Pendapatan',
-                        value:   Formatters.currency(summary.totalRevenue),
-                        icon:    Icons.attach_money_rounded,
-                        subtitle: 'Omzet Gross',
-                      )),
-                      const SizedBox(width: 16),
-                      Expanded(child: StatCard(
-                        label:   'Total Laba Kotor',
-                        value:   Formatters.currency(summary.totalGrossProfit),
-                        icon:    Icons.trending_up_rounded,
-                        accentColor: AppTheme.info,
-                        subtitle: 'Profit Potensial',
-                      )),
-                      const SizedBox(width: 16),
-                      Expanded(child: StatCard(
-                        label:   'Total Laba Bersih',
-                        value:   Formatters.currency(summary.totalNetProfit),
-                        icon:    Icons.auto_graph_rounded,
-                        accentColor: AppTheme.success,
-                        subtitle: 'Profit Aktual',
-                      )),
-                      const SizedBox(width: 16),
-                      Expanded(child: StatCard(
-                        label:       'Produk Terjual',
-                        value:       summary.topProducts.length.toString(),
-                        icon:        Icons.inventory_2_rounded,
-                        accentColor: AppTheme.warning,
-                        subtitle:    'SKU Aktif',
-                      )),
-                    ]),
-                    const SizedBox(height: 24),
+            Expanded(
+              child: summaryAsync.when(
+                loading: () => const AppLoading(),
+                error:   (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: AppTheme.danger))),
+                data: (summary) => Scrollbar(
+                  controller: _scrollController,
+                  thumbVisibility: true,
+                  trackVisibility: true,
+                  child: SingleChildScrollView(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // ── KPI Row ────────────────────────────────────────────
+                        Row(children: [
+                          Expanded(child: StatCard(
+                            label:   'Total Pendapatan',
+                            value:   Formatters.currency(summary.totalRevenue),
+                            icon:    Icons.attach_money_rounded,
+                            subtitle: 'Omzet Gross',
+                          )),
+                          const SizedBox(width: 16),
+                          Expanded(child: StatCard(
+                            label:   'Total Laba Kotor',
+                            value:   Formatters.currency(summary.totalGrossProfit),
+                            icon:    Icons.trending_up_rounded,
+                            accentColor: AppTheme.info,
+                            subtitle: 'Profit Potensial',
+                          )),
+                          const SizedBox(width: 16),
+                          Expanded(child: StatCard(
+                            label:   'Total Laba Bersih',
+                            value:   Formatters.currency(summary.totalNetProfit),
+                            icon:    Icons.auto_graph_rounded,
+                            accentColor: AppTheme.success,
+                            subtitle: 'Profit Aktual',
+                          )),
+                          const SizedBox(width: 16),
+                          Expanded(child: StatCard(
+                            label:       'Produk Terjual',
+                            value:       summary.topProducts.length.toString(),
+                            icon:        Icons.inventory_2_rounded,
+                            accentColor: AppTheme.warning,
+                            subtitle:    'SKU Aktif',
+                          )),
+                        ]),
+                        const SizedBox(height: 24),
 
-                    // ── Charts Row ─────────────────────────────────────────
-                    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      // Revenue bar chart
-                      Expanded(
-                        flex: 3,
-                        child: AppCard(
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            const SectionHeader(
-                              title: 'Pendapatan Harian',
-                              icon:  Icons.bar_chart_rounded,
-                            ),
-                            const SizedBox(height: 24),
-                            SizedBox(
-                              height: 260,
-                              child: summary.revenueByDay.isEmpty
-                                  ? const Center(child: Text('Belum ada data transaksi', style: TextStyle(color: AppTheme.textMuted)))
-                                  : _RevenueBarChart(data: summary.revenueByDay),
-                            ),
-                          ]),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      // Payment pie chart
-                      Expanded(
-                        flex: 2,
-                        child: AppCard(
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            const SectionHeader(
-                              title: 'Metode Pembayaran',
-                              icon:  Icons.pie_chart_rounded,
-                            ),
-                            const SizedBox(height: 24),
-                            SizedBox(
-                              height: 260,
-                              child: summary.revenueByPayment.isEmpty
-                                  ? const Center(child: Text('Belum ada data transaksi', style: TextStyle(color: AppTheme.textMuted)))
-                                  : _PaymentPieChart(data: summary.revenueByPayment),
-                            ),
-                          ]),
-                        ),
-                      ),
-                    ]),
-                    const SizedBox(height: 24),
-
-                    // ── Top Products ───────────────────────────────────────
-                    AppCard(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        const SectionHeader(
-                          title: 'Top 10 Produk Terlaris',
-                          icon:  Icons.star_rounded,
-                        ),
-                        const SizedBox(height: 20),
-                        if (summary.topProducts.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 32),
-                            child: Center(
-                              child: Text(
-                                'Lakukan transaksi pertama untuk melihat analitik produk',
-                                style: TextStyle(color: AppTheme.textMuted),
-                              ),
-                            ),
-                          )
-                        else
-                          ...summary.topProducts.asMap().entries.map((entry) {
-                            final rank = entry.key + 1;
-                            final prod = entry.value;
-                            final maxRev = summary.topProducts.first.revenue;
-                            final ratio = maxRev > 0 ? prod.revenue / maxRev : 0.0;
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 14),
-                              child: Row(children: [
-                                // Rank badge
+                        // ── Charts Row ─────────────────────────────────────────
+                        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Expanded(
+                            flex: 3,
+                            child: AppCard(
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                const SectionHeader(
+                                  title: 'Pendapatan Harian',
+                                  icon:  Icons.bar_chart_rounded,
+                                ),
+                                const SizedBox(height: 24),
                                 SizedBox(
-                                  width: 32,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color:        rank <= 3
-                                          ? AppTheme.accent.withValues(alpha: 0.2)
-                                          : AppTheme.surfaceAlt,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      '#$rank',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        color:      rank <= 3 ? AppTheme.accent : AppTheme.textMuted,
-                                        fontWeight: FontWeight.w700,
-                                        fontSize:   11,
-                                      ),
-                                    ),
+                                  height: 260,
+                                  child: summary.revenueByDay.isEmpty
+                                      ? const Center(child: Text('Belum ada data transaksi', style: TextStyle(color: AppTheme.textMuted)))
+                                      : _RevenueBarChart(data: summary.revenueByDay),
+                                ),
+                              ]),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            flex: 2,
+                            child: AppCard(
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                const SectionHeader(
+                                  title: 'Metode Pembayaran',
+                                  icon:  Icons.pie_chart_rounded,
+                                ),
+                                const SizedBox(height: 24),
+                                SizedBox(
+                                  height: 260,
+                                  child: summary.revenueByPayment.isEmpty
+                                      ? const Center(child: Text('Belum ada data transaksi', style: TextStyle(color: AppTheme.textMuted)))
+                                      : _PaymentPieChart(data: summary.revenueByPayment),
+                                ),
+                              ]),
+                            ),
+                          ),
+                        ]),
+                        const SizedBox(height: 24),
+
+                        // ── Top Products ───────────────────────────────────────
+                        AppCard(
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            const SectionHeader(
+                              title: 'Top 10 Produk Terlaris',
+                              icon:  Icons.star_rounded,
+                            ),
+                            const SizedBox(height: 20),
+                            if (summary.topProducts.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 32),
+                                child: Center(
+                                  child: Text(
+                                    'Lakukan transaksi pertama untuk melihat analitik produk',
+                                    style: TextStyle(color: AppTheme.textMuted),
                                   ),
                                 ),
-                                const SizedBox(width: 12),
-                                // Name + bar
-                                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                  Text(
-                                    prod.name,
-                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 5),
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(3),
-                                    child: LinearProgressIndicator(
-                                      value:           ratio,
-                                      backgroundColor: AppTheme.border,
-                                      valueColor: AlwaysStoppedAnimation(
-                                        rank == 1 ? AppTheme.accent
-                                            : rank == 2 ? AppTheme.accentLight
-                                            : rank == 3 ? AppTheme.warning
-                                            : AppTheme.textMuted,
+                              )
+                            else
+                              ...summary.topProducts.asMap().entries.map((entry) {
+                                final rank = entry.key + 1;
+                                final prod = entry.value;
+                                final maxRev = summary.topProducts.first.revenue;
+                                final ratio = maxRev > 0 ? prod.revenue / maxRev : 0.0;
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 14),
+                                  child: Row(children: [
+                                    SizedBox(
+                                      width: 32,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: rank <= 3
+                                              ? AppTheme.accent.withValues(alpha: 0.2)
+                                              : AppTheme.surfaceAlt,
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          '#$rank',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color:      rank <= 3 ? AppTheme.accent : AppTheme.textMuted,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize:   11,
+                                          ),
+                                        ),
                                       ),
-                                      minHeight: 5,
                                     ),
-                                  ),
-                                ])),
-                                const SizedBox(width: 16),
-                                // Revenue
-                                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                                  Text(
-                                    Formatters.currency(prod.revenue),
-                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13),
-                                  ),
-                                  Text(
-                                    '${Formatters.decimal(prod.qty)} terjual',
-                                    style: Theme.of(context).textTheme.bodySmall,
-                                  ),
-                                ]),
-                              ]),
-                            );
-                          }),
-                      ]),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // ── Daily breakdown table ──────────────────────────────
-                    AppCard(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        const SectionHeader(
-                          title: 'Laporan Detail Harian',
-                          icon:  Icons.calendar_today_rounded,
+                                    const SizedBox(width: 12),
+                                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                      Text(
+                                        prod.name,
+                                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 5),
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(3),
+                                        child: LinearProgressIndicator(
+                                          value:           ratio,
+                                          backgroundColor: AppTheme.border,
+                                          valueColor: AlwaysStoppedAnimation(
+                                            rank == 1 ? AppTheme.accent
+                                                : rank == 2 ? AppTheme.accentLight
+                                                : rank == 3 ? AppTheme.warning
+                                                : AppTheme.textMuted,
+                                          ),
+                                          minHeight: 5,
+                                        ),
+                                      ),
+                                    ])),
+                                    const SizedBox(width: 16),
+                                    Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                                      Text(
+                                        Formatters.currency(prod.revenue),
+                                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13),
+                                      ),
+                                      Text(
+                                        '${Formatters.decimal(prod.qty)} terjual',
+                                        style: Theme.of(context).textTheme.bodySmall,
+                                      ),
+                                    ]),
+                                  ]),
+                                );
+                              }),
+                          ]),
                         ),
-                        const SizedBox(height: 16),
-                        if (summary.dailyDetails.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 24),
-                            child: Center(child: Text('Belum ada data harian', style: TextStyle(color: AppTheme.textMuted))),
-                          )
-                        else ...[
-                          // Table Header
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            decoration: BoxDecoration(
-                              color:        AppTheme.surfaceAlt,
-                              borderRadius: BorderRadius.circular(8),
+                        const SizedBox(height: 24),
+
+                        // ── Daily breakdown table ──────────────────────────────
+                        AppCard(
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            const SectionHeader(
+                              title: 'Laporan Detail Harian',
+                              icon:  Icons.calendar_today_rounded,
                             ),
-                            child: Row(children: [
-                              Expanded(flex: 2, child: Text('Tanggal', style: _tableHeaderStyle)),
-                              Expanded(child: Text('Transaksi', textAlign: TextAlign.center, style: _tableHeaderStyle)),
-                              Expanded(flex: 2, child: Text('Pendapatan', textAlign: TextAlign.right, style: _tableHeaderStyle)),
-                              Expanded(flex: 2, child: Text('Laba Kotor', textAlign: TextAlign.right, style: _tableHeaderStyle)),
-                              Expanded(flex: 2, child: Text('Laba Bersih', textAlign: TextAlign.right, style: _tableHeaderStyle)),
-                              const SizedBox(width: 40), // Space for arrow
-                            ]),
-                          ),
-                          const SizedBox(height: 8),
-                          ListView.separated(
-                            shrinkWrap:  true,
-                            physics:     const NeverScrollableScrollPhysics(),
-                            itemCount:   summary.dailyDetails.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 4),
-                            itemBuilder: (_, i) => _DailyExpandableRow(summary: summary.dailyDetails[i]),
-                          ),
-                        ],
-                      ]),
+                            const SizedBox(height: 16),
+                            if (summary.dailyDetails.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 24),
+                                child: Center(child: Text('Belum ada data harian', style: TextStyle(color: AppTheme.textMuted))),
+                              )
+                            else ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color:        AppTheme.surfaceAlt,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(children: [
+                                  Expanded(flex: 2, child: Text('Tanggal', style: _tableHeaderStyle)),
+                                  Expanded(child: Text('Transaksi', textAlign: TextAlign.center, style: _tableHeaderStyle)),
+                                  Expanded(flex: 2, child: Text('Pendapatan', textAlign: TextAlign.right, style: _tableHeaderStyle)),
+                                  Expanded(flex: 2, child: Text('Laba Kotor', textAlign: TextAlign.right, style: _tableHeaderStyle)),
+                                  Expanded(flex: 2, child: Text('Laba Bersih', textAlign: TextAlign.right, style: _tableHeaderStyle)),
+                                  const SizedBox(width: 40),
+                                ]),
+                              ),
+                              const SizedBox(height: 8),
+                              ListView.separated(
+                                shrinkWrap:  true,
+                                physics:     const NeverScrollableScrollPhysics(),
+                                itemCount:   summary.dailyDetails.length,
+                                separatorBuilder: (_, __) => const SizedBox(height: 4),
+                                itemBuilder: (_, i) => _DailyExpandableRow(summary: summary.dailyDetails[i]),
+                              ),
+                            ],
+                          ]),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
-      ]),
+          ]),
+        );
+      },
     );
   }
 
@@ -334,7 +349,6 @@ class _DailyExpandableRowState extends State<_DailyExpandableRow> {
             ...s.transactions.map((t) => Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Transaction Header
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
@@ -349,11 +363,9 @@ class _DailyExpandableRowState extends State<_DailyExpandableRow> {
                     Text('Total: ${Formatters.currency(t.total)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                   ]),
                 ),
-                // Items Table for this transaction
                 Padding(
                   padding: const EdgeInsets.only(left: 10, top: 8, bottom: 20),
                   child: Column(children: [
-                    // Item Header
                     Padding(
                       padding: const EdgeInsets.only(bottom: 6, right: 10),
                       child: Row(children: [
@@ -365,11 +377,10 @@ class _DailyExpandableRowState extends State<_DailyExpandableRow> {
                       ]),
                     ),
                     const Divider(height: 1, color: AppTheme.border),
-                    // Item Rows
                     ...t.items.map((item) {
                       final itemProfit = item.subtotal - (item.costPrice * item.quantity);
                       return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
+                        padding: const EdgeInsets.symmetric(vertical: 6),
                         child: Row(children: [
                           Expanded(flex: 3, child: Text(item.productName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
                           Expanded(child: Text('${Formatters.decimal(item.quantity)} ${item.unitName}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 11))),
@@ -392,8 +403,6 @@ class _DailyExpandableRowState extends State<_DailyExpandableRow> {
     return Text(label, textAlign: align, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textMuted));
   }
 }
-
-// ── Revenue Bar Chart ──────────────────────────────────────────────────────
 
 class _RevenueBarChart extends StatelessWidget {
   final Map<String, double> data;
@@ -475,8 +484,6 @@ class _RevenueBarChart extends StatelessWidget {
     ));
   }
 }
-
-// ── Payment Pie Chart ──────────────────────────────────────────────────────
 
 class _PaymentPieChart extends StatefulWidget {
   final Map<String, double> data;

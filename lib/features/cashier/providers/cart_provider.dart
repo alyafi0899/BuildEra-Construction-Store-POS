@@ -67,6 +67,28 @@ class CartState {
         taxEnabled:          taxEnabled         ?? this.taxEnabled,
         customerName:        customerName       ?? this.customerName,
       );
+
+  Map<String, dynamic> toMap() {
+    return {
+      'items': items.map((x) => x.toMap()).toList(),
+      'transDiscountValue': transDiscountValue,
+      'transDiscountType': transDiscountType.name,
+      'taxRate': taxRate,
+      'taxEnabled': taxEnabled,
+      'customerName': customerName,
+    };
+  }
+
+  factory CartState.fromMap(Map<String, dynamic> map) {
+    return CartState(
+      items: (map['items'] as List).map((x) => CartItem.fromMap(x)).toList(),
+      transDiscountValue: map['transDiscountValue'],
+      transDiscountType: DiscountType.values.byName(map['transDiscountType']),
+      taxRate: map['taxRate'],
+      taxEnabled: map['taxEnabled'],
+      customerName: map['customerName'],
+    );
+  }
 }
 
 // ── Notifier ──────────────────────────────────────────────────────────────

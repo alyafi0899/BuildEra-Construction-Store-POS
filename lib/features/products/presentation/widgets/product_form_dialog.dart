@@ -10,6 +10,9 @@ import '../../../../shared/models/product.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../providers/product_provider.dart';
 
+import '../../../../core/utils/barcode_helper.dart';
+import '../../providers/barcode_history_provider.dart';
+
 final _uuid = Uuid();
 
 class ProductFormDialog extends ConsumerStatefulWidget {
@@ -37,6 +40,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   Uint8List? _imageBytes;
   String? _existingImagePath;
   bool _saving = false;
+  bool _generatingBarcode = false;
 
   @override
   void initState() {
@@ -71,6 +75,39 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
     );
     if (result != null && result.files.first.bytes != null) {
       setState(() => _imageBytes = result.files.first.bytes);
+    }
+  }
+
+  Future<void> _generateBarcode() async {
+    setState(() => _generatingBarcode = true);
+    try {
+      final historyRepo = ref.read(barcodeHistoryRepositoryProvider);
+      String newBarcode = '';
+      bool isUnique = false;
+      int attempts = 0;
+
+      while (!isUnique && attempts < 10) {
+        final rawData = BarcodeHelper.generateRandomEAN13Data();
+        newBarcode = BarcodeHelper.getEAN13WithCheckDigit(rawData);
+        
+        final used = await historyRepo.isBarcodeUsed(newBarcode);
+        if (!used) {
+          isUnique = true;
+        }
+        attempts++;
+      }
+
+      if (isUnique) {
+        setState(() {
+          _barcode.text = newBarcode;
+        });
+      } else {
+        if (mounted) showError(context, 'Gagal membuat barcode unik. Silakan coba lagi.');
+      }
+    } catch (e) {
+      if (mounted) showError(context, 'Error saat membuat barcode: $e');
+    } finally {
+      if (mounted) setState(() => _generatingBarcode = false);
     }
   }
 
@@ -240,10 +277,17 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                           flex: 2,
                           child: TextFormField(
                             controller: _barcode,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               labelText:  'Barcode',
                               hintText:   'Scan atau ketik barcode',
-                              prefixIcon: Icon(Icons.qr_code_scanner_rounded, size: 18),
+                              prefixIcon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
+                              suffixIcon: _generatingBarcode 
+                                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                                : IconButton(
+                                    icon: const Icon(Icons.auto_fix_high_rounded, size: 18, color: AppTheme.accent),
+                                    tooltip: 'Generate Barcode',
+                                    onPressed: _generateBarcode,
+                                  ),
                             ),
                           ),
                         ),
@@ -254,7 +298,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                       Row(children: [
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value:         _category,
+                            initialValue:  _category,
                             decoration:    const InputDecoration(labelText: 'Kategori *'),
                             dropdownColor: AppTheme.surfaceAlt,
                             isExpanded:    true,
@@ -267,7 +311,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                         const SizedBox(width: 16),
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value:         _baseUnit,
+                            initialValue:  _baseUnit,
                             decoration:    const InputDecoration(labelText: 'Satuan Dasar *'),
                             dropdownColor: AppTheme.surfaceAlt,
                             items: AppConstants.baseUnits
@@ -382,7 +426,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                         _sectionLabel(context, 'Pengaturan Default'),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String?>(
-                          value: _defaultUnitName,
+                          initialValue: _defaultUnitName,
                           decoration: const InputDecoration(
                             labelText: 'Satuan Default di Kasir',
                             helperText: 'Satuan ini akan otomatis terpilih saat produk discan/diklik',

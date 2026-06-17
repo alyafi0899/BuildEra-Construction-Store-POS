@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../providers/settings_provider.dart';
+import '../../providers/app_settings_provider.dart';
 import '../../models/store_settings.dart';
+import '../../models/app_settings.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -152,6 +154,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         const SizedBox(height: 20),
                         _buildInput('Deskripsi Toko', _descriptionCtrl, Icons.description_rounded, maxLines: 3),
                         const SizedBox(height: 40),
+                        const _SectionTitle(title: 'Pengaturan Aplikasi'),
+                        const SizedBox(height: 16),
+                        _buildAppSettings(ref),
+                        const SizedBox(height: 40),
                         Row(
                           children: [
                             const _SectionTitle(title: 'Daftar Rekening Bank'),
@@ -200,6 +206,55 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ),
           style: const TextStyle(fontSize: 14),
         ),
+      ],
+    );
+  }
+
+  Widget _buildAppSettings(WidgetRef ref) {
+    final appSettings = ref.watch(appSettingsProvider);
+    final notifier = ref.read(appSettingsProvider.notifier);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceAlt,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        children: [
+          _buildSettingRow(
+            icon: Icons.fullscreen_rounded,
+            label: 'Layar Penuh (Full Screen)',
+            child: Switch.adaptive(
+              value: appSettings.isFullScreen,
+              onChanged: (v) => notifier.setFullScreen(v),
+              activeTrackColor: AppTheme.accent,
+            ),
+          ),
+          const Divider(height: 32),
+          _buildSettingRow(
+            icon: Icons.monitor_rounded,
+            label: 'Tampilan Pelanggan (Dual Monitor)',
+            child: Switch.adaptive(
+              value: appSettings.isCustomerDisplayEnabled,
+              onChanged: (v) => notifier.setCustomerDisplay(v),
+              activeTrackColor: AppTheme.accent,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingRow({required IconData icon, required String label, required Widget child}) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: AppTheme.textSecondary),
+        const SizedBox(width: 12),
+        Text(label, style: const TextStyle(fontSize: 14)),
+        const Spacer(),
+        child,
       ],
     );
   }
