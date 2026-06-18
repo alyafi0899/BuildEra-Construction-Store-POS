@@ -126,7 +126,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
       final excel = Excel.createExcel();
       final sheet = excel['Sheet1'];
 
-      // Header row matching the import format
+      // Header row matching the import format + metadata
       sheet.appendRow([
         TextCellValue('Nama Produk'),
         TextCellValue('Barcode'),
@@ -135,6 +135,8 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
         TextCellValue('Stok Awal'),
         TextCellValue('Harga Modal (Rp)'),
         TextCellValue('Harga Jual Dasar (Rp)'),
+        TextCellValue('Tanggal Dibuat'),
+        TextCellValue('Terakhir Diubah'),
       ]);
 
       // Data rows
@@ -147,6 +149,8 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
           DoubleCellValue(p.stock),
           DoubleCellValue(p.costPrice),
           DoubleCellValue(p.basePrice),
+          TextCellValue(Formatters.dateTime(p.createdAt)),
+          TextCellValue(Formatters.dateTime(p.updatedAt)),
         ]);
       }
 

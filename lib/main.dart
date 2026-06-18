@@ -17,6 +17,7 @@ import 'features/cashier/providers/customer_display_provider.dart';
 import 'features/cashier/providers/cart_provider.dart';
 import 'features/cashier/providers/scan_mode_provider.dart';
 import 'features/cashier/presentation/widgets/barcode_listener.dart';
+import 'features/products/providers/product_provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:io';
@@ -25,8 +26,24 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // If this is a secondary window (Customer Display)
-  if (args.firstOrNull == 'multi_window') {
+  // 1. Initialize Window Manager BEFORE Firebase for a cleaner boot
+  if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+    await windowManager.ensureInitialized();
+    WindowOptions windowOptions = const WindowOptions(
+      size: Size(1280, 800),
+      center: true,
+      backgroundColor: Color(0xFF0F1117), // Match AppTheme.bg to avoid white flash
+      skipTaskbar: false,
+      titleBarStyle: TitleBarStyle.normal,
+    );
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
+  }
+
+  // 2. Secondary Window Handler
+  if (args.isNotEmpty && args.first == 'multi_window') {
     runApp(ProviderScope(
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -37,22 +54,8 @@ Future<void> main(List<String> args) async {
     return;
   }
 
-  if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
-    await windowManager.ensureInitialized();
-    WindowOptions windowOptions = const WindowOptions(
-      size: Size(1280, 800),
-      center: true,
-      backgroundColor: Colors.transparent,
-      skipTaskbar: false,
-      titleBarStyle: TitleBarStyle.normal,
-    );
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.show();
-      await windowManager.focus();
-    });
-  }
-
   try {
+    // 3. Initialize Firebase
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
@@ -64,6 +67,7 @@ Future<void> main(List<String> args) async {
     }
 
     await initializeDateFormatting('id_ID', null);
+
     runApp(const ProviderScope(child: KonstruksiPosApp()));
   } catch (e, stack) {
     debugPrint('BOOT ERROR: $e\n$stack');
@@ -114,6 +118,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   @override
   void initState() {
     super.initState();
+    // Sync Customer Display
     ref.listenManual(cartProvider, (prev, next) {
       final settings = ref.read(appSettingsProvider);
       if (settings.isCustomerDisplayEnabled) {
@@ -124,23 +129,25 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    // ACTIVE listening here ensures barcode scans work from the first second
+    ref.watch(productsProvider);
+
     final autoAdd = ref.watch(scanModeProvider);
+    final shell = Row(children: [
+      AppSidebar(
+        selectedIndex: _idx,
+        onItemSelected: (i) => setState(() => _idx = i),
+      ),
+      Expanded(
+        child: IndexedStack(index: _idx, children: _pages),
+      ),
+    ]);
 
     return Scaffold(
+      backgroundColor: AppTheme.bg,
       body: BarcodeListener(
         autoAdd: autoAdd,
-        // For pages other than cashier, we don't have a local search controller to update,
-        // but since autoAdd is true, it will just add to cart and show snackbar,
-        // which is what was requested (auto add from anywhere).
-        child: Row(children: [
-          AppSidebar(
-            selectedIndex: _idx,
-            onItemSelected: (i) => setState(() => _idx = i),
-          ),
-          Expanded(
-            child: IndexedStack(index: _idx, children: _pages),
-          ),
-        ]),
+        child: shell,
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
-import 'package:cloud_firestore/cloud_firestore.dart' as firestore hide Transaction;
+import 'package:cloud_firestore/cloud_firestore.dart' as firestore
+    hide Transaction;
 import 'package:firebase_storage/firebase_storage.dart' as storage;
 import 'dart:typed_data';
 import '../../../core/utils/image_helper.dart';
@@ -20,7 +21,11 @@ class ProductRepository {
   ProductRepository(this._historyRepo);
 
   Stream<List<Product>> getProductsStream() {
-    return _db.collection('products').orderBy('name').snapshots().map((snapshot) {
+    return _db
+        .collection('products')
+        .orderBy('name')
+        .snapshots()
+        .map((snapshot) {
       return snapshot.docs.map((doc) {
         final data = doc.data();
         final unitsData = data['units'] as List? ?? [];
@@ -50,11 +55,33 @@ class ProductRepository {
     }
   }
 
+  Future<Product?> getProductByBarcode(String barcode) async {
+    final normalized = barcode.trim();
+    if (normalized.isEmpty) return null;
+
+    final snapshot = await _db
+        .collection('products')
+        .where('barcode', isEqualTo: normalized)
+        .limit(1)
+        .get();
+
+    if (snapshot.docs.isEmpty) return null;
+
+    final data = snapshot.docs.first.data();
+    final unitsData = data['units'] as List? ?? [];
+    final units = unitsData
+        .whereType<Map<String, dynamic>>()
+        .map((u) => ProductUnit.fromMap(u))
+        .toList();
+    return Product.fromMap(data, units: units);
+  }
+
   Future<String?> uploadProductImage(String productId, Uint8List bytes) async {
     try {
       final compressedBytes = await ImageHelper.compressImage(bytes);
       final ref = _storage.ref().child('products/$productId.jpg');
-      await ref.putData(compressedBytes, storage.SettableMetadata(contentType: 'image/jpeg'));
+      await ref.putData(
+          compressedBytes, storage.SettableMetadata(contentType: 'image/jpeg'));
       return await ref.getDownloadURL();
     } catch (e) {
       return null;
@@ -64,27 +91,32 @@ class ProductRepository {
   Future<void> saveProduct(Product p, List<ProductUnit> units) async {
     if (p.barcode != null && p.barcode!.trim().isNotEmpty) {
       final isUsed = await _historyRepo.isBarcodeUsed(p.barcode!);
-      
+
       // If editing an existing product, check if it's the SAME product's barcode
       if (isUsed) {
-        final existing = await _db.collection('products')
+        final existing = await _db
+            .collection('products')
             .where('barcode', isEqualTo: p.barcode!.trim())
             .limit(1)
             .get();
-        
+
         if (existing.docs.isNotEmpty && existing.docs.first.id != p.id) {
           throw 'Barcode "${p.barcode}" sudah digunakan atau pernah digunakan sebelumnya.';
         }
-        
+
         // If it's in history but not in active products (archived), it still counts as used per requirement
-        final historyDoc = await _db.collection('barcode_history').doc(p.barcode!.trim()).get();
+        final historyDoc = await _db
+            .collection('barcode_history')
+            .doc(p.barcode!.trim())
+            .get();
         if (historyDoc.exists && historyDoc.data()?['productId'] != p.id) {
           throw 'Barcode "${p.barcode}" pernah digunakan sebelumnya (diarsipkan).';
         }
       }
     }
-    
-    final dupName = await _db.collection('products')
+
+    final dupName = await _db
+        .collection('products')
         .where('name', isEqualTo: p.name.trim())
         .limit(1)
         .get();
@@ -102,10 +134,13 @@ class ProductRepository {
     }
   }
 
-  Future<void> saveProductsBatch(List<Map<Product, List<ProductUnit>>> productsWithUnits) async {
+  Future<void> saveProductsBatch(
+      List<Map<Product, List<ProductUnit>>> productsWithUnits) async {
     final existing = await getAllProducts();
-    final existingBarcodes = existing.map((e) => e.barcode?.trim()).whereType<String>().toSet();
-    final existingNames = existing.map((e) => e.name.trim().toLowerCase()).toSet();
+    final existingBarcodes =
+        existing.map((e) => e.barcode?.trim()).whereType<String>().toSet();
+    final existingNames =
+        existing.map((e) => e.name.trim().toLowerCase()).toSet();
 
     final toImport = <Map<Product, List<ProductUnit>>>[];
     final seenBarcodesInBatch = <String>{};
@@ -116,17 +151,19 @@ class ProductRepository {
       final nameLower = p.name.trim().toLowerCase();
       final barcode = p.barcode?.trim();
 
-      if (existingNames.contains(nameLower) || seenNamesInBatch.contains(nameLower)) {
+      if (existingNames.contains(nameLower) ||
+          seenNamesInBatch.contains(nameLower)) {
         continue;
       }
-      
+
       if (barcode != null && barcode.isNotEmpty) {
-        if (existingBarcodes.contains(barcode) || seenBarcodesInBatch.contains(barcode)) {
+        if (existingBarcodes.contains(barcode) ||
+            seenBarcodesInBatch.contains(barcode)) {
           continue;
         }
         seenBarcodesInBatch.add(barcode);
       }
-      
+
       seenNamesInBatch.add(nameLower);
       toImport.add(item);
     }
@@ -135,9 +172,10 @@ class ProductRepository {
 
     const int batchSize = 500;
     for (var i = 0; i < toImport.length; i += batchSize) {
-      final end = (i + batchSize < toImport.length) ? i + batchSize : toImport.length;
+      final end =
+          (i + batchSize < toImport.length) ? i + batchSize : toImport.length;
       final chunk = toImport.sublist(i, end);
-      
+
       final batch = _db.batch();
       for (final item in chunk) {
         final p = item.keys.first;
@@ -163,7 +201,7 @@ class ProductRepository {
     final barcode = doc.data()?['barcode'] as String?;
 
     await _db.collection('products').doc(id).delete();
-    
+
     if (barcode != null && barcode.isNotEmpty) {
       await _historyRepo.archiveBarcode(barcode);
     }
@@ -217,7 +255,8 @@ class ProductsActionNotifier {
     return await _repo.uploadProductImage(productId, bytes);
   }
 
-  Future<void> importProducts(List<Map<Product, List<ProductUnit>>> products) async {
+  Future<void> importProducts(
+      List<Map<Product, List<ProductUnit>>> products) async {
     await _repo.saveProductsBatch(products);
   }
 
