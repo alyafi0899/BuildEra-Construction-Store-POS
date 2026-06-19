@@ -24,8 +24,16 @@ import 'package:window_manager/window_manager.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
+import 'shared/widgets/splash_screen.dart';
+
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Show splash screen immediately for a smoother first paint
+  runApp(const MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: SplashScreen(),
+  ));
 
   // 1. Initialize Window Manager BEFORE Firebase for a cleaner boot
   if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {

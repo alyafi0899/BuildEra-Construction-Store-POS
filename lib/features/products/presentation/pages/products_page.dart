@@ -30,6 +30,8 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
   bool _sortAsc = true;
   final Set<String> _selectedIds = {};
 
+  bool _isGenerating = false;
+
   @override
   void dispose() { _searchCtrl.dispose(); super.dispose(); }
 
@@ -91,7 +93,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     
     if (!mounted || !ok) return;
 
-    setState(() {}); // Show some loading if needed
+    setState(() => _isGenerating = true);
 
     try {
       final historyRepo = ref.read(barcodeHistoryRepositoryProvider);
@@ -127,6 +129,8 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
       }
     } catch (e) {
       if (mounted) showError(context, 'Gagal generate barcode: $e');
+    } finally {
+      if (mounted) setState(() => _isGenerating = false);
     }
   }
 
@@ -200,8 +204,20 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
               Text('Kelola daftar produk dan satuan jual', style: Theme.of(context).textTheme.bodyMedium),
             ]),
             const Spacer(),
+            if (_isGenerating)
+              const Row(
+                children: [
+                  SizedBox(
+                    width: 16, height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent),
+                  ),
+                  SizedBox(width: 12),
+                  Text('Generating Barcodes...', style: TextStyle(color: AppTheme.accent, fontSize: 13, fontWeight: FontWeight.bold)),
+                  SizedBox(width: 24),
+                ],
+              ),
             OutlinedButton.icon(
-              onPressed: () => productsAsync.whenData((p) => _generateMissingBarcodes(p)),
+              onPressed: _isGenerating ? null : () => productsAsync.whenData((p) => _generateMissingBarcodes(p)),
               icon:  const Icon(Icons.auto_fix_high_rounded, size: 18),
               label: const Text('Generate Missing'),
             ),
