@@ -151,11 +151,13 @@ class ProductRepository {
       final nameLower = p.name.trim().toLowerCase();
       final barcode = p.barcode?.trim();
 
+      // Skip if name already exists in DB or in current batch
       if (existingNames.contains(nameLower) ||
           seenNamesInBatch.contains(nameLower)) {
         continue;
       }
 
+      // Skip if barcode already exists in DB or in current batch
       if (barcode != null && barcode.isNotEmpty) {
         if (existingBarcodes.contains(barcode) ||
             seenBarcodesInBatch.contains(barcode)) {
@@ -183,9 +185,54 @@ class ProductRepository {
         final data = p.toMap();
         data['units'] = units.map((u) => u.toMap()).toList();
         batch.set(_db.collection('products').doc(p.id), data);
+
+        // Also log barcode to history if present
+        if (p.barcode != null && p.barcode!.isNotEmpty) {
+          final historyRef = _db.collection('barcode_history').doc(p.barcode!.trim());
+          batch.set(historyRef, {
+            'barcode': p.barcode!.trim(),
+            'productName': p.name,
+            'productId': p.id,
+            'usedAt': firestore.FieldValue.serverTimestamp(),
+            'status': 'active',
+          });
+        }
       }
       await batch.commit();
     }
+  }
+
+  Future<void> updateProductsWithBarcodesBatch(List<Product> products) async {
+    if (products.isEmpty) return;
+
+    final batch = _db.batch();
+    final now = DateTime.now();
+
+    for (final p in products) {
+      if (p.barcode == null || p.barcode!.isEmpty) continue;
+
+      final docRef = _db.collection('products').doc(p.id);
+      final data = p.toMap();
+      // Ensure units are preserved if they are already in the product object
+      // If p.units is empty here, we might have a problem if we don't fetch them first
+      // But in the "Generate Missing" flow, we have the full product objects.
+      data['units'] = p.units.map((u) => u.toMap()).toList();
+      data['updated_at'] = now.toIso8601String();
+      
+      batch.set(docRef, data);
+
+      // Also batch the history logging
+      final historyRef = _db.collection('barcode_history').doc(p.barcode!.trim());
+      batch.set(historyRef, {
+        'barcode': p.barcode!.trim(),
+        'productName': p.name,
+        'productId': p.id,
+        'usedAt': firestore.FieldValue.serverTimestamp(),
+        'status': 'active',
+      });
+    }
+
+    await batch.commit();
   }
 
   Future<void> updateStock(String productId, double delta) async {
@@ -258,6 +305,10 @@ class ProductsActionNotifier {
   Future<void> importProducts(
       List<Map<Product, List<ProductUnit>>> products) async {
     await _repo.saveProductsBatch(products);
+  }
+
+  Future<void> updateProductsBatch(List<Product> products) async {
+    await _repo.updateProductsWithBarcodesBatch(products);
   }
 
   Future<void> deleteProduct(String id) async {

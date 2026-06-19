@@ -85,7 +85,9 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
 
     final ok = await showConfirmDialog(context,
         title: 'Generate Barcode Massal',
-        content: 'Akan membuat barcode unik untuk ${missing.length} produk. Lanjutkan?');
+        content: 'Akan membuat barcode unik untuk ${missing.length} produk. Lanjutkan?',
+        confirmLabel: 'Generate',
+        confirmColor: AppTheme.accent);
     
     if (!mounted || !ok) return;
 
@@ -94,28 +96,35 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     try {
       final historyRepo = ref.read(barcodeHistoryRepositoryProvider);
       final productsAction = ref.read(productsActionProvider);
-      int count = 0;
+      final List<Product> updatedProducts = [];
 
       for (final product in missing) {
         String newBarcode = '';
         bool isUnique = false;
         int attempts = 0;
 
-        while (!isUnique && attempts < 10) {
+        while (!isUnique && attempts < 15) {
           final rawData = BarcodeHelper.generateRandomEAN13Data();
           newBarcode = BarcodeHelper.getEAN13WithCheckDigit(rawData);
           final used = await historyRepo.isBarcodeUsed(newBarcode);
-          if (!used) isUnique = true;
+          // Also check in our current batch to avoid duplicate within the same generation
+          final duplicateInBatch = updatedProducts.any((p) => p.barcode == newBarcode);
+          
+          if (!used && !duplicateInBatch) isUnique = true;
           attempts++;
         }
 
         if (isUnique) {
-          await productsAction.saveProduct(product.copyWith(barcode: newBarcode), product.units);
-          count++;
+          updatedProducts.add(product.copyWith(barcode: newBarcode));
         }
       }
 
-      if (mounted) showSuccess(context, 'Berhasil membuat $count barcode baru.');
+      if (updatedProducts.isNotEmpty) {
+        await productsAction.updateProductsBatch(updatedProducts);
+        if (mounted) showSuccess(context, 'Berhasil membuat ${updatedProducts.length} barcode baru.');
+      } else {
+        if (mounted) showError(context, 'Tidak ada barcode unik yang berhasil dibuat.');
+      }
     } catch (e) {
       if (mounted) showError(context, 'Gagal generate barcode: $e');
     }
