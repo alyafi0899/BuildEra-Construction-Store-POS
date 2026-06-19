@@ -5,6 +5,7 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   cloud_firestore
   desktop_multi_window
+  firebase_auth
   firebase_core
   firebase_storage
   printing

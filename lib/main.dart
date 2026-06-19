@@ -19,6 +19,7 @@ import 'features/cashier/providers/cart_provider.dart';
 import 'features/cashier/providers/scan_mode_provider.dart';
 import 'features/cashier/presentation/widgets/barcode_listener.dart';
 import 'features/products/providers/product_provider.dart';
+import 'features/auth/presentation/widgets/auth_gate.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:io';
@@ -29,19 +30,18 @@ import 'shared/widgets/splash_screen.dart';
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Show splash screen immediately for a smoother first paint
+  // Show splash screen immediately
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
     home: SplashScreen(),
   ));
 
-  // 1. Initialize Window Manager BEFORE Firebase for a cleaner boot
   if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
     await windowManager.ensureInitialized();
     WindowOptions windowOptions = const WindowOptions(
       size: Size(1280, 800),
       center: true,
-      backgroundColor: Color(0xFF0F1117), // Match AppTheme.bg to avoid white flash
+      backgroundColor: Color(0xFF0F1117),
       skipTaskbar: false,
       titleBarStyle: TitleBarStyle.normal,
     );
@@ -51,7 +51,6 @@ Future<void> main(List<String> args) async {
     });
   }
 
-  // 2. Secondary Window Handler
   if (args.isNotEmpty && args.first == 'multi_window') {
     runApp(ProviderScope(
       child: MaterialApp(
@@ -64,7 +63,6 @@ Future<void> main(List<String> args) async {
   }
 
   try {
-    // 3. Initialize Firebase
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
@@ -102,7 +100,7 @@ class KonstruksiPosApp extends ConsumerWidget {
       title: 'Konstruksi POS',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
-      home: const MainShell(),
+      home: const AuthGate(), // Root logic moved to AuthGate
     );
   }
 }
@@ -128,7 +126,6 @@ class _MainShellState extends ConsumerState<MainShell> {
   @override
   void initState() {
     super.initState();
-    // Sync Customer Display
     ref.listenManual(cartProvider, (prev, next) {
       final settings = ref.read(appSettingsProvider);
       if (settings.isCustomerDisplayEnabled) {
@@ -139,7 +136,6 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    // ACTIVE listening here ensures barcode scans work from the first second
     ref.watch(productsProvider);
 
     final autoAdd = ref.watch(scanModeProvider);

@@ -7,6 +7,7 @@ import '../../products/providers/product_provider.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../debts/providers/debt_repository.dart';
 import '../../debts/models/debt.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../../core/constants/app_constants.dart';
 
 final _uuid = Uuid();
@@ -14,12 +15,18 @@ final _uuid = Uuid();
 // ── Repository ─────────────────────────────────────────────────────────────
 
 class TransactionRepository {
-  final _db = firestore.FirebaseFirestore.instance;
+  final String _uid;
+  final firestore.FirebaseFirestore _db = firestore.FirebaseFirestore.instance;
+
+  TransactionRepository(this._uid);
+
+  firestore.CollectionReference get _transactionsCol => 
+      _db.collection('users').doc(_uid).collection('transactions');
 
   Future<List<Transaction>> getAllTransactions() async {
-    final snapshot = await _db.collection('transactions').orderBy('created_at', descending: true).get();
+    final snapshot = await _transactionsCol.orderBy('created_at', descending: true).get();
     return snapshot.docs.map((doc) {
-      final data = doc.data();
+      final data = doc.data() as Map<String, dynamic>;
       final itemsData = data['items'] as List? ?? [];
       final items = itemsData.map((i) => TransactionItem.fromMap(i as Map<String, dynamic>)).toList();
       return Transaction.fromMap(data, items: items);
@@ -77,7 +84,7 @@ class TransactionRepository {
       ).toMap();
     }).toList();
 
-    await _db.collection('transactions').doc(id).set(data);
+    await _transactionsCol.doc(id).set(data);
     return t;
   }
 
@@ -164,14 +171,10 @@ SalesSummary buildSummary(List<Transaction> txs) {
   for (final t in txs) {
     totalRevenue += t.total;
     
-    // Cost calculation
     double itemCosts = t.items.fold(0, (s, i) => s + (i.costPrice * i.quantity));
-    
-    // Gross Profit (before discounts/overrides)
     double tGrossProfit = t.items.fold(0, (s, i) => s + ((i.originalPrice - i.costPrice) * i.quantity));
     totalGrossProfit += tGrossProfit;
 
-    // Net Profit (after all discounts and overrides, excluding tax)
     double tNetProfit = (t.total - t.taxAmount) - itemCosts;
     totalNetProfit += tNetProfit;
 
@@ -225,7 +228,10 @@ SalesSummary buildSummary(List<Transaction> txs) {
 
 // ── Providers ──────────────────────────────────────────────────────────────
 
-final transactionRepositoryProvider = Provider((_) => TransactionRepository());
+final transactionRepositoryProvider = Provider<TransactionRepository>((ref) {
+  final user = ref.watch(authStateProvider).value;
+  return TransactionRepository(user?.uid ?? 'unknown');
+});
 
 final transactionsProvider =
     AsyncNotifierProvider<TransactionsNotifier, List<Transaction>>(
@@ -236,7 +242,10 @@ class TransactionsNotifier extends AsyncNotifier<List<Transaction>> {
   TransactionRepository get _repo => ref.read(transactionRepositoryProvider);
 
   @override
-  Future<List<Transaction>> build() => _repo.getAllTransactions();
+  Future<List<Transaction>> build() async {
+    if (_repo._uid == 'unknown') return [];
+    return _repo.getAllTransactions();
+  }
 
   Future<void> refresh() async {
     state = const AsyncLoading();
@@ -267,7 +276,6 @@ class TransactionsNotifier extends AsyncNotifier<List<Transaction>> {
       notes:         notes,
     );
 
-    // If it's a debt transaction
     if (paymentMethod == AppConstants.paymentPiutang && cart.customerId != null) {
       final remaining = cart.total - amountPaid;
       if (remaining > 0) {
@@ -290,7 +298,6 @@ class TransactionsNotifier extends AsyncNotifier<List<Transaction>> {
     }
 
     ref.read(cartProvider.notifier).clear();
-    // Wait for the state to be updated before returning
     await refresh();
     return tx.id;
   }

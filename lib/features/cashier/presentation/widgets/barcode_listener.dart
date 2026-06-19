@@ -5,6 +5,7 @@ import '../../../products/providers/product_provider.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/barcode_event_provider.dart';
 import '../../../../shared/models/product.dart';
+import '../../../../shared/widgets/common_widgets.dart';
 
 class BarcodeListener extends ConsumerStatefulWidget {
   final Widget child;
@@ -133,7 +134,6 @@ class _BarcodeListenerState extends ConsumerState<BarcodeListener> {
 
     if (!context.mounted) return;
 
-    // Broadcast the event globally regardless of success/failure
     ref.read(barcodeEventProvider.notifier).emit(BarcodeEvent(
       barcode: normalizedBarcode, 
       product: matching
@@ -141,33 +141,14 @@ class _BarcodeListenerState extends ConsumerState<BarcodeListener> {
 
     if (matching == null) {
       if (normalizedBarcode.length >= 3) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Barcode "$normalizedBarcode" tidak terdaftar'),
-            duration: const Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: Colors.redAccent,
-          ),
-        );
+        showError(context, 'Barcode "$normalizedBarcode" tidak terdaftar');
       }
       return;
     }
 
     if (widget.autoAdd) {
       ref.read(cartProvider.notifier).addProduct(matching);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(children: [
-            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
-            const SizedBox(width: 12),
-            Expanded(child: Text('${matching.name} masuk keranjang')),
-          ]),
-          duration: const Duration(milliseconds: 1000),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Colors.green,
-        ),
-      );
+      showSuccess(context, '${matching.name} masuk keranjang');
     }
   }
 

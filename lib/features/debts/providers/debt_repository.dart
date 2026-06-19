@@ -4,39 +4,47 @@ import 'package:uuid/uuid.dart';
 import '../models/customer.dart';
 import '../models/debt.dart';
 import '../models/debt_payment.dart';
+import '../../auth/providers/auth_provider.dart';
 
 final _uuid = const Uuid();
 
 class DebtRepository {
+  final String _uid;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+
+  DebtRepository(this._uid);
+
+  DocumentReference get _userDoc => _db.collection('users').doc(_uid);
+  CollectionReference get _customersCol => _userDoc.collection('customers');
+  CollectionReference get _debtsCol => _userDoc.collection('debts');
+  CollectionReference get _paymentsCol => _userDoc.collection('debt_payments');
 
   // ── Customers ─────────────────────────────────────────────────────────────
 
   Stream<List<Customer>> getCustomersStream() {
-    return _db.collection('customers')
+    return _customersCol
         .orderBy('name')
         .snapshots()
-        .map((s) => s.docs.map((d) => Customer.fromMap(d.data())).toList());
+        .map((s) => s.docs.map((d) => Customer.fromMap(d.data() as Map<String, dynamic>)).toList());
   }
 
   Future<void> saveCustomer(Customer c) async {
-    await _db.collection('customers').doc(c.id).set(c.toMap());
+    await _customersCol.doc(c.id).set(c.toMap());
   }
 
   Future<void> deleteCustomer(String id) async {
-    // Check if customer has outstanding debt
-    final doc = await _db.collection('customers').doc(id).get();
-    final data = doc.data();
+    final doc = await _customersCol.doc(id).get();
+    final data = doc.data() as Map<String, dynamic>?;
     if (data != null && (data['total_outstanding'] as num? ?? 0) > 0) {
       throw 'Tidak bisa menghapus pelanggan yang masih memiliki piutang aktif.';
     }
-    await _db.collection('customers').doc(id).delete();
+    await _customersCol.doc(id).delete();
   }
 
   // ── Debts ─────────────────────────────────────────────────────────────────
 
   Stream<List<Debt>> getDebtsStream({String? customerId}) {
-    Query query = _db.collection('debts').orderBy('created_at', descending: true);
+    Query query = _debtsCol.orderBy('created_at', descending: true);
     if (customerId != null) {
       query = query.where('customer_id', isEqualTo: customerId);
     }
@@ -45,22 +53,17 @@ class DebtRepository {
 
   Future<void> createDebt(Debt debt) async {
     final batch = _db.batch();
-    
-    // 1. Create debt doc
-    batch.set(_db.collection('debts').doc(debt.id), debt.toMap());
-    
-    // 2. Update customer outstanding balance
-    batch.update(_db.collection('customers').doc(debt.customerId), {
+    batch.set(_debtsCol.doc(debt.id), debt.toMap());
+    batch.update(_customersCol.doc(debt.customerId), {
       'total_outstanding': FieldValue.increment(debt.remainingBalance),
     });
-    
     await batch.commit();
   }
 
   // ── Payments ──────────────────────────────────────────────────────────────
 
   Stream<List<DebtPayment>> getPaymentsStream({String? customerId, String? debtId}) {
-    Query query = _db.collection('debt_payments').orderBy('created_at', descending: true);
+    Query query = _paymentsCol.orderBy('created_at', descending: true);
     if (customerId != null) {
       query = query.where('customer_id', isEqualTo: customerId);
     }
@@ -79,8 +82,7 @@ class DebtRepository {
     final batch = _db.batch();
     final now = DateTime.now();
     
-    // 1. Get current debt
-    final debtDoc = await _db.collection('debts').doc(debtId).get();
+    final debtDoc = await _debtsCol.doc(debtId).get();
     if (!debtDoc.exists) throw 'Data piutang tidak ditemukan';
     
     final debt = Debt.fromMap(debtDoc.data() as Map<String, dynamic>);
@@ -94,14 +96,12 @@ class DebtRepository {
       status = DebtStatus.paid;
     }
 
-    // 2. Update debt
-    batch.update(_db.collection('debts').doc(debtId), {
+    batch.update(_debtsCol.doc(debtId), {
       'paid_amount':       newPaidAmount,
       'remaining_balance': newRemaining < 0 ? 0 : newRemaining,
       'status':            status.name,
     });
 
-    // 3. Create payment record
     final paymentId = _uuid.v4();
     final payment = DebtPayment(
       id:         paymentId,
@@ -111,10 +111,9 @@ class DebtRepository {
       createdAt:  now,
       notes:      notes,
     );
-    batch.set(_db.collection('debt_payments').doc(paymentId), payment.toMap());
+    batch.set(_paymentsCol.doc(paymentId), payment.toMap());
 
-    // 4. Update customer balance
-    batch.update(_db.collection('customers').doc(customerId), {
+    batch.update(_customersCol.doc(customerId), {
       'total_outstanding': FieldValue.increment(-amount),
     });
 
@@ -124,16 +123,25 @@ class DebtRepository {
 
 // ── Providers ──────────────────────────────────────────────────────────────
 
-final debtRepositoryProvider = Provider((ref) => DebtRepository());
+final debtRepositoryProvider = Provider<DebtRepository>((ref) {
+  final user = ref.watch(authStateProvider).value;
+  return DebtRepository(user?.uid ?? 'unknown');
+});
 
 final customersProvider = StreamProvider<List<Customer>>((ref) {
-  return ref.watch(debtRepositoryProvider).getCustomersStream();
+  final repo = ref.watch(debtRepositoryProvider);
+  if (repo._uid == 'unknown') return Stream.value([]);
+  return repo.getCustomersStream();
 });
 
 final debtsProvider = StreamProvider.family<List<Debt>, String?>((ref, customerId) {
-  return ref.watch(debtRepositoryProvider).getDebtsStream(customerId: customerId);
+  final repo = ref.watch(debtRepositoryProvider);
+  if (repo._uid == 'unknown') return Stream.value([]);
+  return repo.getDebtsStream(customerId: customerId);
 });
 
 final debtPaymentsProvider = StreamProvider.family<List<DebtPayment>, ({String? customerId, String? debtId})>((ref, arg) {
-  return ref.watch(debtRepositoryProvider).getPaymentsStream(customerId: arg.customerId, debtId: arg.debtId);
+  final repo = ref.watch(debtRepositoryProvider);
+  if (repo._uid == 'unknown') return Stream.value([]);
+  return repo.getPaymentsStream(customerId: arg.customerId, debtId: arg.debtId);
 });

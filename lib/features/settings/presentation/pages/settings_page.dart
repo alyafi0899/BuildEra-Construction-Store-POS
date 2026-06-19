@@ -4,6 +4,8 @@ import '../../../../core/theme/app_theme.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/app_settings_provider.dart';
 import '../../models/store_settings.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../../../shared/widgets/common_widgets.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -73,18 +75,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       );
       
       ref.read(settingsProvider.notifier).updateSettings(settings);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Pengaturan berhasil disimpan'),
-          backgroundColor: AppTheme.success,
-        ),
-      );
+      showSuccess(context, 'Pengaturan berhasil disimpan');
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Sync UI with provider changes
     ref.listen(settingsProvider, (prev, next) {
       if (_businessNameCtrl.text.isEmpty && next.businessName.isNotEmpty) {
         _businessNameCtrl.text = next.businessName;
@@ -110,8 +107,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               children: [
                 const Icon(Icons.settings_rounded, color: AppTheme.accent, size: 24),
                 const SizedBox(width: 12),
-                Text('Pengaturan Toko', style: Theme.of(context).textTheme.headlineMedium),
+                Text('Pengaturan Akun & Toko', style: Theme.of(context).textTheme.headlineMedium),
                 const Spacer(),
+                OutlinedButton.icon(
+                  onPressed: () => ref.read(authRepositoryProvider).logout(),
+                  icon: const Icon(Icons.logout, size: 18),
+                  label: const Text('Keluar (Logout)'),
+                  style: OutlinedButton.styleFrom(foregroundColor: AppTheme.danger, side: const BorderSide(color: AppTheme.danger)),
+                ),
+                const SizedBox(width: 12),
                 ElevatedButton.icon(
                   onPressed: _save,
                   icon: const Icon(Icons.save_rounded, size: 18),
@@ -135,7 +139,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         const SizedBox(height: 16),
                         Row(
                           children: [
-                            Expanded(child: _buildInput('Nama Bisnis', _businessNameCtrl, Icons.store_rounded)),
+                            Expanded(child: _buildInput('Nama Toko / Usaha', _businessNameCtrl, Icons.store_rounded)),
                             const SizedBox(width: 20),
                             Expanded(child: _buildInput('Nama Pemilik', _ownerNameCtrl, Icons.person_rounded)),
                           ],
@@ -145,17 +149,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                           children: [
                             Expanded(child: _buildInput('Nomor Telepon', _phoneCtrl, Icons.phone_rounded)),
                             const SizedBox(width: 20),
-                            Expanded(child: _buildInput('Email', _emailCtrl, Icons.email_rounded)),
+                            Expanded(child: _buildInput('Email Bisnis', _emailCtrl, Icons.business_outlined)),
                           ],
                         ),
                         const SizedBox(height: 20),
-                        _buildInput('Alamat', _addressCtrl, Icons.location_on_rounded, maxLines: 2),
+                        _buildInput('Alamat Toko', _addressCtrl, Icons.location_on_rounded, maxLines: 2),
                         const SizedBox(height: 20),
                         _buildInput('Deskripsi Toko', _descriptionCtrl, Icons.description_rounded, maxLines: 3),
+                        
                         const SizedBox(height: 40),
-                        const _SectionTitle(title: 'Pengaturan Aplikasi'),
+                        const _SectionTitle(title: 'Pengaturan Tampilan & Jendela'),
                         const SizedBox(height: 16),
                         _buildAppSettings(ref),
+
                         const SizedBox(height: 40),
                         Row(
                           children: [

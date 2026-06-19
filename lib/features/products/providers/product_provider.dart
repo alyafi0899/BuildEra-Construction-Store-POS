@@ -6,6 +6,7 @@ import 'package:firebase_storage/firebase_storage.dart' as storage;
 import 'dart:typed_data';
 import '../../../core/utils/image_helper.dart';
 import '../../../shared/models/product.dart';
+import '../../auth/providers/auth_provider.dart';
 
 import '../providers/barcode_history_provider.dart';
 
@@ -14,20 +15,23 @@ final _uuid = Uuid();
 // ── Repository ────────────────────────────────────────────────────────────
 
 class ProductRepository {
-  final _db = firestore.FirebaseFirestore.instance;
-  final _storage = storage.FirebaseStorage.instance;
+  final String _uid;
+  final firestore.FirebaseFirestore _db = firestore.FirebaseFirestore.instance;
+  final storage.FirebaseStorage _storage = storage.FirebaseStorage.instance;
   final BarcodeHistoryRepository _historyRepo;
 
-  ProductRepository(this._historyRepo);
+  ProductRepository(this._uid, this._historyRepo);
+
+  firestore.CollectionReference get _productsCol => 
+      _db.collection('users').doc(_uid).collection('products');
 
   Stream<List<Product>> getProductsStream() {
-    return _db
-        .collection('products')
+    return _productsCol
         .orderBy('name')
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) {
-        final data = doc.data();
+        final data = doc.data() as Map<String, dynamic>;
         final unitsData = data['units'] as List? ?? [];
         final units = unitsData
             .whereType<Map<String, dynamic>>()
@@ -40,9 +44,9 @@ class ProductRepository {
 
   Future<List<Product>> getAllProducts() async {
     try {
-      final snapshot = await _db.collection('products').orderBy('name').get();
+      final snapshot = await _productsCol.orderBy('name').get();
       return snapshot.docs.map((doc) {
-        final data = doc.data();
+        final data = doc.data() as Map<String, dynamic>;
         final unitsData = data['units'] as List? ?? [];
         final units = unitsData
             .whereType<Map<String, dynamic>>()
@@ -59,15 +63,14 @@ class ProductRepository {
     final normalized = barcode.trim();
     if (normalized.isEmpty) return null;
 
-    final snapshot = await _db
-        .collection('products')
+    final snapshot = await _productsCol
         .where('barcode', isEqualTo: normalized)
         .limit(1)
         .get();
 
     if (snapshot.docs.isEmpty) return null;
 
-    final data = snapshot.docs.first.data();
+    final data = snapshot.docs.first.data() as Map<String, dynamic>;
     final unitsData = data['units'] as List? ?? [];
     final units = unitsData
         .whereType<Map<String, dynamic>>()
@@ -79,7 +82,8 @@ class ProductRepository {
   Future<String?> uploadProductImage(String productId, Uint8List bytes) async {
     try {
       final compressedBytes = await ImageHelper.compressImage(bytes);
-      final ref = _storage.ref().child('products/$productId.jpg');
+      // Path includes UID for isolation
+      final ref = _storage.ref().child('users/$_uid/products/$productId.jpg');
       await ref.putData(
           compressedBytes, storage.SettableMetadata(contentType: 'image/jpeg'));
       return await ref.getDownloadURL();
@@ -92,20 +96,19 @@ class ProductRepository {
     if (p.barcode != null && p.barcode!.trim().isNotEmpty) {
       final isUsed = await _historyRepo.isBarcodeUsed(p.barcode!);
 
-      // If editing an existing product, check if it's the SAME product's barcode
       if (isUsed) {
-        final existing = await _db
-            .collection('products')
+        final existing = await _productsCol
             .where('barcode', isEqualTo: p.barcode!.trim())
             .limit(1)
             .get();
 
         if (existing.docs.isNotEmpty && existing.docs.first.id != p.id) {
-          throw 'Barcode "${p.barcode}" sudah digunakan atau pernah digunakan sebelumnya.';
+          throw 'Barcode "${p.barcode}" sudah digunakan oleh produk lain.';
         }
 
-        // If it's in history but not in active products (archived), it still counts as used per requirement
         final historyDoc = await _db
+            .collection('users')
+            .doc(_uid)
             .collection('barcode_history')
             .doc(p.barcode!.trim())
             .get();
@@ -115,8 +118,7 @@ class ProductRepository {
       }
     }
 
-    final dupName = await _db
-        .collection('products')
+    final dupName = await _productsCol
         .where('name', isEqualTo: p.name.trim())
         .limit(1)
         .get();
@@ -126,9 +128,8 @@ class ProductRepository {
 
     final data = p.toMap();
     data['units'] = units.map((u) => u.toMap()).toList();
-    await _db.collection('products').doc(p.id).set(data);
+    await _productsCol.doc(p.id).set(data);
 
-    // Log the barcode in history
     if (p.barcode != null && p.barcode!.trim().isNotEmpty) {
       await _historyRepo.logBarcode(p.barcode!, p.name, p.id);
     }
@@ -151,13 +152,11 @@ class ProductRepository {
       final nameLower = p.name.trim().toLowerCase();
       final barcode = p.barcode?.trim();
 
-      // Skip if name already exists in DB or in current batch
       if (existingNames.contains(nameLower) ||
           seenNamesInBatch.contains(nameLower)) {
         continue;
       }
 
-      // Skip if barcode already exists in DB or in current batch
       if (barcode != null && barcode.isNotEmpty) {
         if (existingBarcodes.contains(barcode) ||
             seenBarcodesInBatch.contains(barcode)) {
@@ -184,11 +183,14 @@ class ProductRepository {
         final units = item.values.first;
         final data = p.toMap();
         data['units'] = units.map((u) => u.toMap()).toList();
-        batch.set(_db.collection('products').doc(p.id), data);
+        batch.set(_productsCol.doc(p.id), data);
 
-        // Also log barcode to history if present
         if (p.barcode != null && p.barcode!.isNotEmpty) {
-          final historyRef = _db.collection('barcode_history').doc(p.barcode!.trim());
+          final historyRef = _db
+              .collection('users')
+              .doc(_uid)
+              .collection('barcode_history')
+              .doc(p.barcode!.trim());
           batch.set(historyRef, {
             'barcode': p.barcode!.trim(),
             'productName': p.name,
@@ -211,18 +213,18 @@ class ProductRepository {
     for (final p in products) {
       if (p.barcode == null || p.barcode!.isEmpty) continue;
 
-      final docRef = _db.collection('products').doc(p.id);
+      final docRef = _productsCol.doc(p.id);
       final data = p.toMap();
-      // Ensure units are preserved if they are already in the product object
-      // If p.units is empty here, we might have a problem if we don't fetch them first
-      // But in the "Generate Missing" flow, we have the full product objects.
       data['units'] = p.units.map((u) => u.toMap()).toList();
       data['updated_at'] = now.toIso8601String();
       
       batch.set(docRef, data);
 
-      // Also batch the history logging
-      final historyRef = _db.collection('barcode_history').doc(p.barcode!.trim());
+      final historyRef = _db
+          .collection('users')
+          .doc(_uid)
+          .collection('barcode_history')
+          .doc(p.barcode!.trim());
       batch.set(historyRef, {
         'barcode': p.barcode!.trim(),
         'productName': p.name,
@@ -236,39 +238,38 @@ class ProductRepository {
   }
 
   Future<void> updateStock(String productId, double delta) async {
-    await _db.collection('products').doc(productId).update({
+    await _productsCol.doc(productId).update({
       'stock': firestore.FieldValue.increment(delta),
       'updated_at': DateTime.now().toIso8601String(),
     });
   }
 
   Future<void> deleteProduct(String id) async {
-    // Get product to archive its barcode
-    final doc = await _db.collection('products').doc(id).get();
-    final barcode = doc.data()?['barcode'] as String?;
+    final doc = await _productsCol.doc(id).get();
+    final data = doc.data() as Map<String, dynamic>?;
+    final barcode = data?['barcode'] as String?;
 
-    await _db.collection('products').doc(id).delete();
+    await _productsCol.doc(id).delete();
 
     if (barcode != null && barcode.isNotEmpty) {
       await _historyRepo.archiveBarcode(barcode);
     }
 
     try {
-      await _storage.ref().child('products/$id.jpg').delete();
+      await _storage.ref().child('users/$_uid/products/$id.jpg').delete();
     } catch (_) {}
   }
 
   Future<void> deleteProductsBatch(List<String> ids) async {
     final batch = _db.batch();
     for (final id in ids) {
-      batch.delete(_db.collection('products').doc(id));
+      batch.delete(_productsCol.doc(id));
     }
     await batch.commit();
 
-    // Delete images (Storage doesn't support batch delete)
     for (final id in ids) {
       try {
-        await _storage.ref().child('products/$id.jpg').delete();
+        await _storage.ref().child('users/$_uid/products/$id.jpg').delete();
       } catch (_) {}
     }
   }
@@ -276,16 +277,18 @@ class ProductRepository {
 
 // ── Providers ─────────────────────────────────────────────────────────────
 
-final productRepositoryProvider = Provider((ref) {
+final productRepositoryProvider = Provider<ProductRepository>((ref) {
+  final user = ref.watch(authStateProvider).value;
   final historyRepo = ref.read(barcodeHistoryRepositoryProvider);
-  return ProductRepository(historyRepo);
+  return ProductRepository(user?.uid ?? 'unknown', historyRepo);
 });
 
 final productsProvider = StreamProvider<List<Product>>((ref) {
-  return ref.watch(productRepositoryProvider).getProductsStream();
+  final repo = ref.watch(productRepositoryProvider);
+  if (repo._uid == 'unknown') return Stream.value([]);
+  return repo.getProductsStream();
 });
 
-// Since we switched to StreamProvider, we need a separate Notifier for actions
 final productsActionProvider = Provider((ref) => ProductsActionNotifier(ref));
 
 class ProductsActionNotifier {

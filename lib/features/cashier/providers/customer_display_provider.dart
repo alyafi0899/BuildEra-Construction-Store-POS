@@ -35,6 +35,7 @@ class CustomerDisplayBridge {
       final jsonStr = json.encode(state.toMap());
       final subWindowIds = await DesktopMultiWindow.getAllSubWindowIds();
       for (final id in subWindowIds) {
+        // Broadcast works the same, multi-tenant is handled by the primary window being scoped.
         DesktopMultiWindow.invokeMethod(id, 'updateCart', jsonStr);
       }
     } catch (e) {
