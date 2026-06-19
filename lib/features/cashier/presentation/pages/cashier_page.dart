@@ -62,46 +62,41 @@ class _CashierPageState extends ConsumerState<CashierPage> {
       // ── Left: Product Search & Grid ──────────────────────────────────
       Expanded(
         flex: 6,
-        child: Column(children: [
-          // Header
-          Container(
-            padding: const EdgeInsets.all(20),
-            color: AppTheme.surface,
-            child: Column(children: [
-              Row(children: [
-                const Icon(Icons.point_of_sale_rounded,
-                    color: AppTheme.accent, size: 22),
-                const SizedBox(width: 10),
-                Text('Kasir',
-                    style: Theme.of(context).textTheme.headlineMedium),
-                const Spacer(),
-                // Scan Mode Toggle
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: autoAdd
-                        ? AppTheme.accent.withValues(alpha: 0.1)
-                        : AppTheme.surfaceAlt,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: autoAdd ? AppTheme.accent : AppTheme.border),
-                  ),
-                  child: Row(children: [
-                    Icon(
-                        autoAdd ? Icons.bolt_rounded : Icons.search_rounded,
+        child: Column(
+          children: [
+            // Header
+            PageHeader(
+            title: 'Kasir',
+            icon: Icons.point_of_sale_rounded,
+            actions: [
+              // Scan Mode Toggle
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: autoAdd
+                      ? AppTheme.accent.withValues(alpha: 0.1)
+                      : AppTheme.surfaceAlt,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                      color: autoAdd ? AppTheme.accent : AppTheme.border),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(autoAdd ? Icons.bolt_rounded : Icons.search_rounded,
                         size: 16,
-                        color: autoAdd
-                            ? AppTheme.accent
-                            : AppTheme.textSecondary),
+                        color: autoAdd ? AppTheme.accent : AppTheme.textSecondary),
                     const SizedBox(width: 8),
-                    Text(autoAdd ? 'Jual Langsung' : 'Cari Produk',
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: autoAdd
-                                ? AppTheme.accent
-                                : AppTheme.textSecondary)),
+                    Flexible(
+                      child: Text(autoAdd ? 'Jual Langsung' : 'Cari Produk',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: autoAdd
+                                  ? AppTheme.accent
+                                  : AppTheme.textSecondary)),
+                    ),
                     const SizedBox(width: 8),
                     Switch.adaptive(
                       value: autoAdd,
@@ -109,27 +104,28 @@ class _CashierPageState extends ConsumerState<CashierPage> {
                           ref.read(scanModeProvider.notifier).setEnabled(v),
                       activeTrackColor: AppTheme.accent,
                     ),
-                  ]),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                Text(Formatters.date(DateTime.now()),
-                    style: Theme.of(context).textTheme.bodyMedium),
-              ]),
-              const SizedBox(height: 16),
-              Row(children: [
-                Expanded(
-                  child: AppSearchField(
-                    controller: _searchCtrl,
-                    hintText: 'Cari produk atau scan barcode...',
-                    onChanged: (v) => setState(() => _search = v),
-                    onClear: () => setState(() {
-                      _search = '';
-                      _searchCtrl.clear();
-                    }),
-                  ),
-                ),
-              ]),
-            ]),
+              ),
+              const SizedBox(width: 16),
+              Text(Formatters.date(DateTime.now()),
+                  style: Theme.of(context).textTheme.bodyMedium),
+            ],
+          ),
+          
+          // Search Field (Separated from Header for consistency)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            color: AppTheme.surface,
+            child: AppSearchField(
+              controller: _searchCtrl,
+              hintText: 'Cari produk atau scan barcode...',
+              onChanged: (v) => setState(() => _search = v),
+              onClear: () => setState(() {
+                _search = '';
+                _searchCtrl.clear();
+              }),
+            ),
           ),
 
           // Category filter chips
@@ -675,7 +671,8 @@ class _CartItemTileState extends ConsumerState<_CartItemTile> {
                     .textTheme
                     .titleMedium
                     ?.copyWith(fontSize: 13),
-                overflow: TextOverflow.ellipsis),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1),
           ),
           IconButton(
             onPressed: () => _showItemEditDialog(context, ref, item),

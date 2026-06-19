@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../../core/sync/services/local_database.dart';
 
 class BarcodeHistoryRepository {
   final String _uid;
@@ -11,42 +13,63 @@ class BarcodeHistoryRepository {
   CollectionReference get _historyCol => 
       _db.collection('users').doc(_uid).collection('barcode_history');
 
+  Future<Box> _getBox() => LocalDatabase.openBox(_uid, 'barcode_history');
+
   /// Checks if a barcode was EVER used (even in deleted products)
   Future<bool> isBarcodeUsed(String barcode) async {
-    if (barcode.trim().isEmpty) return false;
+    final normalized = barcode.trim();
+    if (normalized.isEmpty) return false;
     
-    final historyDoc = await _historyCol.doc(barcode.trim()).get();
-    if (historyDoc.exists) return true;
+    // 1. Check in local history log first
+    final box = await _getBox();
+    if (box.containsKey(normalized)) return true;
 
-    final activeProducts = await _db.collection('users').doc(_uid).collection('products')
-        .where('barcode', isEqualTo: barcode.trim())
-        .limit(1)
-        .get();
-    
-    return activeProducts.docs.isNotEmpty;
+    // 2. Check in Firestore only if online
+    try {
+      final historyDoc = await _historyCol.doc(normalized).get().timeout(const Duration(seconds: 2));
+      if (historyDoc.exists) {
+        // Cache it locally if we found it on server
+        await box.put(normalized, historyDoc.data());
+        return true;
+      }
+    } catch (_) {
+      // If offline or timeout, we rely on local check only
+    }
+
+    return false;
   }
 
   /// Logs a barcode into the permanent history
   Future<void> logBarcode(String barcode, String productName, String productId) async {
-    if (barcode.trim().isEmpty) return;
+    final normalized = barcode.trim();
+    if (normalized.isEmpty) return;
     
-    await _historyCol.doc(barcode.trim()).set({
-      'barcode': barcode.trim(),
+    final data = {
+      'barcode': normalized,
       'productName': productName,
       'productId': productId,
-      'usedAt': FieldValue.serverTimestamp(),
+      'usedAt': DateTime.now().toIso8601String(),
       'status': 'active',
-    });
+    };
+
+    // 1. Save Local
+    final box = await _getBox();
+    await box.put(normalized, data);
   }
 
   /// Archives a barcode when a product is deleted
   Future<void> archiveBarcode(String barcode) async {
-    if (barcode.trim().isEmpty) return;
+    final normalized = barcode.trim();
+    if (normalized.isEmpty) return;
     
-    await _historyCol.doc(barcode.trim()).update({
-      'status': 'archived',
-      'archivedAt': FieldValue.serverTimestamp(),
-    });
+    final box = await _getBox();
+    final data = box.get(normalized);
+    if (data != null) {
+      final m = Map<String, dynamic>.from(data as Map);
+      m['status'] = 'archived';
+      m['archivedAt'] = DateTime.now().toIso8601String();
+      await box.put(normalized, m);
+    }
   }
 }
 

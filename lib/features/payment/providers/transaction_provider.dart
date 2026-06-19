@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
-import 'package:cloud_firestore/cloud_firestore.dart' as firestore hide Transaction;
+import 'package:hive_flutter/hive_flutter.dart';
 import '../../../shared/models/transaction.dart';
 import '../../cashier/providers/cart_provider.dart';
 import '../../products/providers/product_provider.dart';
@@ -9,6 +9,9 @@ import '../../debts/providers/debt_repository.dart';
 import '../../debts/models/debt.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/sync/models/sync_task.dart';
+import '../../../core/sync/providers/sync_provider.dart';
+import '../../../core/sync/services/local_database.dart';
 
 final _uuid = Uuid();
 
@@ -16,21 +19,22 @@ final _uuid = Uuid();
 
 class TransactionRepository {
   final String _uid;
-  final firestore.FirebaseFirestore _db = firestore.FirebaseFirestore.instance;
+  final Ref _ref;
 
-  TransactionRepository(this._uid);
+  TransactionRepository(this._uid, this._ref);
 
-  firestore.CollectionReference get _transactionsCol => 
-      _db.collection('users').doc(_uid).collection('transactions');
+  Future<Box> _getBox() => LocalDatabase.openBox(_uid, 'transactions');
 
   Future<List<Transaction>> getAllTransactions() async {
-    final snapshot = await _transactionsCol.orderBy('created_at', descending: true).get();
-    return snapshot.docs.map((doc) {
-      final data = doc.data() as Map<String, dynamic>;
-      final itemsData = data['items'] as List? ?? [];
-      final items = itemsData.map((i) => TransactionItem.fromMap(i as Map<String, dynamic>)).toList();
-      return Transaction.fromMap(data, items: items);
+    final box = await _getBox();
+    final list = box.values.map((data) {
+      final m = Map<String, dynamic>.from(data as Map);
+      final itemsData = m['items'] as List? ?? [];
+      final items = itemsData.map((i) => TransactionItem.fromMap(Map<String, dynamic>.from(i as Map))).toList();
+      return Transaction.fromMap(m, items: items);
     }).toList();
+    list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return list;
   }
 
   Future<Transaction> saveTransaction({
@@ -84,7 +88,18 @@ class TransactionRepository {
       ).toMap();
     }).toList();
 
-    await _transactionsCol.doc(id).set(data);
+    // 1. Write Local
+    final box = await _getBox();
+    await box.put(id, data);
+
+    // 2. Queue Sync
+    await _ref.read(syncProvider.notifier).addToQueue(
+      collection: 'transactions',
+      documentId: id,
+      action:     SyncAction.create,
+      data:       data,
+    );
+
     return t;
   }
 
@@ -98,7 +113,7 @@ class TransactionRepository {
   }
 }
 
-// ── Analytics models ───────────────────────────────────────────────────────
+// ── Analytics models & logic ... (remain unchanged) ───────────────────────
 
 class TopProduct {
   final String name;
@@ -230,7 +245,7 @@ SalesSummary buildSummary(List<Transaction> txs) {
 
 final transactionRepositoryProvider = Provider<TransactionRepository>((ref) {
   final user = ref.watch(authStateProvider).value;
-  return TransactionRepository(user?.uid ?? 'unknown');
+  return TransactionRepository(user?.uid ?? 'unknown', ref);
 });
 
 final transactionsProvider =
@@ -279,8 +294,9 @@ class TransactionsNotifier extends AsyncNotifier<List<Transaction>> {
     if (paymentMethod == AppConstants.paymentPiutang && cart.customerId != null) {
       final remaining = cart.total - amountPaid;
       if (remaining > 0) {
+        final debtId = _uuid.v4();
         final debt = Debt(
-          id:               _uuid.v4(),
+          id:               debtId,
           transactionId:    tx.id,
           customerId:       cart.customerId!,
           customerName:     cart.customerName ?? 'Pelanggan',

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/services.dart';
@@ -34,12 +35,12 @@ class CustomerDisplayBridge {
     try {
       final jsonStr = json.encode(state.toMap());
       final subWindowIds = await DesktopMultiWindow.getAllSubWindowIds();
+      debugPrint('Broadcasting cart to windows: $subWindowIds');
       for (final id in subWindowIds) {
-        // Broadcast works the same, multi-tenant is handled by the primary window being scoped.
-        DesktopMultiWindow.invokeMethod(id, 'updateCart', jsonStr);
+        await DesktopMultiWindow.invokeMethod(id, 'updateCart', jsonStr);
       }
     } catch (e) {
-      // Ignore errors if no other windows are open
+      debugPrint('Error broadcasting cart: $e');
     }
   }
 }

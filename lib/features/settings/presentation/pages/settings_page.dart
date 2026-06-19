@@ -100,29 +100,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       backgroundColor: AppTheme.bg,
       body: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            color: AppTheme.surface,
-            child: Row(
-              children: [
-                const Icon(Icons.settings_rounded, color: AppTheme.accent, size: 24),
-                const SizedBox(width: 12),
-                Text('Pengaturan Akun & Toko', style: Theme.of(context).textTheme.headlineMedium),
-                const Spacer(),
-                OutlinedButton.icon(
-                  onPressed: () => ref.read(authRepositoryProvider).logout(),
-                  icon: const Icon(Icons.logout, size: 18),
-                  label: const Text('Keluar (Logout)'),
-                  style: OutlinedButton.styleFrom(foregroundColor: AppTheme.danger, side: const BorderSide(color: AppTheme.danger)),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton.icon(
-                  onPressed: _save,
-                  icon: const Icon(Icons.save_rounded, size: 18),
-                  label: const Text('Simpan Perubahan'),
-                ),
-              ],
-            ),
+          PageHeader(
+            title: 'Pengaturan Akun & Toko',
+            icon: Icons.settings_rounded,
+            actions: [
+              OutlinedButton.icon(
+                onPressed: () => ref.read(authRepositoryProvider).logout(),
+                icon: const Icon(Icons.logout, size: 18),
+                label: const Text('Keluar (Logout)'),
+                style: OutlinedButton.styleFrom(foregroundColor: AppTheme.danger, side: const BorderSide(color: AppTheme.danger)),
+              ),
+              ElevatedButton.icon(
+                onPressed: _save,
+                icon: const Icon(Icons.save_rounded, size: 18),
+                label: const Text('Simpan Perubahan'),
+              ),
+            ],
           ),
           Expanded(
             child: SingleChildScrollView(

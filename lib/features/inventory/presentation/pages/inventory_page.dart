@@ -32,17 +32,13 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      body: Column(children: [
-        // Header
-        Container(
-          padding: const EdgeInsets.all(24),
-          color: AppTheme.surface,
-          child: Row(children: [
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Inventori', style: Theme.of(context).textTheme.headlineLarge),
-              Text('Monitor stok produk secara real-time', style: Theme.of(context).textTheme.bodyMedium),
-            ]),
-          ]),
+      body: Column(
+        children: [
+          // Header
+          const PageHeader(
+          title: 'Inventori',
+          subtitle: 'Monitor stok produk secara real-time',
+          icon: Icons.warehouse_rounded,
         ),
 
         // Stats row

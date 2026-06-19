@@ -165,16 +165,19 @@ class _DebtList extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Text(d.invoiceNumber, style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'monospace')),
-                        const SizedBox(width: 8),
-                        StatusChip(label: _statusLabel(d.status), color: _statusColor(d.status)),
-                        if (d.isOverdue) ...[
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          Text(d.invoiceNumber, style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'monospace')),
                           const SizedBox(width: 8),
-                          const StatusChip(label: 'TERLAMBAT', color: AppTheme.danger),
+                          StatusChip(label: _statusLabel(d.status), color: _statusColor(d.status)),
+                          if (d.isOverdue) ...[
+                            const SizedBox(width: 8),
+                            const StatusChip(label: 'TERLAMBAT', color: AppTheme.danger),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text('Jatuh Tempo: ${Formatters.date(d.dueDate)}', style: Theme.of(context).textTheme.bodySmall),

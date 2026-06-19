@@ -30,23 +30,20 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
         return Scaffold(
           backgroundColor: AppTheme.bg,
-          body: Column(children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.all(24),
-              color:   AppTheme.surface,
-              child: Row(children: [
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Analitik Penjualan', style: Theme.of(context).textTheme.headlineLarge),
-                  Text('Ringkasan performa toko secara keseluruhan', style: Theme.of(context).textTheme.bodyMedium),
-                ]),
-                const Spacer(),
+          body: Column(
+            children: [
+              // Header
+              PageHeader(
+              title: 'Analitik Penjualan',
+              subtitle: 'Ringkasan performa toko secara keseluruhan',
+              icon: Icons.bar_chart_rounded,
+              actions: [
                 OutlinedButton.icon(
                   onPressed: () => ref.refresh(salesSummaryProvider),
-                  icon:  const Icon(Icons.refresh_rounded, size: 16),
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
                   label: const Text('Refresh'),
                 ),
-              ]),
+              ],
             ),
 
             Expanded(

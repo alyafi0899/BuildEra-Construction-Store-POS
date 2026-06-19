@@ -33,23 +33,17 @@ class _CustomerManagementPageState extends ConsumerState<CustomerManagementPage>
       body: Column(
         children: [
           // Header
-          Container(
-            padding: const EdgeInsets.all(24),
-            color: AppTheme.surface,
-            child: Row(
-              children: [
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Data Pelanggan', style: Theme.of(context).textTheme.headlineLarge),
-                  Text('Kelola profil pelanggan untuk transaksi piutang', style: Theme.of(context).textTheme.bodyMedium),
-                ]),
-                const Spacer(),
-                ElevatedButton.icon(
-                  onPressed: () => _showCustomerForm(context),
-                  icon: const Icon(Icons.person_add_rounded, size: 18),
-                  label: const Text('Tambah Pelanggan'),
-                ),
-              ],
-            ),
+          PageHeader(
+            title: 'Data Pelanggan',
+            subtitle: 'Kelola profil pelanggan untuk transaksi piutang',
+            icon: Icons.people_rounded,
+            actions: [
+              ElevatedButton.icon(
+                onPressed: () => _showCustomerForm(context),
+                icon: const Icon(Icons.person_add_rounded, size: 18),
+                label: const Text('Tambah Pelanggan'),
+              ),
+            ],
           ),
 
           // Filters

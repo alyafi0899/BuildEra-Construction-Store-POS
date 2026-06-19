@@ -23,28 +23,22 @@ class PiutangDashboard extends ConsumerWidget {
       body: Column(
         children: [
           // Header
-          Container(
-            padding: const EdgeInsets.all(24),
-            color: AppTheme.surface,
-            child: Row(
-              children: [
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Dashboard Piutang', style: Theme.of(context).textTheme.headlineLarge),
-                  Text('Kelola dan pantau saldo piutang pelanggan', style: Theme.of(context).textTheme.bodyMedium),
-                ]),
-                OutlinedButton.icon(
-                  onPressed: () => _exportAllOutstanding(ref),
-                  icon: const Icon(Icons.file_download_outlined, size: 18),
-                  label: const Text('Export Excel'),
-                ),
-                const SizedBox(width: 12),
-                OutlinedButton.icon(
-                  onPressed: () => _navigateToCustomerManagement(context),
-                  icon: const Icon(Icons.people_rounded, size: 18),
-                  label: const Text('Kelola Pelanggan'),
-                ),
-              ],
-            ),
+          PageHeader(
+            title: 'Dashboard Piutang',
+            subtitle: 'Kelola dan pantau saldo piutang pelanggan',
+            icon: Icons.account_balance_wallet_rounded,
+            actions: [
+              OutlinedButton.icon(
+                onPressed: () => _exportAllOutstanding(ref),
+                icon: const Icon(Icons.file_download_outlined, size: 18),
+                label: const Text('Export Excel'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _navigateToCustomerManagement(context),
+                icon: const Icon(Icons.people_rounded, size: 18),
+                label: const Text('Kelola Pelanggan'),
+              ),
+            ],
           ),
 
           Expanded(

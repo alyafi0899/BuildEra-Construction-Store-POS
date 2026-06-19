@@ -27,7 +27,7 @@ class _CustomerDisplayPageState extends ConsumerState<CustomerDisplayPage> {
       backgroundColor: AppTheme.bg,
       body: Row(
         children: [
-          // Left Side: Promotional area or branding
+          // Left Side: Branding
           Expanded(
             flex: 1,
             child: Container(
@@ -40,12 +40,15 @@ class _CustomerDisplayPageState extends ConsumerState<CustomerDisplayPage> {
                     const SizedBox(height: 24),
                     Text(
                       'KONSTRUKSI POS',
-                      style: Theme.of(context).textTheme.displayLarge?.copyWith(color: Colors.white),
+                      style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Belanja Kebutuhan Bangunan Jadi Lebih Mudah',
-                      style: TextStyle(color: Colors.white70),
+                      'Terima Kasih Telah Berbelanja',
+                      style: TextStyle(color: Colors.white70, fontSize: 18),
                     ),
                   ],
                 ),
@@ -53,9 +56,9 @@ class _CustomerDisplayPageState extends ConsumerState<CustomerDisplayPage> {
             ),
           ),
           
-          // Right Side: Live Cart Details
+          // Right Side: Cart Summary (Duplicated logic from Cashier Page)
           Container(
-            width: 450,
+            width: 500,
             decoration: const BoxDecoration(
               color: AppTheme.surface,
               border: Border(left: BorderSide(color: AppTheme.border)),
@@ -63,58 +66,71 @@ class _CustomerDisplayPageState extends ConsumerState<CustomerDisplayPage> {
             child: Column(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.all(32),
                   decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppTheme.border))),
                   child: Row(
                     children: [
-                      const Icon(Icons.shopping_bag_rounded, color: AppTheme.accent),
-                      const SizedBox(width: 12),
-                      Text('Ringkasan Belanja', style: Theme.of(context).textTheme.headlineMedium),
+                      const Icon(Icons.shopping_cart_rounded, color: AppTheme.accent, size: 28),
+                      const SizedBox(width: 16),
+                      Text('Daftar Belanja', style: Theme.of(context).textTheme.headlineMedium),
                     ],
                   ),
                 ),
                 
                 Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(24),
-                    itemCount: cart.items.length,
-                    itemBuilder: (context, i) {
-                      final item = cart.items[i];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(item.product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                  Text('${Formatters.decimal(item.quantity)} ${item.selectedUnit.unitName} x ${Formatters.currency(item.soldPrice)}'),
-                                ],
+                  child: cart.items.isEmpty 
+                    ? const Center(
+                        child: Text('Menunggu pesanan...', 
+                          style: TextStyle(color: AppTheme.textSecondary, fontSize: 18)))
+                    : ListView.separated(
+                        padding: const EdgeInsets.all(24),
+                        itemCount: cart.items.length,
+                        separatorBuilder: (_, __) => const Divider(color: AppTheme.border, height: 32),
+                        itemBuilder: (context, i) {
+                          final item = cart.items[i];
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(item.product.name, 
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                                    const SizedBox(height: 4),
+                                    Text('${Formatters.decimal(item.quantity)} ${item.selectedUnit.unitName} x ${Formatters.currency(item.soldPrice)}',
+                                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 16)),
+                                  ],
+                                ),
                               ),
-                            ),
-                            Text(Formatters.currency(item.subtotal), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.accent)),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+                              const SizedBox(width: 16),
+                              Text(Formatters.currency(item.subtotal), 
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppTheme.accent)),
+                            ],
+                          );
+                        },
+                      ),
                 ),
                 
+                // Totals
                 Container(
-                  padding: const EdgeInsets.all(32),
+                  padding: const EdgeInsets.all(40),
                   color: AppTheme.surfaceAlt,
                   child: Column(
                     children: [
-                      _buildRow('Subtotal', Formatters.currency(cart.grossSubtotal)),
+                      _buildRow('Subtotal', Formatters.currency(cart.grossSubtotal), fontSize: 18),
                       if (cart.totalDiscount > 0)
-                        _buildRow('Potongan', '- ${Formatters.currency(cart.totalDiscount)}', color: AppTheme.success),
-                      const Divider(height: 32),
+                        _buildRow('Potongan', '- ${Formatters.currency(cart.totalDiscount)}', 
+                          color: AppTheme.success, fontSize: 18),
+                      if (cart.taxEnabled)
+                        _buildRow('PPN (11%)', Formatters.currency(cart.taxAmount), fontSize: 18),
+                      const Divider(height: 48, thickness: 2),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('TOTAL AKHIR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
-                          Text(Formatters.currency(cart.total), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 32, color: AppTheme.accent)),
+                          const Text('TOTAL', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24)),
+                          Text(Formatters.currency(cart.total), 
+                            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 42, color: AppTheme.accent)),
                         ],
                       ),
                     ],
@@ -128,14 +144,14 @@ class _CustomerDisplayPageState extends ConsumerState<CustomerDisplayPage> {
     );
   }
 
-  Widget _buildRow(String label, String value, {Color? color}) {
+  Widget _buildRow(String label, String value, {Color? color, double fontSize = 16}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(fontSize: 16)),
-          Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+          Text(label, style: TextStyle(fontSize: fontSize, color: AppTheme.textSecondary)),
+          Text(value, style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold, color: color)),
         ],
       ),
     );

@@ -36,21 +36,18 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
         // List
         Expanded(
           flex: 5,
-          child: Column(children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              color: AppTheme.surface,
-              child: Row(children: [
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Riwayat Transaksi', style: Theme.of(context).textTheme.headlineLarge),
-                  Text('Semua transaksi yang telah selesai', style: Theme.of(context).textTheme.bodyMedium),
-                ]),
-                const Spacer(),
+          child: Column(
+            children: [
+              PageHeader(
+              title: 'Riwayat Transaksi',
+              subtitle: 'Semua transaksi yang telah selesai',
+              icon: Icons.receipt_long_rounded,
+              actions: [
                 IconButton(
                   onPressed: () => ref.read(transactionsProvider.notifier).refresh(),
-                  icon: const Icon(Icons.refresh_rounded, color: AppTheme.textSecondary),
+                  icon: const Icon(Icons.refresh_rounded, color: AppTheme.accent),
                 ),
-              ]),
+              ],
             ),
             Expanded(child: txAsync.when(
               loading: () => const AppLoading(),
@@ -199,8 +196,11 @@ class _TxDetailState extends State<_TxDetail> {
                 ],
               ),
               const SizedBox(height: 4),
-              Text(tx.invoiceNumber,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontFamily: 'monospace', color: AppTheme.accent)),
+              Flexible(
+                child: Text(tx.invoiceNumber,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontFamily: 'monospace', color: AppTheme.accent)),
+              ),
               const SizedBox(height: 4),
               Text(Formatters.dateTime(tx.createdAt), style: Theme.of(context).textTheme.bodySmall),
             ]),

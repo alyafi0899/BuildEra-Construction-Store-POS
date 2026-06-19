@@ -190,20 +190,14 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      body: Column(children: [
-        // Top bar
-        Container(
-          padding: const EdgeInsets.all(24),
-          decoration: const BoxDecoration(
-            color: AppTheme.surface,
-            border: Border(bottom: BorderSide(color: AppTheme.border)),
-          ),
-          child: Row(children: [
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Manajemen Produk', style: Theme.of(context).textTheme.headlineLarge),
-              Text('Kelola daftar produk dan satuan jual', style: Theme.of(context).textTheme.bodyMedium),
-            ]),
-            const Spacer(),
+      body: Column(
+        children: [
+          // Top bar
+          PageHeader(
+          title: 'Manajemen Produk',
+          subtitle: 'Kelola daftar produk dan satuan jual',
+          icon: Icons.inventory_2_rounded,
+          actions: [
             if (_isGenerating)
               const Row(
                 children: [
@@ -213,7 +207,6 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                   ),
                   SizedBox(width: 12),
                   Text('Generating Barcodes...', style: TextStyle(color: AppTheme.accent, fontSize: 13, fontWeight: FontWeight.bold)),
-                  SizedBox(width: 24),
                 ],
               ),
             OutlinedButton.icon(
@@ -221,25 +214,22 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
               icon:  const Icon(Icons.auto_fix_high_rounded, size: 18),
               label: const Text('Generate Missing'),
             ),
-            const SizedBox(width: 12),
             OutlinedButton.icon(
               onPressed: () => ExcelImportDialog.show(context),
               icon:  const Icon(Icons.file_upload_outlined, size: 18),
               label: const Text('Import Excel'),
             ),
-            const SizedBox(width: 12),
             OutlinedButton.icon(
               onPressed: () => productsAsync.whenData((p) => _exportToExcel(p)),
               icon:  const Icon(Icons.file_download_outlined, size: 18),
               label: const Text('Export Excel'),
             ),
-            const SizedBox(width: 12),
             ElevatedButton.icon(
               onPressed: () => ProductFormDialog.show(context),
               icon:  const Icon(Icons.add_rounded, size: 18),
               label: const Text('Tambah Produk'),
             ),
-          ]),
+          ],
         ),
 
         // Filters & Sorting

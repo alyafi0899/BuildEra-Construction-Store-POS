@@ -138,6 +138,7 @@ class Product {
   }
 
   Product copyWith({
+    String? id,
     String? name,
     String? category,
     String? barcode,
@@ -147,10 +148,12 @@ class Product {
     String? defaultUnitName,
     double? stock,
     String? imagePath,
+    DateTime? createdAt,
+    DateTime? updatedAt,
     List<ProductUnit>? units,
   }) =>
       Product(
-        id:        id,
+        id:        id ?? this.id,
         name:      name ?? this.name,
         category:  category ?? this.category,
         barcode:   barcode ?? this.barcode,
@@ -160,8 +163,8 @@ class Product {
         defaultUnitName: defaultUnitName ?? this.defaultUnitName,
         stock:     stock ?? this.stock,
         imagePath: imagePath ?? this.imagePath,
-        createdAt: createdAt,
-        updatedAt: DateTime.now(),
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? DateTime.now(),
         units:     units ?? this.units,
       );
 }

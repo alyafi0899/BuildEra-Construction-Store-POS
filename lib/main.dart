@@ -20,6 +20,7 @@ import 'features/cashier/providers/scan_mode_provider.dart';
 import 'features/cashier/presentation/widgets/barcode_listener.dart';
 import 'features/products/providers/product_provider.dart';
 import 'features/auth/presentation/widgets/auth_gate.dart';
+import 'core/sync/services/local_database.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:io';
@@ -30,6 +31,26 @@ import 'shared/widgets/splash_screen.dart';
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  // 1. Check for multi-window arguments immediately
+  if (args.isNotEmpty && args.first == 'multi_window') {
+    await LocalDatabase.init();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    await initializeDateFormatting('id_ID', null);
+    runApp(ProviderScope(
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.dark,
+        home: const CustomerDisplayPage(),
+      ),
+    ));
+    return;
+  }
+
+  // 2. Main Window setup
+  await LocalDatabase.init();
+
   // Show splash screen immediately
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
@@ -49,17 +70,6 @@ Future<void> main(List<String> args) async {
       await windowManager.show();
       await windowManager.focus();
     });
-  }
-
-  if (args.isNotEmpty && args.first == 'multi_window') {
-    runApp(ProviderScope(
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.dark,
-        home: const CustomerDisplayPage(),
-      ),
-    ));
-    return;
   }
 
   try {

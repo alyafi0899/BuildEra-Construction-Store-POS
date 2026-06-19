@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/constants/app_constants.dart';
 import '../../features/settings/providers/settings_provider.dart';
+import '../../core/sync/widgets/sync_status_bar.dart';
 
 class _NavItem {
   final IconData icon;
@@ -96,6 +97,11 @@ class AppSidebar extends ConsumerWidget {
                       selected: selectedIndex == item.index,
                       onTap:    () => onItemSelected(item.index),
                     )),
+                const SizedBox(height: 32),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 10),
+                  child: SyncStatusBar(),
+                ),
               ],
             ),
           ),

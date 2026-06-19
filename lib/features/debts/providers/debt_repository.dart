@@ -1,76 +1,129 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../models/customer.dart';
 import '../models/debt.dart';
 import '../models/debt_payment.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../../core/sync/models/sync_task.dart';
+import '../../../core/sync/providers/sync_provider.dart';
+import '../../../core/sync/services/local_database.dart';
 
 final _uuid = const Uuid();
 
 class DebtRepository {
   final String _uid;
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final Ref _ref;
 
-  DebtRepository(this._uid);
+  DebtRepository(this._uid, this._ref);
 
-  DocumentReference get _userDoc => _db.collection('users').doc(_uid);
-  CollectionReference get _customersCol => _userDoc.collection('customers');
-  CollectionReference get _debtsCol => _userDoc.collection('debts');
-  CollectionReference get _paymentsCol => _userDoc.collection('debt_payments');
+  Future<Box> _getBox(String col) => LocalDatabase.openBox(_uid, col);
 
   // ── Customers ─────────────────────────────────────────────────────────────
 
-  Stream<List<Customer>> getCustomersStream() {
-    return _customersCol
-        .orderBy('name')
-        .snapshots()
-        .map((s) => s.docs.map((d) => Customer.fromMap(d.data() as Map<String, dynamic>)).toList());
+  Stream<List<Customer>> getCustomersStream() async* {
+    final box = await _getBox('customers');
+    yield _customersFromBox(box);
+    yield* box.watch().map((_) => _customersFromBox(box));
+  }
+
+  List<Customer> _customersFromBox(Box box) {
+    return box.values.map((d) => Customer.fromMap(Map<String, dynamic>.from(d as Map))).toList();
   }
 
   Future<void> saveCustomer(Customer c) async {
-    await _customersCol.doc(c.id).set(c.toMap());
+    final box = await _getBox('customers');
+    final data = c.toMap();
+    await box.put(c.id, data);
+
+    await _ref.read(syncProvider.notifier).addToQueue(
+      collection: 'customers',
+      documentId: c.id,
+      action:     SyncAction.update,
+      data:       data,
+    );
   }
 
   Future<void> deleteCustomer(String id) async {
-    final doc = await _customersCol.doc(id).get();
-    final data = doc.data() as Map<String, dynamic>?;
+    final box = await _getBox('customers');
+    final data = box.get(id);
     if (data != null && (data['total_outstanding'] as num? ?? 0) > 0) {
       throw 'Tidak bisa menghapus pelanggan yang masih memiliki piutang aktif.';
     }
-    await _customersCol.doc(id).delete();
+    await box.delete(id);
+
+    await _ref.read(syncProvider.notifier).addToQueue(
+      collection: 'customers',
+      documentId: id,
+      action:     SyncAction.delete,
+      data:       {},
+    );
   }
 
   // ── Debts ─────────────────────────────────────────────────────────────────
 
-  Stream<List<Debt>> getDebtsStream({String? customerId}) {
-    Query query = _debtsCol.orderBy('created_at', descending: true);
+  Stream<List<Debt>> getDebtsStream({String? customerId}) async* {
+    final box = await _getBox('debts');
+    yield _debtsFromBox(box, customerId);
+    yield* box.watch().map((_) => _debtsFromBox(box, customerId));
+  }
+
+  List<Debt> _debtsFromBox(Box box, String? customerId) {
+    var list = box.values.map((d) => Debt.fromMap(Map<String, dynamic>.from(d as Map))).toList();
     if (customerId != null) {
-      query = query.where('customer_id', isEqualTo: customerId);
+      list = list.where((d) => d.customerId == customerId).toList();
     }
-    return query.snapshots().map((s) => s.docs.map((d) => Debt.fromMap(d.data() as Map<String, dynamic>)).toList());
+    list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return list;
   }
 
   Future<void> createDebt(Debt debt) async {
-    final batch = _db.batch();
-    batch.set(_debtsCol.doc(debt.id), debt.toMap());
-    batch.update(_customersCol.doc(debt.customerId), {
-      'total_outstanding': FieldValue.increment(debt.remainingBalance),
-    });
-    await batch.commit();
+    final debtBox = await _getBox('debts');
+    final custBox = await _getBox('customers');
+
+    // 1. Update Debts
+    await debtBox.put(debt.id, debt.toMap());
+
+    // 2. Update Customer Local
+    final custData = custBox.get(debt.customerId);
+    if (custData != null) {
+      final m = Map<String, dynamic>.from(custData as Map);
+      m['total_outstanding'] = (m['total_outstanding'] as num? ?? 0) + debt.remainingBalance;
+      await custBox.put(debt.customerId, m);
+    }
+
+    // 3. Queue Sync (Simplified, the Sync Engine will handle the batch logic ideally, 
+    // but here we just queue individual tasks)
+    await _ref.read(syncProvider.notifier).addToQueue(
+      collection: 'debts',
+      documentId: debt.id,
+      action:     SyncAction.create,
+      data:       debt.toMap(),
+    );
+
+    await _ref.read(syncProvider.notifier).addToQueue(
+      collection: 'customers',
+      documentId: debt.customerId,
+      action:     SyncAction.update,
+      data:       {'total_outstanding': FieldValue.increment(debt.remainingBalance)},
+    );
   }
 
   // ── Payments ──────────────────────────────────────────────────────────────
 
-  Stream<List<DebtPayment>> getPaymentsStream({String? customerId, String? debtId}) {
-    Query query = _paymentsCol.orderBy('created_at', descending: true);
-    if (customerId != null) {
-      query = query.where('customer_id', isEqualTo: customerId);
-    }
-    if (debtId != null) {
-      query = query.where('debt_id', isEqualTo: debtId);
-    }
-    return query.snapshots().map((s) => s.docs.map((d) => DebtPayment.fromMap(d.data() as Map<String, dynamic>)).toList());
+  Stream<List<DebtPayment>> getPaymentsStream({String? customerId, String? debtId}) async* {
+    final box = await _getBox('debt_payments');
+    yield _paymentsFromBox(box, customerId, debtId);
+    yield* box.watch().map((_) => _paymentsFromBox(box, customerId, debtId));
+  }
+
+  List<DebtPayment> _paymentsFromBox(Box box, String? customerId, String? debtId) {
+    var list = box.values.map((d) => DebtPayment.fromMap(Map<String, dynamic>.from(d as Map))).toList();
+    if (customerId != null) list = list.where((p) => p.customerId == customerId).toList();
+    if (debtId != null)     list = list.where((p) => p.debtId == debtId).toList();
+    list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return list;
   }
 
   Future<void> recordPayment({
@@ -79,45 +132,56 @@ class DebtRepository {
     required double amount,
     String? notes,
   }) async {
-    final batch = _db.batch();
-    final now = DateTime.now();
-    
-    final debtDoc = await _debtsCol.doc(debtId).get();
-    if (!debtDoc.exists) throw 'Data piutang tidak ditemukan';
-    
-    final debt = Debt.fromMap(debtDoc.data() as Map<String, dynamic>);
-    final newPaidAmount = debt.paidAmount + amount;
-    final newRemaining  = debt.remainingBalance - amount;
-    
-    if (newRemaining < -0.01) throw 'Jumlah bayar melebihi sisa piutang';
+    final debtBox = await _getBox('debts');
+    final custBox = await _getBox('customers');
+    final payBox  = await _getBox('debt_payments');
 
-    DebtStatus status = DebtStatus.partiallyPaid;
-    if (newRemaining <= 0.01) {
-      status = DebtStatus.paid;
+    final now = DateTime.now();
+
+    // 1. Update Debt Local
+    final dData = debtBox.get(debtId);
+    if (dData == null) throw 'Data piutang tidak ditemukan';
+    final debt = Debt.fromMap(Map<String, dynamic>.from(dData as Map));
+    
+    final newRemaining = debt.remainingBalance - amount;
+    final status = newRemaining <= 0.01 ? DebtStatus.paid : DebtStatus.partiallyPaid;
+
+    final updatedDebt = debt.copyWith(
+      paidAmount: debt.paidAmount + amount,
+      remainingBalance: newRemaining < 0 ? 0 : newRemaining,
+      status: status,
+    );
+    await debtBox.put(debtId, updatedDebt.toMap());
+
+    // 2. Create Payment Local
+    final payId = _uuid.v4();
+    final payment = DebtPayment(
+      id: payId, debtId: debtId, customerId: customerId, 
+      amount: amount, createdAt: now, notes: notes,
+    );
+    await payBox.put(payId, payment.toMap());
+
+    // 3. Update Customer Local
+    final cData = custBox.get(customerId);
+    if (cData != null) {
+      final m = Map<String, dynamic>.from(cData as Map);
+      m['total_outstanding'] = (m['total_outstanding'] as num? ?? 0) - amount;
+      await custBox.put(customerId, m);
     }
 
-    batch.update(_debtsCol.doc(debtId), {
-      'paid_amount':       newPaidAmount,
-      'remaining_balance': newRemaining < 0 ? 0 : newRemaining,
-      'status':            status.name,
-    });
-
-    final paymentId = _uuid.v4();
-    final payment = DebtPayment(
-      id:         paymentId,
-      debtId:     debtId,
-      customerId: customerId,
-      amount:     amount,
-      createdAt:  now,
-      notes:      notes,
+    // 4. Queue Syncs
+    await _ref.read(syncProvider.notifier).addToQueue(
+      collection: 'debts', documentId: debtId, action: SyncAction.update,
+      data: {'paid_amount': updatedDebt.paidAmount, 'remaining_balance': updatedDebt.remainingBalance, 'status': updatedDebt.status.name},
     );
-    batch.set(_paymentsCol.doc(paymentId), payment.toMap());
-
-    batch.update(_customersCol.doc(customerId), {
-      'total_outstanding': FieldValue.increment(-amount),
-    });
-
-    await batch.commit();
+    await _ref.read(syncProvider.notifier).addToQueue(
+      collection: 'debt_payments', documentId: payId, action: SyncAction.create,
+      data: payment.toMap(),
+    );
+    await _ref.read(syncProvider.notifier).addToQueue(
+      collection: 'customers', documentId: customerId, action: SyncAction.update,
+      data: {'total_outstanding': FieldValue.increment(-amount)},
+    );
   }
 }
 
@@ -125,7 +189,7 @@ class DebtRepository {
 
 final debtRepositoryProvider = Provider<DebtRepository>((ref) {
   final user = ref.watch(authStateProvider).value;
-  return DebtRepository(user?.uid ?? 'unknown');
+  return DebtRepository(user?.uid ?? 'unknown', ref);
 });
 
 final customersProvider = StreamProvider<List<Customer>>((ref) {
