@@ -32,7 +32,8 @@ class StoreSettings {
   final String businessName;
   final String ownerName;
   final String phone;
-  final String email;
+  final String email; // Business email
+  final String? loginEmail; // New: For security checks
   final String address;
   final String description;
   final List<BankAccount> bankAccounts;
@@ -43,6 +44,7 @@ class StoreSettings {
     this.ownerName = '',
     this.phone = '',
     this.email = '',
+    this.loginEmail,
     this.address = '',
     this.description = '',
     this.bankAccounts = const [],
@@ -55,6 +57,7 @@ class StoreSettings {
       'ownerName': ownerName,
       'phone': phone,
       'email': email,
+      'loginEmail': loginEmail,
       'address': address,
       'description': description,
       'bankAccounts': bankAccounts.map((x) => x.toMap()).toList(),
@@ -68,6 +71,7 @@ class StoreSettings {
       ownerName: map['ownerName'] ?? '',
       phone: map['phone'] ?? '',
       email: map['email'] ?? '',
+      loginEmail: map['loginEmail'],
       address: map['address'] ?? '',
       description: map['description'] ?? '',
       bankAccounts: (map['bankAccounts'] as List?)
@@ -87,6 +91,7 @@ class StoreSettings {
     String? ownerName,
     String? phone,
     String? email,
+    String? loginEmail,
     String? address,
     String? description,
     List<BankAccount>? bankAccounts,
@@ -97,6 +102,7 @@ class StoreSettings {
       ownerName: ownerName ?? this.ownerName,
       phone: phone ?? this.phone,
       email: email ?? this.email,
+      loginEmail: loginEmail ?? this.loginEmail,
       address: address ?? this.address,
       description: description ?? this.description,
       bankAccounts: bankAccounts ?? this.bankAccounts,

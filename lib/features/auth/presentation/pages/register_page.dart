@@ -57,6 +57,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         ownerName:    _ownerNameCtrl.text.trim(),
         phone:        _phoneCtrl.text.trim(),
         email:        _bizEmailCtrl.text.trim(),
+        loginEmail:   _emailCtrl.text.trim(), // Save login email for security check
         address:      _addressCtrl.text.trim(),
         description:  _descCtrl.text.trim(),
       );
