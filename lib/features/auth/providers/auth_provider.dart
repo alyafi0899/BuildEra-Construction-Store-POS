@@ -6,7 +6,8 @@ import '../models/auth_user.dart';
 final firebaseAuthProvider = Provider<FirebaseAuth>((ref) => FirebaseAuth.instance);
 
 final authStateProvider = StreamProvider<AuthUser?>((ref) {
-  return ref.watch(firebaseAuthProvider).authStateChanges().map((user) {
+  // Use userChanges() instead of authStateChanges() to catch metadata changes like email verification
+  return ref.watch(firebaseAuthProvider).userChanges().map((user) {
     if (user == null) return null;
     return AuthUser.fromFirebase(user);
   });
@@ -24,9 +25,10 @@ class AuthRepository {
     await _auth.signInWithEmailAndPassword(email: email, password: password);
   }
 
-  Future<void> register(String email, String password) async {
+  Future<User?> register(String email, String password) async {
     final cred = await _auth.createUserWithEmailAndPassword(email: email, password: password);
     await cred.user?.sendEmailVerification();
+    return cred.user;
   }
 
   Future<void> logout() async {

@@ -24,11 +24,11 @@ class SettingsNotifier extends Notifier<StoreSettings> {
     }
   }
 
-  Future<void> updateSettings(StoreSettings settings) async {
-    final user = ref.read(authStateProvider).value;
-    if (user == null) return;
+  Future<void> updateSettings(StoreSettings settings, {String? uid}) async {
+    final targetUid = uid ?? ref.read(authStateProvider).value?.uid;
+    if (targetUid == null) return;
     
-    await _db.collection('users').doc(user.uid).set(settings.toMap(), SetOptions(merge: true));
+    await _db.collection('users').doc(targetUid).set(settings.toMap(), SetOptions(merge: true));
     state = settings;
   }
 }

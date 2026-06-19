@@ -14,7 +14,8 @@ class RegisterPage extends ConsumerStatefulWidget {
 }
 
 class _RegisterPageState extends ConsumerState<RegisterPage> {
-  final _formKey = GlobalKey<FormState>();
+  final _formKey1 = GlobalKey<FormState>();
+  final _formKey2 = GlobalKey<FormState>();
   int _currentStep = 0;
   bool _loading = false;
 
@@ -40,14 +41,15 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   }
 
   Future<void> _register() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey2.currentState!.validate()) return;
 
     setState(() => _loading = true);
     try {
       final authRepo = ref.read(authRepositoryProvider);
       
       // 1. Create Account
-      await authRepo.register(_emailCtrl.text.trim(), _passCtrl.text);
+      final user = await authRepo.register(_emailCtrl.text.trim(), _passCtrl.text);
+      if (user == null) throw 'Gagal membuat akun';
       
       // 2. Prepare business data
       final settings = StoreSettings(
@@ -59,8 +61,14 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         description:  _descCtrl.text.trim(),
       );
 
-      // 3. Save profile (SettingsNotifier will handle the Firestore path)
-      await ref.read(settingsProvider.notifier).updateSettings(settings);
+      // 3. Save profile using the explicit UID
+      await ref.read(settingsProvider.notifier).updateSettings(settings, uid: user.uid);
+
+      if (mounted) {
+        // Pop back to the LoginPage, which is the child of AuthGate.
+        // AuthGate will then detect the new auth state and switch to VerifyEmailPage.
+        Navigator.of(context).pop();
+      }
 
     } catch (e) {
       if (mounted) showError(context, 'Gagal mendaftar: $e');
@@ -88,52 +96,54 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: AppTheme.border),
           ),
-          child: Form(
-            key: _formKey,
-            child: Stepper(
-              type: StepperType.horizontal,
-              currentStep: _currentStep,
-              onStepContinue: () {
-                if (_currentStep == 0) {
-                  if (_formKey.currentState!.validate()) {
-                    setState(() => _currentStep++);
-                  }
-                } else {
+          child: Stepper(
+            type: StepperType.horizontal,
+            currentStep: _currentStep,
+            onStepContinue: () {
+              if (_currentStep == 0) {
+                if (_formKey1.currentState!.validate()) {
+                  setState(() => _currentStep++);
+                }
+              } else {
+                if (_formKey2.currentState!.validate()) {
                   _register();
                 }
-              },
-              onStepCancel: () {
-                if (_currentStep > 0) {
-                  setState(() => _currentStep--);
-                } else {
-                  Navigator.pop(context);
-                }
-              },
-              controlsBuilder: (context, details) {
-                return Padding(
-                  padding: const EdgeInsets.only(top: 32),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: _loading ? null : details.onStepContinue,
-                          child: _loading ? const AppLoading() : Text(_currentStep == 0 ? 'LANJUT KE INFO BISNIS' : 'DAFTAR SEKARANG'),
-                        ),
+              }
+            },
+            onStepCancel: () {
+              if (_currentStep > 0) {
+                setState(() => _currentStep--);
+              } else {
+                Navigator.pop(context);
+              }
+            },
+            controlsBuilder: (context, details) {
+              return Padding(
+                padding: const EdgeInsets.only(top: 32),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _loading ? null : details.onStepContinue,
+                        child: _loading ? const AppLoading() : Text(_currentStep == 0 ? 'LANJUT KE INFO BISNIS' : 'DAFTAR SEKARANG'),
                       ),
-                      const SizedBox(width: 16),
-                      TextButton(
-                        onPressed: _loading ? null : details.onStepCancel,
-                        child: const Text('KEMBALI'),
-                      ),
-                    ],
-                  ),
-                );
-              },
-              steps: [
-                Step(
-                  title: const Text('Akun'),
-                  isActive: _currentStep >= 0,
-                  content: Column(
+                    ),
+                    const SizedBox(width: 16),
+                    TextButton(
+                      onPressed: _loading ? null : details.onStepCancel,
+                      child: const Text('KEMBALI'),
+                    ),
+                  ],
+                ),
+              );
+            },
+            steps: [
+              Step(
+                title: const Text('Akun'),
+                isActive: _currentStep >= 0,
+                content: Form(
+                  key: _formKey1,
+                  child: Column(
                     children: [
                       TextFormField(
                         controller: _emailCtrl,
@@ -157,10 +167,13 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                     ],
                   ),
                 ),
-                Step(
-                  title: const Text('Bisnis'),
-                  isActive: _currentStep >= 1,
-                  content: Column(
+              ),
+              Step(
+                title: const Text('Bisnis'),
+                isActive: _currentStep >= 1,
+                content: Form(
+                  key: _formKey2,
+                  child: Column(
                     children: [
                       Row(
                         children: [
@@ -207,8 +220,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                     ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

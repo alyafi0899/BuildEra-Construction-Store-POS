@@ -4,7 +4,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/app_settings_provider.dart';
 import '../../models/store_settings.dart';
-import '../../auth/providers/auth_provider.dart';
+import '../../../auth/providers/auth_provider.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
