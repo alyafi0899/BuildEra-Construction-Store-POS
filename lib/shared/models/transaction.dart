@@ -67,6 +67,7 @@ class TransactionItem {
 class Transaction {
   final String id;
   final String invoiceNumber;
+  final String? customerId; // Linked registered customer
   final String? customerName;
   final String? cashierName;
   final double subtotal; // Sum of items subtotal
@@ -87,6 +88,7 @@ class Transaction {
   const Transaction({
     required this.id,
     required this.invoiceNumber,
+    this.customerId,
     this.customerName,
     this.cashierName,
     required this.subtotal,
@@ -109,6 +111,7 @@ class Transaction {
       Transaction(
         id:                 m['id'] as String,
         invoiceNumber:      m['invoice_number'] as String,
+        customerId:         m['customer_id'] as String?,
         customerName:       m['customer_name'] as String?,
         cashierName:        m['cashier_name'] as String?,
         subtotal:           (m['subtotal'] as num).toDouble(),
@@ -130,6 +133,7 @@ class Transaction {
   Map<String, dynamic> toMap() => {
         'id':                    id,
         'invoice_number':        invoiceNumber,
+        'customer_id':           customerId,
         'customer_name':         customerName,
         'cashier_name':          cashierName,
         'subtotal':              subtotal,

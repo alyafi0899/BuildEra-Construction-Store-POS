@@ -11,6 +11,7 @@ import 'features/inventory/presentation/pages/inventory_page.dart';
 import 'features/payment/presentation/pages/transactions_page.dart';
 import 'features/analytics/presentation/pages/analytics_page.dart';
 import 'features/settings/presentation/pages/settings_page.dart';
+import 'features/debts/presentation/pages/piutang_dashboard.dart';
 import 'features/settings/providers/app_settings_provider.dart';
 import 'features/cashier/presentation/pages/customer_display_page.dart';
 import 'features/cashier/providers/customer_display_provider.dart';
@@ -111,6 +112,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     const ProductsPage(),
     const InventoryPage(),
     const TransactionsPage(),
+    const PiutangDashboard(),
     const AnalyticsPage(),
     const SettingsPage(),
   ];

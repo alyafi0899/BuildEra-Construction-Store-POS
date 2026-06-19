@@ -5,6 +5,9 @@ import '../../../shared/models/transaction.dart';
 import '../../cashier/providers/cart_provider.dart';
 import '../../products/providers/product_provider.dart';
 import '../../settings/providers/settings_provider.dart';
+import '../../debts/providers/debt_repository.dart';
+import '../../debts/models/debt.dart';
+import '../../../core/constants/app_constants.dart';
 
 final _uuid = Uuid();
 
@@ -23,7 +26,7 @@ class TransactionRepository {
     }).toList();
   }
 
-  Future<String> saveTransaction({
+  Future<Transaction> saveTransaction({
     required CartState cart,
     required String    paymentMethod,
     required double    amountPaid,
@@ -37,6 +40,7 @@ class TransactionRepository {
     final t = Transaction(
       id:                 id,
       invoiceNumber:      invoice,
+      customerId:         cart.customerId,
       customerName:       cart.customerName,
       cashierName:        cashierName,
       subtotal:           cart.grossSubtotal,
@@ -74,7 +78,7 @@ class TransactionRepository {
     }).toList();
 
     await _db.collection('transactions').doc(id).set(data);
-    return id;
+    return t;
   }
 
   String _invoice() {
@@ -242,18 +246,20 @@ class TransactionsNotifier extends AsyncNotifier<List<Transaction>> {
   Future<String> checkout({
     required String paymentMethod,
     required double amountPaid,
+    DateTime?       dueDate,
     String?         notes,
   }) async {
     final cart     = ref.read(cartProvider);
     final settings = ref.read(settingsProvider);
     final prodRepo = ref.read(productRepositoryProvider);
+    final debtRepo = ref.read(debtRepositoryProvider);
 
     for (final item in cart.items) {
       final baseQty = item.quantity * item.selectedUnit.conversionRate;
       await prodRepo.updateStock(item.product.id, -baseQty);
     }
 
-    final id = await _repo.saveTransaction(
+    final tx = await _repo.saveTransaction(
       cart:          cart,
       paymentMethod: paymentMethod,
       amountPaid:    amountPaid,
@@ -261,10 +267,32 @@ class TransactionsNotifier extends AsyncNotifier<List<Transaction>> {
       notes:         notes,
     );
 
+    // If it's a debt transaction
+    if (paymentMethod == AppConstants.paymentPiutang && cart.customerId != null) {
+      final remaining = cart.total - amountPaid;
+      if (remaining > 0) {
+        final debt = Debt(
+          id:               _uuid.v4(),
+          transactionId:    tx.id,
+          customerId:       cart.customerId!,
+          customerName:     cart.customerName ?? 'Pelanggan',
+          invoiceNumber:    tx.invoiceNumber,
+          totalAmount:      cart.total,
+          paidAmount:       amountPaid,
+          remainingBalance: remaining,
+          dueDate:          dueDate ?? DateTime.now().add(const Duration(days: 30)),
+          createdAt:        DateTime.now(),
+          status:           amountPaid > 0 ? DebtStatus.partiallyPaid : DebtStatus.unpaid,
+          notes:            notes,
+        );
+        await debtRepo.createDebt(debt);
+      }
+    }
+
     ref.read(cartProvider.notifier).clear();
     // Wait for the state to be updated before returning
     await refresh();
-    return id;
+    return tx.id;
   }
 }
 

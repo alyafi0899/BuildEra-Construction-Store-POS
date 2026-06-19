@@ -16,8 +16,9 @@ const _navItems = [
   _NavItem(Icons.inventory_2_rounded,         'Produk',      1),
   _NavItem(Icons.warehouse_rounded,           'Inventori',   2),
   _NavItem(Icons.receipt_long_rounded,        'Transaksi',   3),
-  _NavItem(Icons.bar_chart_rounded,           'Analitik',    4),
-  _NavItem(Icons.settings_rounded,            'Pengaturan',  5),
+  _NavItem(Icons.account_balance_wallet_rounded, 'Piutang',   4),
+  _NavItem(Icons.bar_chart_rounded,           'Analitik',    5),
+  _NavItem(Icons.settings_rounded,            'Pengaturan',  6),
 ];
 
 class AppSidebar extends ConsumerWidget {

@@ -477,7 +477,7 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
             ),
             onChanged: (v) => ref
                 .read(cartProvider.notifier)
-                .setCustomer(v.isEmpty ? null : v),
+                .setCustomer(null, v.isEmpty ? null : v),
           ),
           const SizedBox(height: 12),
 

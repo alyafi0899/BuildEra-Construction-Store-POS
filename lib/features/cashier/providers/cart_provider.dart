@@ -13,6 +13,7 @@ class CartState {
   final DiscountType transDiscountType;
   final double taxRate;
   final bool taxEnabled;
+  final String? customerId;
   final String? customerName;
 
   const CartState({
@@ -21,6 +22,7 @@ class CartState {
     this.transDiscountType   = DiscountType.fixed,
     this.taxRate             = 0.11,
     this.taxEnabled          = false,
+    this.customerId,
     this.customerName,
   });
 
@@ -57,6 +59,7 @@ class CartState {
     DiscountType? transDiscountType,
     double? taxRate,
     bool? taxEnabled,
+    String? customerId,
     String? customerName,
   }) =>
       CartState(
@@ -65,6 +68,7 @@ class CartState {
         transDiscountType:   transDiscountType   ?? this.transDiscountType,
         taxRate:             taxRate            ?? this.taxRate,
         taxEnabled:          taxEnabled         ?? this.taxEnabled,
+        customerId:          customerId         ?? this.customerId,
         customerName:        customerName       ?? this.customerName,
       );
 
@@ -75,6 +79,7 @@ class CartState {
       'transDiscountType': transDiscountType.name,
       'taxRate': taxRate,
       'taxEnabled': taxEnabled,
+      'customerId': customerId,
       'customerName': customerName,
     };
   }
@@ -86,6 +91,7 @@ class CartState {
       transDiscountType: DiscountType.values.byName(map['transDiscountType']),
       taxRate: map['taxRate'],
       taxEnabled: map['taxEnabled'],
+      customerId: map['customerId'],
       customerName: map['customerName'],
     );
   }
@@ -200,7 +206,8 @@ class CartNotifier extends Notifier<CartState> {
   void setTransDiscount(double v, DiscountType type) => 
       state = state.copyWith(transDiscountValue: v, transDiscountType: type);
 
-  void setCustomer(String? name) => state = state.copyWith(customerName: name);
+  void setCustomer(String? id, String? name) => 
+      state = state.copyWith(customerId: id, customerName: name);
   
   void toggleTax()           => state = state.copyWith(taxEnabled: !state.taxEnabled);
   void setTaxRate(double r)  => state = state.copyWith(taxRate: r);

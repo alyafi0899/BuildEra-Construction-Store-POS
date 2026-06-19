@@ -192,6 +192,10 @@ class _TxDetailState extends State<_TxDetail> {
                     onPressed: () => InvoiceHelper.shareInvoice(tx, settings),
                     icon: const Icon(Icons.share_rounded, size: 20, color: AppTheme.accent),
                   ),
+                  IconButton(
+                    onPressed: () => InvoiceHelper.saveInvoice(tx, settings),
+                    icon: const Icon(Icons.download, size: 20, color: AppTheme.accent),
+                  ),
                 ],
               ),
               const SizedBox(height: 4),
