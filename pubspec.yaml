@@ -48,9 +48,9 @@ dev_dependencies:
 
 msix_config:
   display_name: BuildEra
-  publisher_display_name: BuildEra
-  identity_name: com.buildera.pos
-  publisher: CN=BuildEra
+  publisher_display_name: Solutivo Studio
+  identity_name: com.solutivo.buildera
+  publisher: CN=Solutivo Studio
   msix_version: 1.0.0.0
   logo_path: assets/images/logo.png
   capabilities: internetClient, location, privateNetworkClientServer
