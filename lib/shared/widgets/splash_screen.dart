@@ -14,36 +14,49 @@ class SplashScreen extends StatelessWidget {
           children: [
             // Logo
             Container(
-              width: 120,
-              height: 120,
+              width: 140,
+              height: 140,
               decoration: BoxDecoration(
-                color: AppTheme.accent,
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(32),
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.accent.withValues(alpha: 0.3),
-                    blurRadius: 30,
-                    spreadRadius: 5,
+                    color: AppTheme.accent.withValues(alpha: 0.2),
+                    blurRadius: 40,
+                    spreadRadius: 10,
                   ),
                 ],
               ),
-              child: const Icon(Icons.construction, color: Colors.white, size: 60),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(32),
+                child: Image.asset('assets/images/logo.png', fit: BoxFit.cover),
+              ),
             ),
             const SizedBox(height: 40),
             // App Name
             Text(
-              'KONSTRUKSI POS',
+              'BuildEra',
               style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                letterSpacing: 4,
+                letterSpacing: 6,
                 fontWeight: FontWeight.w900,
+                color: Colors.white,
               ),
             ),
             const SizedBox(height: 12),
+            const Text(
+              'Material and Construction POS',
+              style: TextStyle(
+                color: AppTheme.accent,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.5,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 4),
             Text(
-              'Sistem Manajemen Toko Bangunan Modern',
+              'Bangun. Kelola. Kembangkan.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: AppTheme.textSecondary,
-                letterSpacing: 1.2,
+                fontStyle: FontStyle.italic,
               ),
             ),
             const SizedBox(height: 60),

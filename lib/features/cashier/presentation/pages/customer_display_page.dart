@@ -24,17 +24,20 @@ class CustomerDisplayPage extends ConsumerWidget {
                 flex: 1,
                 child: Container(
                   color: AppTheme.accent,
-                  child: const Center(
+                  child: Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.construction, color: Colors.white, size: 100),
-                        SizedBox(height: 24),
-                        Text('KONSTRUKSI POS',
-                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 32)),
-                        SizedBox(height: 8),
-                        Text('Terima Kasih Telah Berbelanja',
-                          style: TextStyle(color: Colors.white70, fontSize: 18)),
+                        Image.asset('assets/images/logo.png', width: 120, height: 120),
+                        const SizedBox(height: 24),
+                        const Text('BuildEra',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 42)),
+                        const SizedBox(height: 8),
+                        const Text('Material and Construction POS',
+                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500)),
+                        const SizedBox(height: 4),
+                        const Text('Bangun. Kelola. Kembangkan.',
+                          style: TextStyle(color: Colors.white70, fontSize: 16, fontStyle: FontStyle.italic)),
                       ],
                     ),
                   ),

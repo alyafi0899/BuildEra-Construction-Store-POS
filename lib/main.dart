@@ -47,7 +47,7 @@ Future<void> main(List<String> args) async {
         size: Size(1024, 768),
         center: true,
         backgroundColor: Color(0xFF0F1117),
-        title: 'Tampilan Pelanggan - KONSTRUKSI POS',
+        title: 'Tampilan Pelanggan - BuildEra',
       );
       windowManager.waitUntilReadyToShow(windowOptions, () async {
         await windowManager.show();
@@ -123,7 +123,7 @@ class KonstruksiPosApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp(
-      title: 'Konstruksi POS',
+      title: 'BuildEra',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
       home: const AuthGate(), 

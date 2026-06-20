@@ -49,28 +49,31 @@ class AppSidebar extends ConsumerWidget {
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Container(
-                width: 36, height: 36,
-                decoration: BoxDecoration(
-                  color: AppTheme.accent,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.construction, color: Colors.white, size: 20),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.asset('assets/images/logo.png', width: 36, height: 36, fit: BoxFit.cover),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('BuildEra',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                            color:       Colors.white,
+                            fontSize:    15,
+                            fontWeight:  FontWeight.w900,
+                            letterSpacing: 1.0,
+                          )),
                   Text(businessName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      style: TextStyle(
                             color:       AppTheme.accent,
-                            fontSize:    13,
-                            fontWeight:  FontWeight.w800,
-                            letterSpacing: 1.2,
+                            fontSize:    10,
+                            fontWeight:  FontWeight.w600,
+                            letterSpacing: 0.5,
                           )),
-                  Text('v${AppConstants.appVersion}',
-                      style: Theme.of(context).textTheme.bodySmall),
                 ]),
               ),
             ]),

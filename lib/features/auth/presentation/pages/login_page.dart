@@ -67,9 +67,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.construction, size: 64, color: AppTheme.accent),
+                Image.asset('assets/images/logo.png', width: 80, height: 80),
                 const SizedBox(height: 16),
-                Text('Masuk ke Konstruksi POS', style: Theme.of(context).textTheme.headlineMedium),
+                Text('Masuk ke BuildEra', style: Theme.of(context).textTheme.headlineMedium),
+                const Text('Material and Construction POS', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                 const SizedBox(height: 32),
                 TextFormField(
                   controller: _emailCtrl,
