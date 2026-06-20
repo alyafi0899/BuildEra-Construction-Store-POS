@@ -1,53 +1,102 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
-import 'dart:io';
+import 'package:path/path.dart' as path;
+import 'package:flutter/material.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import '../../core/theme/app_theme.dart';
 
 class ImageHelper {
-  /// Compresses and resizes image to max 512px and 70% quality
-  static Future<Uint8List> compressImage(Uint8List bytes) async {
-    // Decode image
-    img.Image? image = img.decodeImage(bytes);
-    if (image == null) return bytes;
+  /// Picks an image, crops it (if supported), and returns the bytes
+  static Future<Uint8List?> pickAndCropImage(BuildContext context) async {
+    // 1. Pick Image using FilePicker (more stable on Windows/Desktop)
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      withData: true,
+    );
+    
+    if (result == null || result.files.isEmpty) return null;
+    final pickedFile = result.files.first;
 
-    // Resize if too large (max 512px width/height)
-    if (image.width > 512 || image.height > 512) {
-      if (image.width > image.height) {
-        image = img.copyResize(image, width: 512);
-      } else {
-        image = img.copyResize(image, height: 512);
+    // 2. Cropping (Only supported on Mobile and Web)
+    // On Windows, we skip cropping to prevent the app from hanging
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      final croppedFile = await ImageCropper().cropImage(
+        sourcePath: pickedFile.path!,
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Potong Gambar Produk',
+            toolbarColor: AppTheme.accent,
+            toolbarWidgetColor: Colors.white,
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: true,
+          ),
+          IOSUiSettings(
+            title: 'Potong Gambar Produk',
+            aspectRatioLockEnabled: true,
+          ),
+        ],
+      );
+
+      if (croppedFile != null) {
+        return await croppedFile.readAsBytes();
       }
     }
 
-    // Encode to JPG with 70% quality
-    return Uint8List.fromList(img.encodeJpg(image, quality: 70));
+    // On Windows/Desktop or if user cancelled crop, return original picked bytes
+    return pickedFile.bytes;
   }
 
-  /// Saves image to local storage for offline use/fast loading
-  static Future<String?> saveLocally(String id, Uint8List bytes) async {
-    if (kIsWeb) return null; // Web doesn't use file paths like this
+  /// Compresses and resizes image to 512x512
+  static Future<Uint8List> processImage(Uint8List bytes) async {
+    img.Image? image = img.decodeImage(bytes);
+    if (image == null) return bytes;
+
+    // Resize to fit display (512px max dimension)
+    img.Image resized = img.copyResize(
+      image, 
+      width: image.width > image.height ? 512 : null,
+      height: image.height >= image.width ? 512 : null,
+    );
+
+    // Encode as JPG with 80% quality
+    return Uint8List.fromList(img.encodeJpg(resized, quality: 80));
+  }
+
+  /// Saves image to local Documents directory under user-specific folder
+  static Future<String?> saveLocally(String uid, String productId, Uint8List bytes) async {
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      final path = '${dir.path}/products/$id.jpg';
+      final docDir = await getApplicationDocumentsDirectory();
+      final userDir = Directory(path.join(docDir.path, 'KonstruksiPOS', uid, 'product_images'));
       
-      // Ensure directory exists
-      final folder = Directory('${dir.path}/products');
-      if (!await folder.exists()) await folder.create(recursive: true);
+      if (!await userDir.exists()) {
+        await userDir.create(recursive: true);
+      }
+
+      final fileName = '$productId.jpg';
+      final file = File(path.join(userDir.path, fileName));
       
-      final file = File(path);
       await file.writeAsBytes(bytes);
-      return path;
+      return file.path;
     } catch (e) {
+      debugPrint('Error saving image locally: $e');
       return null;
     }
   }
 
-  /// Checks if local image exists
-  static Future<File?> getLocalFile(String? path) async {
-    if (path == null || kIsWeb) return null;
-    final file = File(path);
-    if (await file.exists()) return file;
-    return null;
+  /// Deletes local image file
+  static Future<void> deleteLocal(String? localPath) async {
+    if (localPath == null || localPath.isEmpty) return;
+    try {
+      final file = File(localPath);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (e) {
+      debugPrint('Error deleting local image: $e');
+    }
   }
 }

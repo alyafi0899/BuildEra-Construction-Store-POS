@@ -1,46 +1,37 @@
-import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:desktop_multi_window/desktop_multi_window.dart';
-import 'package:flutter/services.dart';
+import '../../auth/providers/auth_provider.dart';
 import 'cart_provider.dart';
 
-/// Use Notifier instead of StateProvider for better compatibility across versions
-final customerCartProvider = NotifierProvider<CustomerCartNotifier, CartState>(CustomerCartNotifier.new);
+/// This provider is used by the customer display to listen to the "live" cart from Firestore.
+final customerDisplayCartProvider = StreamProvider<CartState?>((ref) {
+  final user = ref.watch(authStateProvider).value;
+  if (user == null) return Stream.value(null);
 
-class CustomerCartNotifier extends Notifier<CartState> {
-  @override
-  CartState build() {
-    return const CartState();
-  }
-
-  void updateState(CartState newState) {
-    state = newState;
-  }
-}
+  return FirebaseFirestore.instance
+      .collection('users')
+      .doc(user.uid)
+      .collection('metadata')
+      .doc('customer_display')
+      .snapshots()
+      .map((doc) {
+        if (!doc.exists) return const CartState();
+        return CartState.fromMap(doc.data()!);
+      });
+});
 
 class CustomerDisplayBridge {
-  static void init(WidgetRef ref) {
-    DesktopMultiWindow.setMethodHandler((MethodCall call, int fromWindowId) async {
-      if (call.method == 'updateCart') {
-        final Map<String, dynamic> data = json.decode(call.arguments as String);
-        ref.read(customerCartProvider.notifier).updateState(CartState.fromMap(data));
-      }
-      return null;
-    });
-  }
-
-  /// Broadcasts the current cart state to all other windows.
-  static void broadcastCart(CartState state) async {
+  /// Writes the current cart state to Firestore for the customer display to pick up.
+  static Future<void> syncCart(String uid, CartState cart) async {
     try {
-      final jsonStr = json.encode(state.toMap());
-      final subWindowIds = await DesktopMultiWindow.getAllSubWindowIds();
-      debugPrint('Broadcasting cart to windows: $subWindowIds');
-      for (final id in subWindowIds) {
-        await DesktopMultiWindow.invokeMethod(id, 'updateCart', jsonStr);
-      }
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('metadata')
+          .doc('customer_display')
+          .set(cart.toMap());
     } catch (e) {
-      debugPrint('Error broadcasting cart: $e');
+      // Quietly ignore sync errors
     }
   }
 }

@@ -10,6 +10,7 @@ import '../../../../shared/models/product.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../../../shared/widgets/product_image.dart';
 import '../../../../core/utils/barcode_helper.dart';
+import '../../../../shared/widgets/product_detail_dialog.dart';
 import '../../providers/barcode_history_provider.dart';
 import '../../providers/product_provider.dart';
 import '../widgets/product_form_dialog.dart';
@@ -486,14 +487,17 @@ class _ProductRow extends ConsumerWidget {
           ),
         ),
         // Product name + icon
-        Expanded(flex: 4, child: Row(children: [
-          ProductImage(imagePath: product.imagePath, size: 36),
-          const SizedBox(width: 12),
-          Flexible(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(product.name, style: Theme.of(context).textTheme.titleMedium, overflow: TextOverflow.ellipsis),
-            Text(product.baseUnit, style: Theme.of(context).textTheme.bodySmall),
-          ])),
-        ])),
+        Expanded(flex: 4, child: InkWell(
+          onTap: () => ProductDetailDialog.show(context, product),
+          child: Row(children: [
+            ProductImage(imagePath: product.imagePath, size: 36),
+            const SizedBox(width: 12),
+            Flexible(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(product.name, style: Theme.of(context).textTheme.titleMedium, overflow: TextOverflow.ellipsis),
+              Text(product.baseUnit, style: Theme.of(context).textTheme.bodySmall),
+            ])),
+          ]),
+        )),
         Expanded(flex: 2, child: Text(product.category, style: Theme.of(context).textTheme.bodyMedium)),
         Expanded(flex: 2, child: Text(product.barcode ?? '—', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'))),
         Expanded(flex: 1, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [

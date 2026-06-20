@@ -48,6 +48,7 @@ class Product {
   final String name;
   final String category;
   final String? barcode;
+  final String? description; // New field
   final double costPrice;
   final double basePrice;
   final String baseUnit;
@@ -63,6 +64,7 @@ class Product {
     required this.name,
     required this.category,
     this.barcode,
+    this.description,
     required this.costPrice,
     required this.basePrice,
     required this.baseUnit,
@@ -80,6 +82,7 @@ class Product {
         name:      m['name'] as String? ?? 'Produk Tanpa Nama',
         category:  m['category'] as String? ?? 'Lainnya',
         barcode:   m['barcode'] as String?,
+        description: m['description'] as String?,
         costPrice: (m['cost_price'] as num? ?? 0).toDouble(),
         basePrice: (m['base_price'] as num? ?? 0).toDouble(),
         baseUnit:  m['base_unit'] as String? ?? 'pcs',
@@ -96,6 +99,7 @@ class Product {
         'name':        name,
         'category':    category,
         'barcode':     barcode,
+        'description': description,
         'cost_price':  costPrice,
         'base_price':  basePrice,
         'base_unit':   baseUnit,
@@ -142,6 +146,7 @@ class Product {
     String? name,
     String? category,
     String? barcode,
+    String? description,
     double? costPrice,
     double? basePrice,
     String? baseUnit,
@@ -157,6 +162,7 @@ class Product {
         name:      name ?? this.name,
         category:  category ?? this.category,
         barcode:   barcode ?? this.barcode,
+        description: description ?? this.description,
         costPrice: costPrice ?? this.costPrice,
         basePrice: basePrice ?? this.basePrice,
         baseUnit:  baseUnit ?? this.baseUnit,

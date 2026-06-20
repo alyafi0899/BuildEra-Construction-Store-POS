@@ -12,6 +12,8 @@ import '../../providers/scan_mode_provider.dart';
 import '../../providers/barcode_event_provider.dart';
 import '../widgets/payment_dialog.dart';
 
+import '../../../../shared/widgets/product_detail_dialog.dart';
+
 class CashierPage extends ConsumerStatefulWidget {
   const CashierPage({super.key});
 
@@ -295,6 +297,7 @@ class _ProductCard extends ConsumerWidget {
     final isLow = product.isLowStock;
     return GestureDetector(
       onTap: () => ref.read(cartProvider.notifier).addProduct(product),
+      onLongPress: () => ProductDetailDialog.show(context, product),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 100),
         decoration: BoxDecoration(
@@ -317,7 +320,10 @@ class _ProductCard extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(children: [
-                    ProductImage(imagePath: product.imagePath),
+                    GestureDetector(
+                      onTap: () => ProductDetailDialog.show(context, product),
+                      child: ProductImage(imagePath: product.imagePath),
+                    ),
                     const Spacer(),
                     if (isLow)
                       Container(

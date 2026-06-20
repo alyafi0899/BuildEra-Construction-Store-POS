@@ -14,12 +14,13 @@ import 'features/settings/presentation/pages/settings_page.dart';
 import 'features/debts/presentation/pages/piutang_dashboard.dart';
 import 'features/settings/providers/app_settings_provider.dart';
 import 'features/cashier/presentation/pages/customer_display_page.dart';
-import 'features/cashier/providers/customer_display_provider.dart';
 import 'features/cashier/providers/cart_provider.dart';
+import 'features/cashier/providers/customer_display_provider.dart';
 import 'features/cashier/providers/scan_mode_provider.dart';
 import 'features/cashier/presentation/widgets/barcode_listener.dart';
 import 'features/products/providers/product_provider.dart';
 import 'features/auth/presentation/widgets/auth_gate.dart';
+import 'features/auth/providers/auth_provider.dart';
 import 'core/sync/services/local_database.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:window_manager/window_manager.dart';
@@ -31,13 +32,29 @@ import 'shared/widgets/splash_screen.dart';
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // 1. Check for multi-window arguments immediately
-  if (args.isNotEmpty && args.first == 'multi_window') {
+  // 1. Handle Secondary Windows (Customer Display) ASAP
+  if (args.isNotEmpty && args.contains('multi_window')) {
     await LocalDatabase.init();
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
     await initializeDateFormatting('id_ID', null);
+
+    // Force show the window
+    if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+      await windowManager.ensureInitialized();
+      WindowOptions windowOptions = const WindowOptions(
+        size: Size(1024, 768),
+        center: true,
+        backgroundColor: Color(0xFF0F1117),
+        title: 'Tampilan Pelanggan - KONSTRUKSI POS',
+      );
+      windowManager.waitUntilReadyToShow(windowOptions, () async {
+        await windowManager.show();
+        await windowManager.focus();
+      });
+    }
+
     runApp(ProviderScope(
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -48,7 +65,6 @@ Future<void> main(List<String> args) async {
     return;
   }
 
-  // 2. Main Window setup
   await LocalDatabase.init();
 
   // Show splash screen immediately
@@ -110,7 +126,7 @@ class KonstruksiPosApp extends ConsumerWidget {
       title: 'Konstruksi POS',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
-      home: const AuthGate(), // Root logic moved to AuthGate
+      home: const AuthGate(), 
     );
   }
 }
@@ -131,15 +147,18 @@ class _MainShellState extends ConsumerState<MainShell> {
     const PiutangDashboard(),
     const AnalyticsPage(),
     const SettingsPage(),
+    const CustomerDisplayPage(), // New accessible route
   ];
 
   @override
   void initState() {
     super.initState();
+    // Use Firestore-based sync instead of unreliable multi-window channels
     ref.listenManual(cartProvider, (prev, next) {
+      final user = ref.read(authStateProvider).value;
       final settings = ref.read(appSettingsProvider);
-      if (settings.isCustomerDisplayEnabled) {
-        CustomerDisplayBridge.broadcastCart(next);
+      if (user != null && settings.isCustomerDisplayEnabled) {
+        CustomerDisplayBridge.syncCart(user.uid, next);
       }
     }, fireImmediately: true);
   }

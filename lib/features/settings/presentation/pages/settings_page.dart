@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -6,6 +7,7 @@ import '../../providers/app_settings_provider.dart';
 import '../../models/store_settings.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../../../../shared/widgets/common_widgets.dart';
+import '../../../../features/cashier/presentation/pages/customer_display_page.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -233,11 +235,24 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           const Divider(height: 32),
           _buildSettingRow(
             icon: Icons.monitor_rounded,
-            label: 'Tampilan Pelanggan (Dual Monitor)',
-            child: Switch.adaptive(
-              value: appSettings.isCustomerDisplayEnabled,
-              onChanged: (v) => notifier.setCustomerDisplay(v),
-              activeTrackColor: AppTheme.accent,
+            label: 'Tampilan Pelanggan (Dual Display)',
+            child: Row(
+              children: [
+                if (appSettings.isCustomerDisplayEnabled)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: OutlinedButton.icon(
+                      onPressed: () => _openCustomerDisplayUrl(context),
+                      icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                      label: const Text('Buka Layar', style: TextStyle(fontSize: 12)),
+                    ),
+                  ),
+                Switch.adaptive(
+                  value: appSettings.isCustomerDisplayEnabled,
+                  onChanged: (v) => notifier.setCustomerDisplay(v),
+                  activeTrackColor: AppTheme.accent,
+                ),
+              ],
             ),
           ),
         ],
@@ -315,6 +330,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ),
       ],
     );
+  }
+
+  void _openCustomerDisplayUrl(BuildContext context) async {
+    try {
+      // Launch a second instance of the current executable with the 'multi_window' argument
+      // This will trigger the dedicated boot path in main.dart
+      await Process.start(Platform.resolvedExecutable, ['multi_window', '1']);
+      
+      if (context.mounted) {
+        showSuccess(context, 'Membuka jendela pelanggan...');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        showError(context, 'Gagal membuka jendela: $e');
+      }
+    }
   }
 }
 

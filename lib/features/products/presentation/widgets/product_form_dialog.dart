@@ -1,7 +1,7 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -9,6 +9,7 @@ import '../../../../core/utils/image_helper.dart';
 import '../../../../shared/models/product.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../providers/product_provider.dart';
+import '../../../auth/providers/auth_provider.dart';
 
 import '../../../../core/utils/barcode_helper.dart';
 import '../../providers/barcode_history_provider.dart';
@@ -33,7 +34,7 @@ class ProductFormDialog extends ConsumerStatefulWidget {
 
 class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _name, _barcode, _costPrice, _basePrice, _stock;
+  late final TextEditingController _name, _barcode, _description, _costPrice, _basePrice, _stock;
   late String _category, _baseUnit;
   String? _defaultUnitName;
   late List<_UnitEntry> _units;
@@ -48,6 +49,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
     final p = widget.product;
     _name      = TextEditingController(text: p?.name ?? '');
     _barcode   = TextEditingController(text: p?.barcode ?? '');
+    _description = TextEditingController(text: p?.description ?? '');
     _costPrice = TextEditingController(text: p != null ? p.costPrice.toStringAsFixed(0) : '');
     _basePrice = TextEditingController(text: p != null ? p.basePrice.toStringAsFixed(0) : '');
     _stock     = TextEditingController(text: p != null ? p.stock.toStringAsFixed(0) : '0');
@@ -62,6 +64,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   void dispose() {
     _name.dispose();
     _barcode.dispose();
+    _description.dispose();
     _costPrice.dispose();
     _basePrice.dispose();
     _stock.dispose();
@@ -69,12 +72,9 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   }
 
   Future<void> _pickImage() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      withData: true,
-    );
-    if (result != null && result.files.first.bytes != null) {
-      setState(() => _imageBytes = result.files.first.bytes);
+    final bytes = await ImageHelper.pickAndCropImage(context);
+    if (bytes != null) {
+      setState(() => _imageBytes = bytes);
     }
   }
 
@@ -114,9 +114,10 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     
-    // Process units: ignore rows with empty names
     final validUnits = <ProductUnit>[];
     final productId = widget.product?.id ?? _uuid.v4();
+    final user = ref.read(authStateProvider).value;
+    if (user == null) return;
 
     for (final u in _units) {
       if (u.unitName.trim().isNotEmpty) {
@@ -128,12 +129,11 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
     try {
       String? imagePath = _existingImagePath;
       if (_imageBytes != null) {
-        // 1. Save locally for instant access (if not on web)
-        final localPath = await ImageHelper.saveLocally(productId, _imageBytes!);
-        if (localPath != null) imagePath = localPath;
-
-        // 2. Upload to Firebase Storage with compression
-        imagePath = await ref.read(productsActionProvider).uploadImage(productId, _imageBytes!);
+        // 1. Process (resize & compress)
+        final processed = await ImageHelper.processImage(_imageBytes!);
+        
+        // 2. Save locally in User Documents
+        imagePath = await ImageHelper.saveLocally(user.uid, productId, processed);
       }
 
       final product = Product(
@@ -141,6 +141,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
         name:      _name.text.trim(),
         category:  _category,
         barcode:   _barcode.text.trim().isEmpty ? null : _barcode.text.trim(),
+        description: _description.text.trim().isEmpty ? null : _description.text.trim(),
         costPrice: double.tryParse(_costPrice.text) ?? 0,
         basePrice: double.tryParse(_basePrice.text) ?? 0,
         baseUnit:  _baseUnit,
@@ -233,7 +234,9 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                   image: _imageBytes != null 
                                     ? DecorationImage(image: MemoryImage(_imageBytes!), fit: BoxFit.cover)
                                     : (_existingImagePath != null 
-                                        ? DecorationImage(image: NetworkImage(_existingImagePath!), fit: BoxFit.cover)
+                                        ? (_existingImagePath!.startsWith('http') 
+                                            ? DecorationImage(image: NetworkImage(_existingImagePath!), fit: BoxFit.cover)
+                                            : DecorationImage(image: FileImage(File(_existingImagePath!)), fit: BoxFit.cover))
                                         : null),
                                 ),
                                 child: (_imageBytes == null && _existingImagePath == null)
@@ -292,6 +295,16 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                           ),
                         ),
                       ]),
+                      const SizedBox(height: 16),
+
+                      TextFormField(
+                        controller: _description,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          labelText: 'Deskripsi Produk',
+                          hintText: 'Tambahkan keterangan detail mengenai produk ini...',
+                        ),
+                      ),
                       const SizedBox(height: 16),
 
                       // Row 2: category + base unit + stock

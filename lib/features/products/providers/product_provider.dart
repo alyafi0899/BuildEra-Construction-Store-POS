@@ -294,7 +294,7 @@ class ProductRepository {
 
   Future<String?> uploadProductImage(String productId, Uint8List bytes) async {
     try {
-      final compressedBytes = await ImageHelper.compressImage(bytes);
+      final compressedBytes = await ImageHelper.processImage(bytes);
       final ref = _storage.ref().child('users/$_uid/products/$productId.jpg');
       await ref.putData(
           compressedBytes, storage.SettableMetadata(contentType: 'image/jpeg'));
