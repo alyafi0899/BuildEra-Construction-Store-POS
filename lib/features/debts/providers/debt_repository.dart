@@ -82,19 +82,10 @@ class DebtRepository {
     final debtBox = await _getBox('debts');
     final custBox = await _getBox('customers');
 
-    // 1. Update Debts
+    // 1. Update Debts Local
     await debtBox.put(debt.id, debt.toMap());
 
-    // 2. Update Customer Local
-    final custData = custBox.get(debt.customerId);
-    if (custData != null) {
-      final m = Map<String, dynamic>.from(custData as Map);
-      m['total_outstanding'] = (m['total_outstanding'] as num? ?? 0) + debt.remainingBalance;
-      await custBox.put(debt.customerId, m);
-    }
-
-    // 3. Queue Sync (Simplified, the Sync Engine will handle the batch logic ideally, 
-    // but here we just queue individual tasks)
+    // 2. Queue Debt Sync
     await _ref.read(syncProvider.notifier).addToQueue(
       collection: 'debts',
       documentId: debt.id,
@@ -102,12 +93,20 @@ class DebtRepository {
       data:       debt.toMap(),
     );
 
-    await _ref.read(syncProvider.notifier).addToQueue(
-      collection: 'customers',
-      documentId: debt.customerId,
-      action:     SyncAction.update,
-      data:       {'total_outstanding': FieldValue.increment(debt.remainingBalance)},
-    );
+    // 3. Update Customer Local & Queue Sync
+    final custData = custBox.get(debt.customerId);
+    if (custData != null) {
+      final m = Map<String, dynamic>.from(custData as Map);
+      m['total_outstanding'] = (m['total_outstanding'] as num? ?? 0) + debt.remainingBalance;
+      await custBox.put(debt.customerId, m);
+
+      await _ref.read(syncProvider.notifier).addToQueue(
+        collection: 'customers',
+        documentId: debt.customerId,
+        action:     SyncAction.update,
+        data:       {'total_outstanding': m['total_outstanding']},
+      );
+    }
   }
 
   // ── Payments ──────────────────────────────────────────────────────────────
@@ -161,15 +160,20 @@ class DebtRepository {
     );
     await payBox.put(payId, payment.toMap());
 
-    // 3. Update Customer Local
+    // 3. Update Customer Local & Queue Sync
     final cData = custBox.get(customerId);
     if (cData != null) {
       final m = Map<String, dynamic>.from(cData as Map);
       m['total_outstanding'] = (m['total_outstanding'] as num? ?? 0) - amount;
       await custBox.put(customerId, m);
+
+      await _ref.read(syncProvider.notifier).addToQueue(
+        collection: 'customers', documentId: customerId, action: SyncAction.update,
+        data: {'total_outstanding': m['total_outstanding']},
+      );
     }
 
-    // 4. Queue Syncs
+    // 4. Queue other Syncs
     await _ref.read(syncProvider.notifier).addToQueue(
       collection: 'debts', documentId: debtId, action: SyncAction.update,
       data: {'paid_amount': updatedDebt.paidAmount, 'remaining_balance': updatedDebt.remainingBalance, 'status': updatedDebt.status.name},
@@ -177,10 +181,6 @@ class DebtRepository {
     await _ref.read(syncProvider.notifier).addToQueue(
       collection: 'debt_payments', documentId: payId, action: SyncAction.create,
       data: payment.toMap(),
-    );
-    await _ref.read(syncProvider.notifier).addToQueue(
-      collection: 'customers', documentId: customerId, action: SyncAction.update,
-      data: {'total_outstanding': FieldValue.increment(-amount)},
     );
   }
 }

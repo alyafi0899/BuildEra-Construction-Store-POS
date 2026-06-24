@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/constants/app_constants.dart';
 import '../../features/settings/providers/settings_provider.dart';
 import '../../core/sync/widgets/sync_status_bar.dart';
 
@@ -19,7 +18,8 @@ const _navItems = [
   _NavItem(Icons.receipt_long_rounded,        'Transaksi',   3),
   _NavItem(Icons.account_balance_wallet_rounded, 'Piutang',   4),
   _NavItem(Icons.bar_chart_rounded,           'Analitik',    5),
-  _NavItem(Icons.settings_rounded,            'Pengaturan',  6),
+  _NavItem(Icons.qr_code_2_rounded,           'Label Barcode', 6),
+  _NavItem(Icons.settings_rounded,            'Pengaturan',  7),
 ];
 
 class AppSidebar extends ConsumerWidget {

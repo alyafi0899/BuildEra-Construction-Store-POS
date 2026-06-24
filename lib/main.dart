@@ -19,6 +19,7 @@ import 'features/cashier/providers/customer_display_provider.dart';
 import 'features/cashier/providers/scan_mode_provider.dart';
 import 'features/cashier/presentation/widgets/barcode_listener.dart';
 import 'features/products/providers/product_provider.dart';
+import 'features/products/presentation/pages/barcode_management_page.dart';
 import 'features/auth/presentation/widgets/auth_gate.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'core/sync/services/local_database.dart';
@@ -146,6 +147,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     const TransactionsPage(),
     const PiutangDashboard(),
     const AnalyticsPage(),
+    const BarcodeManagementPage(),
     const SettingsPage(),
     const CustomerDisplayPage(), // New accessible route
   ];

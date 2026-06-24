@@ -142,7 +142,7 @@ class ProductRepository {
       collection: 'products',
       documentId: productId,
       action:     SyncAction.update,
-      data:       {'stock': firestore.FieldValue.increment(delta), 'updated_at': m['updated_at']},
+      data:       {'stock': m['stock'], 'updated_at': m['updated_at']},
     );
   }
 
