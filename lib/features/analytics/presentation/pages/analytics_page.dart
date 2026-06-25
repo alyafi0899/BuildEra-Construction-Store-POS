@@ -229,7 +229,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                                 ),
                               )
                             else
-                              ...summary.topProducts.asMap().entries.map((entry) {
+                              ...summary.topProducts.take(10).toList().asMap().entries.map((entry) {
                                 final rank = entry.key + 1;
                                 final prod = entry.value;
                                 final maxRev = summary.topProducts.first.revenue;

@@ -116,30 +116,42 @@ class ReportHelper {
             ),
             pw.SizedBox(height: 30),
 
-            // Top Products
-            pw.Text('10 PRODUK TERLARIS', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+            // Product Breakdown Table
+            pw.Text('RINGKASAN PENJUALAN PRODUK', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
             pw.SizedBox(height: 10),
             pw.Table(
               border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
               columnWidths: {
-                0: const pw.FlexColumnWidth(4.5),
-                1: const pw.FlexColumnWidth(1.2),
-                2: const pw.FlexColumnWidth(2.5),
+                0: const pw.FlexColumnWidth(3),   // Nama Produk
+                1: const pw.FlexColumnWidth(0.7), // Qty
+                2: const pw.FlexColumnWidth(1),   // Satuan
+                3: const pw.FlexColumnWidth(1.5), // Modal
+                4: const pw.FlexColumnWidth(1.5), // Jual
+                5: const pw.FlexColumnWidth(1.8), // Pendapatan
+                6: const pw.FlexColumnWidth(1.8), // Laba Bersih
               },
               children: [
                 pw.TableRow(
                   decoration: const pw.BoxDecoration(color: PdfColors.grey100),
                   children: [
-                    _th('Nama Produk'),
-                    _th('Qty', align: pw.TextAlign.center),
-                    _th('Pendapatan', align: pw.TextAlign.right),
+                    _th('Nama Produk', fontSize: 8),
+                    _th('Qty', align: pw.TextAlign.center, fontSize: 8),
+                    _th('Satuan', align: pw.TextAlign.center, fontSize: 8),
+                    _th('Modal', align: pw.TextAlign.right, fontSize: 8),
+                    _th('Jual', align: pw.TextAlign.right, fontSize: 8),
+                    _th('Pendapatan', align: pw.TextAlign.right, fontSize: 8),
+                    _th('Profit', align: pw.TextAlign.right, fontSize: 8),
                   ],
                 ),
                 ...summary.topProducts.map((p) => pw.TableRow(
                   children: [
-                    _td(p.name),
-                    _td(Formatters.decimal(p.qty), align: pw.TextAlign.center),
-                    _td(Formatters.currency(p.revenue), align: pw.TextAlign.right),
+                    _td(p.name, fontSize: 8),
+                    _td(Formatters.decimal(p.qty), align: pw.TextAlign.center, fontSize: 8),
+                    _td(p.unit, align: pw.TextAlign.center, fontSize: 8),
+                    _td(Formatters.currency(p.costPrice), align: pw.TextAlign.right, fontSize: 8),
+                    _td(Formatters.currency(p.soldPrice), align: pw.TextAlign.right, fontSize: 8),
+                    _td(Formatters.currency(p.revenue), align: pw.TextAlign.right, fontSize: 8),
+                    _td(Formatters.currency(p.profit), align: pw.TextAlign.right, fontSize: 8),
                   ],
                 )),
               ],
@@ -191,17 +203,17 @@ class ReportHelper {
     );
   }
 
-  static pw.Widget _th(String text, {pw.TextAlign align = pw.TextAlign.left}) {
+  static pw.Widget _th(String text, {pw.TextAlign align = pw.TextAlign.left, double fontSize = 10}) {
     return pw.Padding(
       padding: const pw.EdgeInsets.all(6),
-      child: pw.Text(text, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9), textAlign: align),
+      child: pw.Text(text, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fontSize), textAlign: align),
     );
   }
 
-  static pw.Widget _td(String text, {pw.TextAlign align = pw.TextAlign.left}) {
+  static pw.Widget _td(String text, {pw.TextAlign align = pw.TextAlign.left, double fontSize = 10}) {
     return pw.Padding(
       padding: const pw.EdgeInsets.all(6),
-      child: pw.Text(text, style: const pw.TextStyle(fontSize: 9), textAlign: align),
+      child: pw.Text(text, style: pw.TextStyle(fontSize: fontSize), textAlign: align),
     );
   }
 }

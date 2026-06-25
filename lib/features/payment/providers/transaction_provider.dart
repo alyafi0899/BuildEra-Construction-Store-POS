@@ -139,10 +139,22 @@ class TransactionRepository {
 
 class TopProduct {
   final String name;
+  final String unit;
   final double revenue;
   final double profit;
   final double qty;
-  const TopProduct(this.name, this.revenue, this.profit, this.qty);
+  final double costPrice;
+  final double soldPrice;
+
+  const TopProduct({
+    required this.name,
+    required this.unit,
+    required this.revenue,
+    required this.profit,
+    required this.qty,
+    required this.costPrice,
+    required this.soldPrice,
+  });
 }
 
 class DailySummary {
@@ -201,9 +213,9 @@ SalesSummary buildSummary(List<Transaction> txs) {
   final byDayTxs     = <String, List<Transaction>>{};
   
   final byPay = <String, double>{};
-  final rev   = <String, double>{};
-  final prf   = <String, double>{};
-  final qty   = <String, double>{};
+  
+  // Use a map to aggregate product stats by name and unit
+  final productAggregators = <String, _ProductAggregator>{};
 
   for (final t in txs) {
     totalRevenue += t.total;
@@ -227,14 +239,26 @@ SalesSummary buildSummary(List<Transaction> txs) {
     byPay[t.paymentMethod] = (byPay[t.paymentMethod] ?? 0) + t.total;
     
     for (final i in t.items) {
-      rev[i.productName] = (rev[i.productName] ?? 0) + i.subtotal;
-      prf[i.productName] = (prf[i.productName] ?? 0) + (i.subtotal - (i.costPrice * i.quantity));
-      qty[i.productName] = (qty[i.productName] ?? 0) + i.quantity;
+      final key = '${i.productName}|${i.unitName}';
+      final agg = productAggregators.putIfAbsent(key, () => _ProductAggregator(i.productName, i.unitName));
+      agg.revenue += i.subtotal;
+      agg.profit += (i.subtotal - (i.costPrice * i.quantity));
+      agg.qty += i.quantity;
+      agg.costPrice = i.costPrice; // take the last one
+      agg.soldPrice = i.soldPrice; // take the last one
     }
   }
 
-  final top = rev.entries
-      .map((e) => TopProduct(e.key, e.value, prf[e.key] ?? 0, qty[e.key] ?? 0))
+  final top = productAggregators.values
+      .map((a) => TopProduct(
+            name:      a.name,
+            unit:      a.unit,
+            revenue:   a.revenue,
+            profit:    a.profit,
+            qty:       a.qty,
+            costPrice: a.costPrice,
+            soldPrice: a.soldPrice,
+          ))
       .toList()
     ..sort((a, b) => b.revenue.compareTo(a.revenue));
 
@@ -258,9 +282,20 @@ SalesSummary buildSummary(List<Transaction> txs) {
     revenueByDay:      byDayRevenue,
     netProfitByDay:    byDayNetProfit,
     revenueByPayment:  byPay,
-    topProducts:       top.take(10).toList(),
+    topProducts:       top.toList(), // Increased from take(10) to show all products in reports
     dailyDetails:      dailyDetails,
   );
+}
+
+class _ProductAggregator {
+  final String name;
+  final String unit;
+  double revenue = 0;
+  double profit = 0;
+  double qty = 0;
+  double costPrice = 0;
+  double soldPrice = 0;
+  _ProductAggregator(this.name, this.unit);
 }
 
 // ── Providers ──────────────────────────────────────────────────────────────
