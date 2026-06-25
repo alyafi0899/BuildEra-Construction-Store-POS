@@ -5,6 +5,9 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../../payment/providers/transaction_provider.dart';
+import '../../../../shared/models/transaction.dart';
+import '../../../settings/providers/settings_provider.dart';
+import '../../../../core/utils/report_helper.dart';
 
 class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({super.key});
@@ -22,11 +25,60 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     super.dispose();
   }
 
+  void _downloadReport(WidgetRef ref, List<Transaction> allTxs, String type) async {
+    final now = DateTime.now();
+    List<Transaction> filtered = [];
+    String periodName = '';
+
+    switch (type) {
+      case 'daily':
+        filtered = allTxs.where((t) => 
+          t.createdAt.year == now.year && 
+          t.createdAt.month == now.month && 
+          t.createdAt.day == now.day).toList();
+        periodName = 'Hari Ini (${Formatters.date(now)})';
+        break;
+      case 'weekly':
+        final weekStart = now.subtract(Duration(days: now.weekday - 1));
+        final start = DateTime(weekStart.year, weekStart.month, weekStart.day);
+        filtered = allTxs.where((t) => t.createdAt.isAfter(start) || t.createdAt.isAtSameMomentAs(start)).toList();
+        periodName = 'Minggu Ini';
+        break;
+      case 'monthly':
+        filtered = allTxs.where((t) => 
+          t.createdAt.year == now.year && 
+          t.createdAt.month == now.month).toList();
+        periodName = 'Bulan Ini (${Formatters.month(now.month)} ${now.year})';
+        break;
+      case 'yearly':
+        filtered = allTxs.where((t) => t.createdAt.year == now.year).toList();
+        periodName = 'Tahun Ini (${now.year})';
+        break;
+      case 'all':
+        filtered = allTxs;
+        periodName = 'Semua Data';
+        break;
+    }
+
+    if (filtered.isEmpty) {
+      if (mounted) showError(context, 'Tidak ada data transaksi untuk periode ini');
+      return;
+    }
+
+    final settings = ref.read(settingsProvider);
+    await ReportHelper.generateAndDownloadReport(
+      transactions: filtered, 
+      periodName: periodName, 
+      settings: settings
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer(
       builder: (context, ref, child) {
         final summaryAsync = ref.watch(salesSummaryProvider);
+        final transactionsAsync = ref.watch(transactionsProvider);
 
         return Scaffold(
           backgroundColor: AppTheme.bg,
@@ -38,6 +90,27 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               subtitle: 'Ringkasan performa toko secara keseluruhan',
               icon: Icons.bar_chart_rounded,
               actions: [
+                if (transactionsAsync.hasValue)
+                  PopupMenuButton<String>(
+                    onSelected: (val) => _downloadReport(ref, transactionsAsync.value!, val),
+                    child: OutlinedButton.icon(
+                      onPressed: null, // Let popup handle it
+                      icon: const Icon(Icons.download_rounded, size: 16),
+                      label: const Text('Download Laporan'),
+                      style: OutlinedButton.styleFrom(
+                        disabledForegroundColor: AppTheme.accent,
+                        side: const BorderSide(color: AppTheme.accent),
+                      ),
+                    ),
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(value: 'weekly', child: Text('Minggu Ini')),
+                      const PopupMenuItem(value: 'monthly', child: Text('Bulan Ini')),
+                      const PopupMenuItem(value: 'yearly', child: Text('Tahun Ini')),
+                      const PopupMenuDivider(),
+                      const PopupMenuItem(value: 'all', child: Text('Semua Data')),
+                    ],
+                  ),
+                const SizedBox(width: 8),
                 OutlinedButton.icon(
                   onPressed: () => ref.refresh(salesSummaryProvider),
                   icon: const Icon(Icons.refresh_rounded, size: 16),
@@ -299,99 +372,116 @@ class _DailyExpandableRowState extends State<_DailyExpandableRow> {
   @override
   Widget build(BuildContext context) {
     final s = widget.summary;
-    return Column(children: [
-      InkWell(
-        onTap: () => setState(() => _expanded = !_expanded),
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color:        _expanded ? AppTheme.accent.withValues(alpha: 0.05) : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border:       Border.all(color: _expanded ? AppTheme.accent.withValues(alpha: 0.2) : Colors.transparent),
-          ),
-          child: Row(children: [
-            Expanded(flex: 2, child: Text(s.date, style: const TextStyle(fontWeight: FontWeight.w600))),
-            Expanded(child: Text('${s.transactionCount}', textAlign: TextAlign.center)),
-            Expanded(flex: 2, child: Text(Formatters.currency(s.revenue), textAlign: TextAlign.right, style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold))),
-            Expanded(flex: 2, child: Text(Formatters.currency(s.netProfit), textAlign: TextAlign.right, style: const TextStyle(color: AppTheme.success, fontWeight: FontWeight.bold))),
-            const SizedBox(width: 8),
-            Icon(_expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, size: 20, color: AppTheme.textMuted),
-          ]),
-        ),
-      ),
-      if (_expanded)
-        Container(
-          margin: const EdgeInsets.only(top: 4, bottom: 12),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color:        AppTheme.surfaceAlt.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(12),
-            border:       Border.all(color: AppTheme.border),
-          ),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              const Icon(Icons.receipt_long_rounded, size: 14, color: AppTheme.accent),
+    return Consumer(builder: (context, ref, _) {
+      return Column(children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color:        _expanded ? AppTheme.accent.withValues(alpha: 0.05) : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+              border:       Border.all(color: _expanded ? AppTheme.accent.withValues(alpha: 0.2) : Colors.transparent),
+            ),
+            child: Row(children: [
+              Expanded(flex: 2, child: Text(s.date, style: const TextStyle(fontWeight: FontWeight.w600))),
+              Expanded(child: Text('${s.transactionCount}', textAlign: TextAlign.center)),
+              Expanded(flex: 2, child: Text(Formatters.currency(s.revenue), textAlign: TextAlign.right, style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold))),
+              Expanded(flex: 2, child: Text(Formatters.currency(s.netProfit), textAlign: TextAlign.right, style: const TextStyle(color: AppTheme.success, fontWeight: FontWeight.bold))),
+              const SizedBox(width: 12),
+              IconButton(
+                onPressed: () {
+                  final settings = ref.read(settingsProvider);
+                  ReportHelper.generateAndDownloadReport(
+                    transactions: s.transactions, 
+                    periodName: 'Hari Ini (${s.date})', 
+                    settings: settings
+                  );
+                },
+                icon: const Icon(Icons.download_rounded, size: 18, color: AppTheme.accent),
+                tooltip: 'Download Laporan Hari Ini',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
               const SizedBox(width: 8),
-              Text('RINCIAN TRANSAKSI & PRODUK', 
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.bold, 
-                  letterSpacing: 1.1,
-                  color: AppTheme.accent,
-                )),
+              Icon(_expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, size: 20, color: AppTheme.textMuted),
             ]),
-            const SizedBox(height: 16),
-            ...s.transactions.map((t) => Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surface,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(children: [
-                    Text(t.invoiceNumber, style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, fontSize: 13)),
-                    const SizedBox(width: 12),
-                    StatusChip(label: t.paymentMethod, color: AppTheme.textMuted),
-                    const Spacer(),
-                    Text('Total: ${Formatters.currency(t.total)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  ]),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(left: 10, top: 8, bottom: 20),
-                  child: Column(children: [
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6, right: 10),
-                      child: Row(children: [
-                        Expanded(flex: 3, child: _smallTh('Produk')),
-                        Expanded(child: _smallTh('Qty', TextAlign.center)),
-                        Expanded(flex: 2, child: _smallTh('Modal', TextAlign.right)),
-                        Expanded(flex: 2, child: _smallTh('Jual', TextAlign.right)),
-                        Expanded(flex: 2, child: _smallTh('Profit', TextAlign.right)),
-                      ]),
-                    ),
-                    const Divider(height: 1, color: AppTheme.border),
-                    ...t.items.map((item) {
-                      final itemProfit = item.subtotal - (item.costPrice * item.quantity);
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Row(children: [
-                          Expanded(flex: 3, child: Text(item.productName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
-                          Expanded(child: Text('${Formatters.decimal(item.quantity)} ${item.unitName}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 11))),
-                          Expanded(flex: 2, child: Text(Formatters.currency(item.costPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary))),
-                          Expanded(flex: 2, child: Text(Formatters.currency(item.soldPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11))),
-                          Expanded(flex: 2, child: Text(Formatters.currency(itemProfit), textAlign: TextAlign.right, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: itemProfit >= 0 ? AppTheme.success : AppTheme.danger))),
-                        ]),
-                      );
-                    }),
-                  ]),
-                ),
-              ],
-            )),
-          ]),
+          ),
         ),
-    ]);
+        if (_expanded)
+          Container(
+            margin: const EdgeInsets.only(top: 4, bottom: 12),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color:        AppTheme.surfaceAlt.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(12),
+              border:       Border.all(color: AppTheme.border),
+            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const Icon(Icons.receipt_long_rounded, size: 14, color: AppTheme.accent),
+                const SizedBox(width: 8),
+                Text('RINCIAN TRANSAKSI & PRODUK', 
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.bold, 
+                    letterSpacing: 1.1,
+                    color: AppTheme.accent,
+                  )),
+              ]),
+              const SizedBox(height: 16),
+              ...s.transactions.map((t) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surface,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(children: [
+                      Text(t.invoiceNumber, style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, fontSize: 13)),
+                      const SizedBox(width: 12),
+                      StatusChip(label: t.paymentMethod, color: AppTheme.textMuted),
+                      const Spacer(),
+                      Text('Total: ${Formatters.currency(t.total)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    ]),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 10, top: 8, bottom: 20),
+                    child: Column(children: [
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6, right: 10),
+                        child: Row(children: [
+                          Expanded(flex: 3, child: _smallTh('Produk')),
+                          Expanded(child: _smallTh('Qty', TextAlign.center)),
+                          Expanded(flex: 2, child: _smallTh('Modal', TextAlign.right)),
+                          Expanded(flex: 2, child: _smallTh('Jual', TextAlign.right)),
+                          Expanded(flex: 2, child: _smallTh('Profit', TextAlign.right)),
+                        ]),
+                      ),
+                      const Divider(height: 1, color: AppTheme.border),
+                      ...t.items.map((item) {
+                        final itemProfit = item.subtotal - (item.costPrice * item.quantity);
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(children: [
+                            Expanded(flex: 3, child: Text(item.productName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
+                            Expanded(child: Text('${Formatters.decimal(item.quantity)} ${item.unitName}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 11))),
+                            Expanded(flex: 2, child: Text(Formatters.currency(item.costPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary))),
+                            Expanded(flex: 2, child: Text(Formatters.currency(item.soldPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11))),
+                            Expanded(flex: 2, child: Text(Formatters.currency(itemProfit), textAlign: TextAlign.right, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: itemProfit >= 0 ? AppTheme.success : AppTheme.danger))),
+                          ]),
+                        );
+                      }),
+                    ]),
+                  ),
+                ],
+              )),
+            ]),
+          ),
+      ]);
+    });
   }
 
   Widget _smallTh(String label, [TextAlign align = TextAlign.left]) {
