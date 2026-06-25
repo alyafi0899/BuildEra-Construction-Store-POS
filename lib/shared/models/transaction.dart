@@ -62,6 +62,13 @@ class TransactionItem {
         'discount_type':   discountType.name,
         'subtotal':        subtotal,
       };
+
+  double get totalDiscount {
+    if (discountType == DiscountType.percentage) {
+      return (originalPrice * quantity) * (discountValue / 100);
+    }
+    return discountValue * quantity;
+  }
 }
 
 class Transaction {

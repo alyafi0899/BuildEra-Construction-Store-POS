@@ -441,9 +441,10 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
   Widget _sortDropdown() {
     return SizedBox(
       width: 160,
+      height: 40,
       child: DropdownButtonFormField<String>(
-        initialValue: _sortBy,
-        decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
+        value: _sortBy,
+        decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
         dropdownColor: AppTheme.surfaceAlt,
         items: const [
           DropdownMenuItem(value: 'name', child: Text('Nama (A-Z)')),
@@ -476,33 +477,43 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
             ),
           ]),
           const SizedBox(height: 12),
-          DropdownButtonFormField<String?>(
-            initialValue: _selectedProfileId,
-            isDense: true,
-            decoration: const InputDecoration(labelText: 'Pilih Profil', isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
-            dropdownColor: AppTheme.surfaceAlt,
-            items: [
-              const DropdownMenuItem(value: null, child: Text('Custom / Default')),
-              ...profiles.map((p) => DropdownMenuItem(
-                value: p.id,
-                child: Row(children: [
-                  Text(p.name),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: () => ref.read(printProfilesProvider.notifier).deleteProfile(p.id),
-                    icon: const Icon(Icons.delete_outline, size: 14, color: AppTheme.danger),
-                  )
-                ]),
-              )),
-            ],
-            onChanged: (v) {
-              if (v == null) {
-                setState(() => _selectedProfileId = null);
-              } else {
-                final p = profiles.firstWhere((e) => e.id == v);
-                _loadProfile(p);
-              }
-            },
+          SizedBox(
+            height: 50,
+            child: DropdownButtonFormField<String?>(
+              value: profiles.any((p) => p.id == _selectedProfileId) ? _selectedProfileId : null,
+              isDense: true,
+              decoration: const InputDecoration(
+                labelText: 'Pilih Profil',
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              ),
+              dropdownColor: AppTheme.surfaceAlt,
+              items: [
+                const DropdownMenuItem(value: null, child: Text('Custom / Default')),
+                ...profiles.map((p) => DropdownMenuItem(
+                  value: p.id,
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(p.name, overflow: TextOverflow.ellipsis)),
+                      IconButton(
+                        onPressed: () => ref.read(printProfilesProvider.notifier).deleteProfile(p.id),
+                        icon: const Icon(Icons.delete_outline, size: 14, color: AppTheme.danger),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                )),
+              ],
+              onChanged: (v) {
+                if (v == null) {
+                  setState(() => _selectedProfileId = null);
+                } else {
+                  final p = profiles.firstWhere((e) => e.id == v);
+                  _loadProfile(p);
+                }
+              },
+            ),
           ),
         ],
       ),

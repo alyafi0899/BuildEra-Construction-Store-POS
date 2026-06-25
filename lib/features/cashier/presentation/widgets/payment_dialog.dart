@@ -307,8 +307,8 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
           customersAsync.when(
             loading: () => const AppLoading(),
             error:   (_, __) => const Text('Gagal memuat data pelanggan'),
-            data: (customers) => DropdownButtonFormField<Customer>(
-              initialValue: customers.any((c) => c.id == _selectedCustomer?.id) ? _selectedCustomer : null,
+            data: (customers) => DropdownButtonFormField<String>(
+              value: customers.any((c) => c.id == _selectedCustomer?.id) ? _selectedCustomer?.id : null,
               decoration: const InputDecoration(
                 isDense: true,
                 contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -316,10 +316,12 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
               ),
               hint: const Text('Pilih dari daftar...', style: TextStyle(fontSize: 13)),
               items: customers.map((c) => DropdownMenuItem(
-                value: c,
+                value: c.id,
                 child: Text('${c.name} (${c.phone})', style: const TextStyle(fontSize: 13)),
               )).toList(),
-              onChanged: (v) => setState(() => _selectedCustomer = v),
+              onChanged: (v) => setState(() {
+                _selectedCustomer = customers.firstWhereOrNull((c) => c.id == v);
+              }),
             ),
           ),
           const SizedBox(height: 16),

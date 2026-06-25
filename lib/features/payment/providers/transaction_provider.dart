@@ -37,6 +37,16 @@ class TransactionRepository {
     return list;
   }
 
+  Future<Transaction?> getTransactionById(String id) async {
+    final box = await _getBox();
+    final data = box.get(id);
+    if (data == null) return null;
+    final m = Map<String, dynamic>.from(data as Map);
+    final itemsData = m['items'] as List? ?? [];
+    final items = itemsData.map((i) => TransactionItem.fromMap(Map<String, dynamic>.from(i as Map))).toList();
+    return Transaction.fromMap(m, items: items);
+  }
+
   Future<Transaction> saveTransaction({
     required CartState cart,
     required String    paymentMethod,
@@ -101,6 +111,18 @@ class TransactionRepository {
     );
 
     return t;
+  }
+
+  Future<void> deleteTransaction(String id) async {
+    final box = await _getBox();
+    await box.delete(id);
+
+    await _ref.read(syncProvider.notifier).addToQueue(
+      collection: 'transactions',
+      documentId: id,
+      action:     SyncAction.delete,
+      data:       {},
+    );
   }
 
   String _invoice() {
@@ -318,6 +340,10 @@ class TransactionsNotifier extends AsyncNotifier<List<Transaction>> {
     return tx.id;
   }
 }
+
+final transactionByIdProvider = FutureProvider.family<Transaction?, String>((ref, id) async {
+  return ref.watch(transactionRepositoryProvider).getTransactionById(id);
+});
 
 final salesSummaryProvider = FutureProvider<SalesSummary>((ref) async {
   final txs = await ref.watch(transactionsProvider.future);

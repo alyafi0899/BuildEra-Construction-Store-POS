@@ -8,6 +8,7 @@ import '../../models/debt.dart';
 import '../../models/debt_payment.dart';
 import '../../providers/debt_repository.dart';
 import '../../utils/debt_report_helper.dart';
+import '../../../payment/providers/transaction_provider.dart';
 
 class CustomerDebtDetailPage extends ConsumerWidget {
   final Customer customer;
@@ -148,18 +149,40 @@ class _DebtList extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       itemCount: debts.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, i) {
-        final d = debts[i];
-        final bool isPaid = d.status == DebtStatus.paid;
-        
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppTheme.surfaceAlt,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: isPaid ? AppTheme.success.withValues(alpha: 0.3) : AppTheme.border),
-          ),
-          child: Row(
+      itemBuilder: (context, i) => _DebtTile(debt: debts[i], onRecordPayment: onRecordPayment),
+    );
+  }
+}
+
+class _DebtTile extends ConsumerStatefulWidget {
+  final Debt debt;
+  final Function(Debt) onRecordPayment;
+  const _DebtTile({required this.debt, required this.onRecordPayment});
+
+  @override
+  ConsumerState<_DebtTile> createState() => _DebtTileState();
+}
+
+class _DebtTileState extends ConsumerState<_DebtTile> {
+  bool _expanded = true; // Always expanded for full detail visibility as requested
+
+  @override
+  Widget build(BuildContext context) {
+    final d = widget.debt;
+    final bool isPaid = d.status == DebtStatus.paid;
+    final transactionAsync = ref.watch(transactionByIdProvider(d.transactionId));
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceAlt,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isPaid ? AppTheme.success.withValues(alpha: 0.3) : AppTheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
               Expanded(
                 child: Column(
@@ -191,10 +214,27 @@ class _DebtList extends StatelessWidget {
                   Text(Formatters.currency(d.remainingBalance), style: const TextStyle(fontWeight: FontWeight.bold)),
                 ],
               ),
-              const SizedBox(width: 24),
+              const SizedBox(width: 16),
+              IconButton(
+                onPressed: () async {
+                  final ok = await showConfirmDialog(context, 
+                    title: 'Hapus Piutang', 
+                    content: 'Yakin ingin menghapus catatan piutang ini beserta riwayat pembayarannya?',
+                    confirmLabel: 'HAPUS',
+                    confirmColor: AppTheme.danger
+                  );
+                  if (ok) {
+                    await ref.read(debtRepositoryProvider).deleteDebt(d.id);
+                    if (context.mounted) showSuccess(context, 'Piutang berhasil dihapus');
+                  }
+                },
+                icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.danger),
+                tooltip: 'Hapus Piutang',
+              ),
+              const SizedBox(width: 8),
               if (!isPaid)
                 ElevatedButton(
-                  onPressed: () => onRecordPayment(d),
+                  onPressed: () => widget.onRecordPayment(d),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.accent,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -205,8 +245,57 @@ class _DebtList extends StatelessWidget {
                 const Icon(Icons.check_circle_rounded, color: AppTheme.success),
             ],
           ),
-        );
-      },
+          
+          if (_expanded) ...[
+            const Divider(height: 24),
+            transactionAsync.when(
+              data: (tx) {
+                if (tx == null) return const Text('Data transaksi tidak ditemukan');
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('RINCIAN PRODUK:', 
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textMuted, letterSpacing: 0.5)),
+                    const SizedBox(height: 12),
+                    ...tx.items.map((item) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Padding(padding: EdgeInsets.only(top: 6), child: Icon(Icons.circle, size: 4, color: AppTheme.accent)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(item.productName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                                Text('${Formatters.decimal(item.quantity)} ${item.unitName} × ${Formatters.currency(item.soldPrice)}', 
+                                  style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                              ],
+                            ),
+                          ),
+                          Text(Formatters.currency(item.subtotal), 
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    )),
+                    const Divider(height: 24, thickness: 0.5, color: AppTheme.border),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('TOTAL TRANSAKSI', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        Text(Formatters.currency(tx.total), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: AppTheme.accent)),
+                      ],
+                    ),
+                  ],
+                );
+              },
+              loading: () => const LinearProgressIndicator(minHeight: 2),
+              error: (e, _) => Text('Gagal memuat rincian: $e', style: const TextStyle(color: AppTheme.danger, fontSize: 12)),
+            ),
+          ],
+        ],
+      ),
     );
   }
 

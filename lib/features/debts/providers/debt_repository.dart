@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -181,6 +180,57 @@ class DebtRepository {
     await _ref.read(syncProvider.notifier).addToQueue(
       collection: 'debt_payments', documentId: payId, action: SyncAction.create,
       data: payment.toMap(),
+    );
+  }
+
+  Future<void> deleteDebt(String id) async {
+    final debtBox = await _getBox('debts');
+    final custBox = await _getBox('customers');
+    final payBox  = await _getBox('debt_payments');
+
+    final dData = debtBox.get(id);
+    if (dData == null) return;
+    final debt = Debt.fromMap(Map<String, dynamic>.from(dData as Map));
+
+    // 1. Update Customer Balance Local
+    final cData = custBox.get(debt.customerId);
+    if (cData != null) {
+      final m = Map<String, dynamic>.from(cData as Map);
+      m['total_outstanding'] = (m['total_outstanding'] as num? ?? 0) - debt.remainingBalance;
+      await custBox.put(debt.customerId, m);
+      
+      // Sync Customer Update
+      await _ref.read(syncProvider.notifier).addToQueue(
+        collection: 'customers',
+        documentId: debt.customerId,
+        action: SyncAction.update,
+        data: {'total_outstanding': m['total_outstanding']},
+      );
+    }
+
+    // 2. Delete all related payments locally and sync
+    final payments = payBox.values
+        .map((e) => DebtPayment.fromMap(Map<String, dynamic>.from(e as Map)))
+        .where((p) => p.debtId == id)
+        .toList();
+
+    for (final p in payments) {
+      await payBox.delete(p.id);
+      await _ref.read(syncProvider.notifier).addToQueue(
+        collection: 'debt_payments',
+        documentId: p.id,
+        action: SyncAction.delete,
+        data: {},
+      );
+    }
+
+    // 3. Delete Debt Local and Sync
+    await debtBox.delete(id);
+    await _ref.read(syncProvider.notifier).addToQueue(
+      collection: 'debts',
+      documentId: id,
+      action: SyncAction.delete,
+      data: {},
     );
   }
 }
