@@ -308,7 +308,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
             loading: () => const AppLoading(),
             error:   (_, __) => const Text('Gagal memuat data pelanggan'),
             data: (customers) => DropdownButtonFormField<String>(
-              value: customers.any((c) => c.id == _selectedCustomer?.id) ? _selectedCustomer?.id : null,
+              initialValue: customers.any((c) => c.id == _selectedCustomer?.id) ? _selectedCustomer?.id : null,
               decoration: const InputDecoration(
                 isDense: true,
                 contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),

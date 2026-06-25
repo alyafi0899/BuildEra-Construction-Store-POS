@@ -3,12 +3,15 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../core/sync/services/local_database.dart';
+import '../../../core/sync/models/sync_task.dart';
+import '../../../core/sync/providers/sync_provider.dart';
 
 class BarcodeHistoryRepository {
   final String _uid;
+  final Ref _ref;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  BarcodeHistoryRepository(this._uid);
+  BarcodeHistoryRepository(this._uid, this._ref);
 
   CollectionReference get _historyCol => 
       _db.collection('users').doc(_uid).collection('barcode_history');
@@ -55,6 +58,14 @@ class BarcodeHistoryRepository {
     // 1. Save Local
     final box = await _getBox();
     await box.put(normalized, data);
+
+    // 2. Queue Sync
+    await _ref.read(syncProvider.notifier).addToQueue(
+      collection: 'barcode_history',
+      documentId: normalized,
+      action:     SyncAction.update,
+      data:       data,
+    );
   }
 
   /// Archives a barcode when a product is deleted
@@ -69,11 +80,19 @@ class BarcodeHistoryRepository {
       m['status'] = 'archived';
       m['archivedAt'] = DateTime.now().toIso8601String();
       await box.put(normalized, m);
+
+      // Sync Update
+      await _ref.read(syncProvider.notifier).addToQueue(
+        collection: 'barcode_history',
+        documentId: normalized,
+        action:     SyncAction.update,
+        data:       m,
+      );
     }
   }
 }
 
 final barcodeHistoryRepositoryProvider = Provider<BarcodeHistoryRepository>((ref) {
   final user = ref.watch(authStateProvider).value;
-  return BarcodeHistoryRepository(user?.uid ?? 'unknown');
+  return BarcodeHistoryRepository(user?.uid ?? 'unknown', ref);
 });

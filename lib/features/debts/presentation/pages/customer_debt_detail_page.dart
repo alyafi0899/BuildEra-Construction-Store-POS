@@ -164,7 +164,7 @@ class _DebtTile extends ConsumerStatefulWidget {
 }
 
 class _DebtTileState extends ConsumerState<_DebtTile> {
-  bool _expanded = true; // Always expanded for full detail visibility as requested
+  final bool _expanded = true; // Always expanded for full detail visibility as requested
 
   @override
   Widget build(BuildContext context) {

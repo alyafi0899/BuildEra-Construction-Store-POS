@@ -167,7 +167,7 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
         fontSizePrice: _fontSizePrice,
       );
       await ref.read(printProfilesProvider.notifier).saveProfile(profile);
-      showSuccess(context, 'Profil berhasil disimpan');
+      if (mounted) showSuccess(context, 'Profil berhasil disimpan');
     }
   }
 
@@ -443,7 +443,7 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
       width: 160,
       height: 40,
       child: DropdownButtonFormField<String>(
-        value: _sortBy,
+        initialValue: _sortBy,
         decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
         dropdownColor: AppTheme.surfaceAlt,
         items: const [
@@ -480,7 +480,7 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
           SizedBox(
             height: 50,
             child: DropdownButtonFormField<String?>(
-              value: profiles.any((p) => p.id == _selectedProfileId) ? _selectedProfileId : null,
+              initialValue: profiles.any((p) => p.id == _selectedProfileId) ? _selectedProfileId : null,
               isDense: true,
               decoration: const InputDecoration(
                 labelText: 'Pilih Profil',

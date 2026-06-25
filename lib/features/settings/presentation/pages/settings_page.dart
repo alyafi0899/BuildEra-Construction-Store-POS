@@ -7,7 +7,6 @@ import '../../providers/app_settings_provider.dart';
 import '../../models/store_settings.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../../../../shared/widgets/common_widgets.dart';
-import '../../../../features/cashier/presentation/pages/customer_display_page.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});

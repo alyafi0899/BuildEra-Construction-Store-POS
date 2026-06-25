@@ -1,11 +1,23 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:excel/excel.dart' hide Border;
 import 'package:printing/printing.dart';
+import 'package:open_filex/open_filex.dart';
 import '../../../core/utils/formatters.dart';
 import '../models/customer.dart';
 import '../models/debt.dart';
 
 class DebtReportHelper {
+  static String? get _downloadsPath {
+    if (Platform.isWindows) {
+      final userProfile = Platform.environment['USERPROFILE'];
+      if (userProfile != null) {
+        return '$userProfile\\Downloads';
+      }
+    }
+    return null;
+  }
+
   static Future<void> exportOutstandingToExcel(List<Customer> customers) async {
     try {
       final excel = Excel.createExcel();
@@ -32,13 +44,19 @@ class DebtReportHelper {
       final bytes = excel.save();
       if (bytes == null) return;
 
-      final now = DateTime.now();
-      final fileName = 'Laporan_Piutang_${now.year}${now.month}${now.day}.xlsx';
-
-      await Printing.sharePdf(
-        bytes: Uint8List.fromList(bytes),
-        filename: fileName,
-      );
+      final fileName = 'Laporan_Piutang_Semua_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+      
+      final dlPath = _downloadsPath;
+      if (dlPath != null) {
+        final file = File('$dlPath\\$fileName');
+        await file.writeAsBytes(bytes);
+        await OpenFilex.open(file.path);
+      } else {
+        await Printing.sharePdf(
+          bytes: Uint8List.fromList(bytes),
+          filename: fileName,
+        );
+      }
     } catch (e) {
       rethrow;
     }
@@ -85,10 +103,17 @@ class DebtReportHelper {
 
       final fileName = 'Piutang_${customer.name.replaceAll(' ', '_')}.xlsx';
 
-      await Printing.sharePdf(
-        bytes: Uint8List.fromList(bytes),
-        filename: fileName,
-      );
+      final dlPath = _downloadsPath;
+      if (dlPath != null) {
+        final file = File('$dlPath\\$fileName');
+        await file.writeAsBytes(bytes);
+        await OpenFilex.open(file.path);
+      } else {
+        await Printing.sharePdf(
+          bytes: Uint8List.fromList(bytes),
+          filename: fileName,
+        );
+      }
     } catch (e) {
       rethrow;
     }

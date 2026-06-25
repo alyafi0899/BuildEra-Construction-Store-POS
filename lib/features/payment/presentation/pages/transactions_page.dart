@@ -181,7 +181,7 @@ class _TxCard extends ConsumerWidget {
 
 class _DebtStatusBadge extends ConsumerWidget {
   final Transaction tx;
-  const _DebtStatusBadge({super.key, required this.tx});
+  const _DebtStatusBadge({required this.tx});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
