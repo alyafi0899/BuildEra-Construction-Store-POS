@@ -11,6 +11,7 @@ import '../../../core/sync/providers/sync_provider.dart';
 import '../../../core/sync/services/local_database.dart';
 import '../../../shared/models/product.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../models/product_financials.dart';
 
 import '../providers/barcode_history_provider.dart';
 
@@ -302,6 +303,26 @@ class ProductRepository {
     } catch (e) {
       return null;
     }
+  }
+
+  Future<void> updatePayment(Product p, {required bool isSupplier, required double paidAmount, required PaymentStatus status}) async {
+    final box = await _getBox();
+    final updated = p.copyWith(
+      financials: p.financials.copyWith(
+        supplierPaidAmount: isSupplier ? (p.financials.supplierPaidAmount + paidAmount) : p.financials.supplierPaidAmount,
+        shippingPaidAmount: !isSupplier ? (p.financials.shippingPaidAmount + paidAmount) : p.financials.shippingPaidAmount,
+        supplierPaymentStatus: isSupplier ? status : p.financials.supplierPaymentStatus,
+        shippingPaymentStatus: !isSupplier ? status : p.financials.shippingPaymentStatus,
+      ),
+    );
+    await box.put(p.id, updated.toMap());
+
+    await _ref.read(syncProvider.notifier).addToQueue(
+      collection: 'products',
+      documentId: p.id,
+      action:     SyncAction.update,
+      data:       updated.toMap(),
+    );
   }
 }
 

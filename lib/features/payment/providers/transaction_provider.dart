@@ -4,6 +4,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../../../shared/models/transaction.dart';
 import '../../../shared/models/product.dart';
 import '../../products/models/product_financials.dart';
+import '../../inventory/models/restock_record.dart';
+import '../../inventory/providers/restock_provider.dart';
 import '../../cashier/providers/cart_provider.dart';
 import '../../products/providers/product_provider.dart';
 import '../../settings/providers/settings_provider.dart';
@@ -137,7 +139,14 @@ class TransactionRepository {
   }
 }
 
-// ── Analytics models & logic ... (remain unchanged) ───────────────────────
+// ── Models ─────────────────────────────────────────────────────────────
+
+class UnpaidBillDetail {
+  final String entityName;
+  final double remainingAmount;
+  final int count;
+  const UnpaidBillDetail({required this.entityName, required this.remainingAmount, required this.count});
+}
 
 class TopProduct {
   final String name;
@@ -198,6 +207,10 @@ class SalesSummary {
   final double maxInventoryProfit;
   final int unpaidSupplierProducts;
   final int unpaidShippingProducts;
+  
+  // Details for Reminders
+  final List<UnpaidBillDetail> unpaidSupplierDetails;
+  final List<UnpaidBillDetail> unpaidShippingDetails;
 
   const SalesSummary({
     required this.totalRevenue,
@@ -218,10 +231,14 @@ class SalesSummary {
     required this.maxInventoryProfit,
     required this.unpaidSupplierProducts,
     required this.unpaidShippingProducts,
+    required this.unpaidSupplierDetails,
+    required this.unpaidShippingDetails,
   });
 }
 
-SalesSummary buildSummary(List<Transaction> txs, List<Product> products) {
+// ── Build Logic ─────────────────────────────────────────────────────────────
+
+SalesSummary buildSummary(List<Transaction> txs, List<Product> products, List<RestockRecord> restocks) {
   double totalRevenue = 0;
   double totalGrossProfit = 0;
   double totalNetProfit  = 0;
@@ -244,7 +261,6 @@ SalesSummary buildSummary(List<Transaction> txs, List<Product> products) {
   
   final byPay = <String, double>{};
   
-  // Use a map to aggregate product stats by name and unit
   final productAggregators = <String, _ProductAggregator>{};
 
   for (final t in txs) {
@@ -284,43 +300,60 @@ SalesSummary buildSummary(List<Transaction> txs, List<Product> products) {
       agg.revenue += i.subtotal;
       agg.profit += (i.subtotal - (i.costPrice * i.quantity));
       agg.qty += i.quantity;
-      agg.costPrice = i.costPrice; // take the last one
-      agg.soldPrice = i.soldPrice; // take the last one
+      agg.costPrice = i.costPrice;
+      agg.soldPrice = i.soldPrice;
     }
   }
 
   // Inventory profit calculation
   double potentialProfit = 0;
   double maxPossibleProfit = 0;
-  int unpaidSupplier = 0;
-  int unpaidShipping = 0;
-
   for (final p in products) {
     final unitProfit = p.basePrice - p.costPrice;
-    if (p.stock > 0) {
-      potentialProfit += p.stock * unitProfit;
-    }
-    // We don't have "Total Stock Ever" in model, but we can assume current stock is what we have.
-    // Or maybe the user means (Stock + Sold)? 
-    // Request says: Maximum Monthly Profit (Total Stock * Net Profit). 
-    // Let's assume Max = (Current Stock + Monthly Sold) * Profit?
-    // Actually, usually it means potential profit if everything currently in stock is sold.
-    // The request separates "Potential" (Remaining) and "Maximum" (Total).
-    // I'll stick to: Potential = Remaining * Profit, Max = Total Initial * Profit.
-    // Since we don't store "Total Initial", I'll use a placeholder or assume it's same for now.
-    // Wait, I can calculate "Total Initial" = current stock + sum of quantities sold of this product.
-    
-    // For simplicity, let's just use current stock for both if data is limited, or use a large value.
-    // Actually, let's calculate total sold qty for each product.
-    final soldQty = productAggregators.values
-        .where((a) => a.name == p.name)
-        .fold<double>(0, (s, a) => s + a.qty);
-    
+    if (p.stock > 0) potentialProfit += p.stock * unitProfit;
+    final soldQty = productAggregators.values.where((a) => a.name == p.name).fold<double>(0, (s, a) => s + a.qty);
     maxPossibleProfit += (p.stock + soldQty) * unitProfit;
-
-    if (p.financials.supplierPaymentStatus == PaymentStatus.unpaid) unpaidSupplier++;
-    if (p.financials.shippingPaymentStatus == PaymentStatus.unpaid) unpaidShipping++;
   }
+
+  // Bills Calculation
+  final supplierMap = <String, ({double amount, int count})>{};
+  final shippingMap = <String, ({double amount, int count})>{};
+  
+  void addBill(String? name, double total, double paid, PaymentStatus status, bool isShip) {
+    if (status == PaymentStatus.unpaid || status == PaymentStatus.partial) {
+      final n = name ?? (isShip ? 'Ekspedisi Umum' : 'Supplier Umum');
+      final remaining = total - paid;
+      if (remaining <= 0) {
+        return;
+      }
+
+      if (isShip) {
+        final prev = shippingMap[n] ?? (amount: 0.0, count: 0);
+        shippingMap[n] = (amount: prev.amount + remaining, count: prev.count + 1);
+      } else {
+        final prev = supplierMap[n] ?? (amount: 0.0, count: 0);
+        supplierMap[n] = (amount: prev.amount + remaining, count: prev.count + 1);
+      }
+    }
+  }
+
+  // 1. Initial product bills (if they have no restocks)
+  final productIdsWithRestocks = restocks.map((r) => r.productId).toSet();
+  for (final p in products) {
+    if (!productIdsWithRestocks.contains(p.id)) {
+      addBill(p.financials.supplierName, p.financials.supplierPrice, p.financials.supplierPaidAmount, p.financials.supplierPaymentStatus, false);
+      addBill(p.financials.shippingServiceName, p.financials.supplierShippingCost, p.financials.shippingPaidAmount, p.financials.shippingPaymentStatus, true);
+    }
+  }
+  
+  // 2. Add all restock bills
+  for (final r in restocks) {
+    addBill(r.supplierName, r.supplierPrice, r.supplierPaidAmount, r.supplierPaymentStatus, false);
+    addBill(r.shippingServiceName, r.shippingCost, r.shippingPaidAmount, r.shippingPaymentStatus, true);
+  }
+
+  final unpaidSupList = supplierMap.entries.map((e) => UnpaidBillDetail(entityName: e.key, remainingAmount: e.value.amount, count: e.value.count)).toList();
+  final unpaidShipList = shippingMap.entries.map((e) => UnpaidBillDetail(entityName: e.key, remainingAmount: e.value.amount, count: e.value.count)).toList();
 
   final top = productAggregators.values
       .map((a) => TopProduct(
@@ -363,8 +396,10 @@ SalesSummary buildSummary(List<Transaction> txs, List<Product> products) {
     monthlyNetProfit:  monthlyNet,
     potentialInventoryProfit: potentialProfit,
     maxInventoryProfit: maxPossibleProfit,
-    unpaidSupplierProducts: unpaidSupplier,
-    unpaidShippingProducts: unpaidShipping,
+    unpaidSupplierProducts: supplierMap.values.fold(0, (s, v) => s + v.count),
+    unpaidShippingProducts: shippingMap.values.fold(0, (s, v) => s + v.count),
+    unpaidSupplierDetails: unpaidSupList,
+    unpaidShippingDetails: unpaidShipList,
   );
 }
 
@@ -464,5 +499,6 @@ final transactionByIdProvider = FutureProvider.family<Transaction?, String>((ref
 final salesSummaryProvider = FutureProvider<SalesSummary>((ref) async {
   final txs = await ref.watch(transactionsProvider.future);
   final products = await ref.watch(productsProvider.future);
-  return buildSummary(txs, products);
+  final restocks = await ref.watch(restockHistoryProvider.future);
+  return buildSummary(txs, products, restocks);
 });

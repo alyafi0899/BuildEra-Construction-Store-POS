@@ -1,6 +1,7 @@
 enum PaymentStatus {
   paid,
   unpaid,
+  partial, // New
   notApplicable,
 }
 
@@ -8,9 +9,11 @@ extension PaymentStatusX on PaymentStatus {
   String get label {
     switch (this) {
       case PaymentStatus.paid:
-        return 'Sudah Bayar';
+        return 'Lunas';
       case PaymentStatus.unpaid:
         return 'Belum Bayar';
+      case PaymentStatus.partial:
+        return 'Dibayar Sebagian';
       case PaymentStatus.notApplicable:
         return 'N/A';
     }
@@ -20,6 +23,8 @@ extension PaymentStatusX on PaymentStatus {
 class ProductFinancials {
   final double supplierPrice;
   final double supplierShippingCost;
+  final double supplierPaidAmount; // New
+  final double shippingPaidAmount; // New
   final bool isManualCost;
   final String? supplierName;
   final PaymentStatus supplierPaymentStatus;
@@ -29,6 +34,8 @@ class ProductFinancials {
   const ProductFinancials({
     this.supplierPrice = 0,
     this.supplierShippingCost = 0,
+    this.supplierPaidAmount = 0,
+    this.shippingPaidAmount = 0,
     this.isManualCost = false,
     this.supplierName,
     this.supplierPaymentStatus = PaymentStatus.notApplicable,
@@ -39,6 +46,8 @@ class ProductFinancials {
   factory ProductFinancials.fromMap(Map<String, dynamic> m) => ProductFinancials(
         supplierPrice: (m['supplier_price'] as num? ?? 0).toDouble(),
         supplierShippingCost: (m['supplier_shipping_cost'] as num? ?? 0).toDouble(),
+        supplierPaidAmount: (m['supplier_paid_amount'] as num? ?? 0).toDouble(),
+        shippingPaidAmount: (m['shipping_paid_amount'] as num? ?? 0).toDouble(),
         isManualCost: m['is_manual_cost'] as bool? ?? false,
         supplierName: m['supplier_name'] as String?,
         supplierPaymentStatus: PaymentStatus.values.byName(m['supplier_payment_status'] as String? ?? 'notApplicable'),
@@ -49,6 +58,8 @@ class ProductFinancials {
   Map<String, dynamic> toMap() => {
         'supplier_price': supplierPrice,
         'supplier_shipping_cost': supplierShippingCost,
+        'supplier_paid_amount': supplierPaidAmount,
+        'shipping_paid_amount': shippingPaidAmount,
         'is_manual_cost': isManualCost,
         'supplier_name': supplierName,
         'supplier_payment_status': supplierPaymentStatus.name,
@@ -59,6 +70,8 @@ class ProductFinancials {
   ProductFinancials copyWith({
     double? supplierPrice,
     double? supplierShippingCost,
+    double? supplierPaidAmount,
+    double? shippingPaidAmount,
     bool? isManualCost,
     String? supplierName,
     PaymentStatus? supplierPaymentStatus,
@@ -68,6 +81,8 @@ class ProductFinancials {
       ProductFinancials(
         supplierPrice: supplierPrice ?? this.supplierPrice,
         supplierShippingCost: supplierShippingCost ?? this.supplierShippingCost,
+        supplierPaidAmount: supplierPaidAmount ?? this.supplierPaidAmount,
+        shippingPaidAmount: shippingPaidAmount ?? this.shippingPaidAmount,
         isManualCost: isManualCost ?? this.isManualCost,
         supplierName: supplierName ?? this.supplierName,
         supplierPaymentStatus: supplierPaymentStatus ?? this.supplierPaymentStatus,

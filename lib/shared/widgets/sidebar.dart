@@ -8,19 +8,28 @@ class _NavItem {
   final IconData icon;
   final String   label;
   final int      index;
-  const _NavItem(this.icon, this.label, this.index);
+  final String?  category;
+  const _NavItem(this.icon, this.label, this.index, [this.category]);
 }
 
 const _navItems = [
-  _NavItem(Icons.point_of_sale_rounded,       'Kasir',       0),
-  _NavItem(Icons.inventory_2_rounded,         'Produk',      1),
-  _NavItem(Icons.warehouse_rounded,           'Inventori',   2),
-  _NavItem(Icons.receipt_long_rounded,        'Transaksi',   3),
-  _NavItem(Icons.account_balance_wallet_rounded, 'Piutang',   4),
-  _NavItem(Icons.people_rounded,               'Pelanggan',   5),
-  _NavItem(Icons.bar_chart_rounded,           'Analitik',    6),
-  _NavItem(Icons.qr_code_2_rounded,           'Label Barcode', 7),
-  _NavItem(Icons.settings_rounded,            'Pengaturan',  8),
+  // OPERASIONAL
+  _NavItem(Icons.point_of_sale_rounded,       'Kasir',       0, 'OPERASIONAL'),
+  _NavItem(Icons.receipt_long_rounded,        'Transaksi',   3, 'OPERASIONAL'),
+  _NavItem(Icons.account_balance_wallet_rounded, 'Piutang',   4, 'OPERASIONAL'),
+  _NavItem(Icons.people_rounded,               'Pelanggan',   5, 'OPERASIONAL'),
+
+  // INVENTORI
+  _NavItem(Icons.inventory_2_rounded,         'Produk',      1, 'INVENTORI'),
+  _NavItem(Icons.warehouse_rounded,           'Inventori',   2, 'INVENTORI'),
+  _NavItem(Icons.qr_code_2_rounded,           'Label Barcode', 7, 'INVENTORI'),
+
+  // FINANSIAL
+  _NavItem(Icons.bar_chart_rounded,           'Analitik',    6, 'FINANSIAL'),
+  _NavItem(Icons.receipt_rounded,              'Tagihan',     9, 'FINANSIAL'),
+
+  // SISTEM
+  _NavItem(Icons.settings_rounded,            'Pengaturan',  8, 'SISTEM'),
 ];
 
 class AppSidebar extends ConsumerWidget {
@@ -88,19 +97,7 @@ class AppSidebar extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(left: 10, bottom: 8, top: 4),
-                  child: Text('MENU',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            letterSpacing: 1.5,
-                            fontWeight: FontWeight.w700,
-                          )),
-                ),
-                ..._navItems.map((item) => _NavTile(
-                      item:     item,
-                      selected: selectedIndex == item.index,
-                      onTap:    () => onItemSelected(item.index),
-                    )),
+                ..._buildCategorizedNav(context),
                 const SizedBox(height: 32),
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 10),
@@ -137,6 +134,34 @@ class AppSidebar extends ConsumerWidget {
         ),
       ]),
     );
+  }
+
+  List<Widget> _buildCategorizedNav(BuildContext context) {
+    final Map<String, List<_NavItem>> categories = {};
+    for (final item in _navItems) {
+      final cat = item.category ?? 'LAINNYA';
+      categories.putIfAbsent(cat, () => []).add(item);
+    }
+
+    final List<Widget> widgets = [];
+    categories.forEach((cat, items) {
+      widgets.add(Padding(
+        padding: const EdgeInsets.only(left: 10, bottom: 8, top: 16),
+        child: Text(cat,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  letterSpacing: 1.5,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 10,
+                  color: AppTheme.textMuted,
+                )),
+      ));
+      widgets.addAll(items.map((item) => _NavTile(
+            item:     item,
+            selected: selectedIndex == item.index,
+            onTap:    () => onItemSelected(item.index),
+          )));
+    });
+    return widgets;
   }
 }
 

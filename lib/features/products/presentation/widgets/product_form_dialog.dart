@@ -1014,6 +1014,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
     switch (s) {
       case PaymentStatus.paid: return AppTheme.success;
       case PaymentStatus.unpaid: return AppTheme.warning;
+      case PaymentStatus.partial: return AppTheme.info;
       case PaymentStatus.notApplicable: return AppTheme.textMuted;
     }
   }

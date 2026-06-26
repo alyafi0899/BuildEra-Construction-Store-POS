@@ -12,7 +12,7 @@ class LocalDatabase {
   }
 
   static Future<void> clearUserCache(String uid) async {
-    final collections = ['products', 'transactions', 'customers', 'debts', 'debt_payments', 'settings', 'sync_queue'];
+    final collections = ['products', 'transactions', 'customers', 'debts', 'debt_payments', 'settings', 'sync_queue', 'suppliers', 'shipping_services', 'restock_history'];
     for (final col in collections) {
       if (await Hive.boxExists(_boxName(uid, col))) {
         final box = await Hive.openBox(_boxName(uid, col));

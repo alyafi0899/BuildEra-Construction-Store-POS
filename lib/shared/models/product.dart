@@ -43,6 +43,17 @@ class ProductUnit {
         conversionRate: conversionRate ?? this.conversionRate,
         sellPrice:      sellPrice ?? this.sellPrice,
       );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ProductUnit &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          unitName == other.unitName;
+
+  @override
+  int get hashCode => id.hashCode ^ unitName.hashCode;
 }
 
 class Product {

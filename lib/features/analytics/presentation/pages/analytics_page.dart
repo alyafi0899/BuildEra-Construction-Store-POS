@@ -8,6 +8,8 @@ import '../../../payment/providers/transaction_provider.dart';
 import '../../../../shared/models/transaction.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../../core/utils/report_helper.dart';
+import '../../../inventory/models/restock_record.dart';
+import '../../../inventory/providers/restock_provider.dart';
 import '../../../products/models/product_financials.dart';
 import '../../../products/providers/product_provider.dart';
 import '../../../../shared/models/product.dart';
@@ -28,7 +30,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     super.dispose();
   }
 
-  void _downloadReport(WidgetRef ref, List<Transaction> allTxs, List<Product> allProducts, String type) async {
+  void _downloadReport(WidgetRef ref, List<Transaction> allTxs, List<Product> allProducts, List<RestockRecord> allRestocks, String type) async {
     final now = DateTime.now();
     List<Transaction> filtered = [];
     String periodName = '';
@@ -72,6 +74,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     await ReportHelper.generateAndDownloadReport(
       transactions: filtered, 
       products: allProducts,
+      restocks: allRestocks,
       periodName: periodName, 
       settings: settings
     );
@@ -84,6 +87,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         final summaryAsync = ref.watch(salesSummaryProvider);
         final transactionsAsync = ref.watch(transactionsProvider);
         final productsAsync = ref.watch(productsProvider);
+        final restocksAsync = ref.watch(restockHistoryProvider);
 
         return Scaffold(
           backgroundColor: AppTheme.bg,
@@ -95,9 +99,15 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               subtitle: 'Ringkasan performa toko secara keseluruhan',
               icon: Icons.bar_chart_rounded,
               actions: [
-                if (transactionsAsync.hasValue && productsAsync.hasValue)
+                if (transactionsAsync.hasValue && productsAsync.hasValue && restocksAsync.hasValue)
                   PopupMenuButton<String>(
-                    onSelected: (val) => _downloadReport(ref, transactionsAsync.value!, productsAsync.value!, val),
+                    onSelected: (val) => _downloadReport(
+                      ref, 
+                      transactionsAsync.value!, 
+                      productsAsync.value!, 
+                      restocksAsync.value!,
+                      val
+                    ),
                     child: OutlinedButton.icon(
                       onPressed: null, // Let popup handle it
                       icon: const Icon(Icons.download_rounded, size: 16),
@@ -177,8 +187,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                         // ── Payment Reminders ─────────────────────────────────
                         if (summary.unpaidSupplierProducts > 0 || summary.unpaidShippingProducts > 0) ...[
                           _PaymentReminders(
-                            unpaidSupplier: summary.unpaidSupplierProducts,
-                            unpaidShipping: summary.unpaidShippingProducts,
+                            unpaidSupplier: summary.unpaidSupplierDetails,
+                            unpaidShipping: summary.unpaidShippingDetails,
                           ),
                           const SizedBox(height: 24),
                         ],
@@ -444,9 +454,11 @@ class _DailyExpandableRowState extends State<_DailyExpandableRow> {
                 onPressed: () {
                   final settings = ref.read(settingsProvider);
                   final products = ref.read(productsProvider).asData?.value ?? [];
+                  final restocks = ref.read(restockHistoryProvider).asData?.value ?? [];
                   ReportHelper.generateAndDownloadReport(
                     transactions: s.transactions, 
                     products: products,
+                    restocks: restocks,
                     periodName: 'Hari Ini (${s.date})', 
                     settings: settings
                   );
@@ -541,15 +553,13 @@ class _DailyExpandableRowState extends State<_DailyExpandableRow> {
   }
 }
 
-class _PaymentReminders extends ConsumerWidget {
-  final int unpaidSupplier;
-  final int unpaidShipping;
+class _PaymentReminders extends StatelessWidget {
+  final List<UnpaidBillDetail> unpaidSupplier;
+  final List<UnpaidBillDetail> unpaidShipping;
   const _PaymentReminders({required this.unpaidSupplier, required this.unpaidShipping});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final productsAsync = ref.watch(productsProvider);
-    
+  Widget build(BuildContext context) {
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -560,47 +570,25 @@ class _PaymentReminders extends ConsumerWidget {
             color: AppTheme.warning,
           ),
           const SizedBox(height: 16),
-          productsAsync.when(
-            data: (products) {
-              final suppliers = <String, ({double amount, int count})>{};
-              final shippers = <String, ({double amount, int count})>{};
-              
-              for (final p in products) {
-                if (p.financials.supplierPaymentStatus == PaymentStatus.unpaid) {
-                  final name = p.financials.supplierName ?? 'Supplier Umum';
-                  final prev = suppliers[name] ?? (amount: 0.0, count: 0);
-                  suppliers[name] = (amount: prev.amount + p.financials.supplierPrice, count: prev.count + 1);
-                }
-                if (p.financials.shippingPaymentStatus == PaymentStatus.unpaid) {
-                  final name = p.financials.shippingServiceName ?? 'Ekspedisi Umum';
-                  final prev = shippers[name] ?? (amount: 0.0, count: 0);
-                  shippers[name] = (amount: prev.amount + p.financials.supplierShippingCost, count: prev.count + 1);
-                }
-              }
-
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: _BillList(
-                      title: 'Supplier',
-                      icon: Icons.business_rounded,
-                      bills: suppliers,
-                    ),
-                  ),
-                  const SizedBox(width: 24),
-                  Expanded(
-                    child: _BillList(
-                      title: 'Ekspedisi',
-                      icon: Icons.local_shipping_rounded,
-                      bills: shippers,
-                    ),
-                  ),
-                ],
-              );
-            },
-            loading: () => const AppLoading(),
-            error: (_, __) => const Text('Gagal memuat data tagihan'),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _BillList(
+                  title: 'Supplier',
+                  icon: Icons.business_rounded,
+                  bills: unpaidSupplier,
+                ),
+              ),
+              const SizedBox(width: 24),
+              Expanded(
+                child: _BillList(
+                  title: 'Ekspedisi',
+                  icon: Icons.local_shipping_rounded,
+                  bills: unpaidShipping,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -611,7 +599,7 @@ class _PaymentReminders extends ConsumerWidget {
 class _BillList extends StatelessWidget {
   final String title;
   final IconData icon;
-  final Map<String, ({double amount, int count})> bills;
+  final List<UnpaidBillDetail> bills;
 
   const _BillList({required this.title, required this.icon, required this.bills});
 
@@ -641,7 +629,7 @@ class _BillList extends StatelessWidget {
           Text(title.toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: AppTheme.textSecondary, letterSpacing: 0.5)),
         ]),
         const SizedBox(height: 12),
-        ...bills.entries.map((e) => Padding(
+        ...bills.map((b) => Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Container(
             padding: const EdgeInsets.all(12),
@@ -652,10 +640,10 @@ class _BillList extends StatelessWidget {
             ),
             child: Row(children: [
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(e.key, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                Text('${e.value.count} Produk', style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                Text(b.entityName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                Text('${b.count} Batch Aktif', style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
               ])),
-              Text(Formatters.currency(e.value.amount), style: const TextStyle(color: AppTheme.warning, fontWeight: FontWeight.w900, fontSize: 13)),
+              Text(Formatters.currency(b.remainingAmount), style: const TextStyle(color: AppTheme.warning, fontWeight: FontWeight.w900, fontSize: 13)),
             ]),
           ),
         )),

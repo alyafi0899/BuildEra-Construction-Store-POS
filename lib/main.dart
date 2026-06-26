@@ -13,6 +13,7 @@ import 'features/analytics/presentation/pages/analytics_page.dart';
 import 'features/settings/presentation/pages/settings_page.dart';
 import 'features/debts/presentation/pages/piutang_dashboard.dart';
 import 'features/debts/presentation/pages/customer_list_page.dart';
+import 'features/inventory/presentation/pages/bills_page.dart';
 import 'features/settings/providers/app_settings_provider.dart';
 import 'features/cashier/presentation/pages/customer_display_page.dart';
 import 'features/cashier/providers/cart_provider.dart';
@@ -166,7 +167,8 @@ class _MainShellState extends ConsumerState<MainShell> {
     const AnalyticsPage(),
     const BarcodeManagementPage(),
     const SettingsPage(),
-    const CustomerDisplayPage(), // New accessible route
+    const BillsPage(),
+    const CustomerDisplayPage(), // Move to end or hidden index
   ];
 
   @override

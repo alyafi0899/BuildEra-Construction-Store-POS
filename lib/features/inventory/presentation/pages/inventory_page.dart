@@ -5,6 +5,10 @@ import '../../../../core/utils/formatters.dart';
 import '../../../../shared/models/product.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../../products/providers/product_provider.dart';
+import '../../../products/models/product_financials.dart';
+import '../../models/restock_record.dart';
+import '../../providers/restock_provider.dart';
+import '../widgets/restock_dialog.dart';
 
 class InventoryPage extends ConsumerStatefulWidget {
   const InventoryPage({super.key});
@@ -35,7 +39,7 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
       body: Column(
         children: [
           // Header
-          const PageHeader(
+           PageHeader(
           title: 'Inventori',
           subtitle: 'Monitor stok produk secara real-time',
           icon: Icons.warehouse_rounded,
@@ -112,7 +116,7 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
                 padding: const EdgeInsets.all(24),
                 child: Column(children: [
                   _tableHeader(context),
-                  ...filtered.asMap().entries.map((e) => _InventoryRow(product: e.value, isEven: e.key.isEven)),
+                  ...filtered.map((p) => _InventoryRow(key: ValueKey('inv_${p.id}'), product: p)),
                 ]),
               ),
             );
@@ -136,7 +140,7 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
         _th('Satuan Dasar', flex: 1),
         _th('Stok',       flex: 1, align: TextAlign.right),
         _th('Status',     flex: 1, align: TextAlign.center),
-        _th('Sesuaikan Stok', flex: 2, align: TextAlign.center),
+        _th('Aksi / Penyesuaian', flex: 3, align: TextAlign.center),
       ]),
     );
   }
@@ -153,8 +157,7 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
 
 class _InventoryRow extends ConsumerStatefulWidget {
   final Product product;
-  final bool isEven;
-  const _InventoryRow({required this.product, required this.isEven});
+  const _InventoryRow({super.key, required this.product});
 
   @override
   ConsumerState<_InventoryRow> createState() => _InventoryRowState();
@@ -162,6 +165,7 @@ class _InventoryRow extends ConsumerStatefulWidget {
 
 class _InventoryRowState extends ConsumerState<_InventoryRow> {
   final _adjCtrl = TextEditingController();
+  bool _expanded = false;
 
   Future<void> _adjust(double delta) async {
     await ref.read(productsActionProvider).adjustStock(widget.product.id, delta);
@@ -175,58 +179,220 @@ class _InventoryRowState extends ConsumerState<_InventoryRow> {
     final Color statusColor = p.stock <= 0 ? AppTheme.danger : p.isLowStock ? AppTheme.warning : AppTheme.success;
     final String statusLabel = p.stock <= 0 ? 'Habis' : p.isLowStock ? 'Rendah' : 'Normal';
 
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color:  _expanded ? AppTheme.accent.withValues(alpha: 0.05) : AppTheme.surface,
+            border: const Border(
+              left: BorderSide(color: AppTheme.border),
+              right: BorderSide(color: AppTheme.border),
+              bottom: BorderSide(color: AppTheme.border),
+            ),
+          ),
+          child: Row(children: [
+            Expanded(flex: 3, child: Row(
+              children: [
+                IconButton(
+                  onPressed: () => setState(() => _expanded = !_expanded),
+                  icon: Icon(_expanded ? Icons.keyboard_arrow_down_rounded : Icons.keyboard_arrow_right_rounded, 
+                    size: 20, color: AppTheme.textMuted),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: Text(p.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13))),
+              ],
+            )),
+            Expanded(flex: 2, child: Text(p.category, style: Theme.of(context).textTheme.bodyMedium)),
+            Expanded(flex: 1, child: Text(p.baseUnit, style: Theme.of(context).textTheme.bodyMedium)),
+            Expanded(flex: 1, child: Text(
+              Formatters.decimal(p.stock),
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color:      statusColor,
+                fontWeight: FontWeight.w700,
+                fontSize:   14,
+              ),
+            )),
+            Expanded(flex: 1, child: Center(child: StatusChip(label: statusLabel, color: statusColor))),
+            Expanded(flex: 3, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              ElevatedButton.icon(
+                onPressed: () => RestockDialog.show(context, p),
+                icon: const Icon(Icons.add_shopping_cart_rounded, size: 14),
+                label: const Text('Restock'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  textStyle: const TextStyle(fontSize: 12),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 70,
+                child: TextField(
+                  controller: _adjCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(signed: true, decimal: true),
+                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                  decoration: const InputDecoration(
+                    hintText: '±Qty',
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: () {
+                  final v = double.tryParse(_adjCtrl.text);
+                  if (v != null) _adjust(v);
+                },
+                icon: const Icon(Icons.check_circle_outline_rounded, color: AppTheme.accent, size: 20),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ])),
+          ]),
+        ),
+        if (_expanded) _buildHistorySection(p),
+      ],
+    );
+  }
+
+  Widget _buildHistorySection(Product p) {
+    final historyAsync = ref.watch(restockHistoryProvider);
+    
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color:  widget.isEven ? AppTheme.card : AppTheme.surface,
-        border: const Border(
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        color: AppTheme.surfaceAlt,
+        border: Border(
           left: BorderSide(color: AppTheme.border),
           right: BorderSide(color: AppTheme.border),
           bottom: BorderSide(color: AppTheme.border),
         ),
       ),
-      child: Row(children: [
-        Expanded(flex: 3, child: Text(p.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13))),
-        Expanded(flex: 2, child: Text(p.category, style: Theme.of(context).textTheme.bodyMedium)),
-        Expanded(flex: 1, child: Text(p.baseUnit, style: Theme.of(context).textTheme.bodyMedium)),
-        Expanded(flex: 1, child: Text(
-          Formatters.decimal(p.stock),
-          textAlign: TextAlign.right,
-          style: TextStyle(
-            color:      statusColor,
-            fontWeight: FontWeight.w700,
-            fontSize:   14,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(56, 16, 16, 12),
+            child: Text('RIWAYAT RESTOCK PRODUK INI', 
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppTheme.accent.withValues(alpha: 0.7), letterSpacing: 1.1)),
           ),
-        )),
-        Expanded(flex: 1, child: Center(child: StatusChip(label: statusLabel, color: statusColor))),
-        Expanded(flex: 2, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          SizedBox(
-            width: 80,
-            child: TextField(
-              controller: _adjCtrl,
-              keyboardType: const TextInputType.numberWithOptions(signed: true, decimal: true),
-              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
-              decoration: const InputDecoration(
-                hintText: '±Qty',
-                isDense: true,
-                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              ),
-            ),
+          historyAsync.when(
+            data: (list) {
+              final prodRecords = list.where((r) => r.productId == p.id).toList();
+              if (prodRecords.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.fromLTRB(56, 0, 16, 20),
+                  child: Text('Belum ada data restock tercatat.', style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+                );
+              }
+
+              return Column(
+                children: [
+                  ...prodRecords.map((r) => _RestockHistoryRow(record: r, product: p)),
+                  const SizedBox(height: 12),
+                ],
+              );
+            },
+            loading: () => const LinearProgressIndicator(),
+            error: (_, __) => const Text('Error'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RestockHistoryRow extends ConsumerWidget {
+  final RestockRecord record;
+  final Product product;
+  const _RestockHistoryRow({required this.record, required this.product});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(56, 4, 16, 4),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppTheme.border.withValues(alpha: 0.5)),
+        ),
+        child: Row(children: [
+          Expanded(
+            flex: 2,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(Formatters.dateTime(record.createdAt), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+              if (record.notes != null)
+                Text(record.notes!, style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: AppTheme.textMuted), overflow: TextOverflow.ellipsis),
+            ]),
+          ),
+          Expanded(
+            flex: 2,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('+${Formatters.decimal(record.quantityAdded)} ${record.unitName}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.success, fontSize: 13)),
+              Text('Modal: ${Formatters.currency(record.totalCostPerUnit)}', style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+              Text('Jual: ${Formatters.currency(record.sellingPrice)}', style: const TextStyle(fontSize: 10, color: AppTheme.accent, fontWeight: FontWeight.bold)),
+            ]),
+          ),
+          Expanded(
+            flex: 3,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (record.supplierName != null) _miniBadge(Icons.business_rounded, record.supplierName!, record.supplierPaymentStatus),
+              if (record.shippingServiceName != null) _miniBadge(Icons.local_shipping_rounded, record.shippingServiceName!, record.shippingPaymentStatus),
+            ]),
+          ),
+          // Calculations
+          Expanded(
+            flex: 2,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text('Net Beli: ${Formatters.currency(record.supplierPrice)}', style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+              Text('Ongkir: ${Formatters.currency(record.shippingCost)}', style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+            ]),
+          ),
+          const SizedBox(width: 16),
+          // Actions
+          IconButton(
+            onPressed: () => RestockDialog.show(context, product, record: record),
+            icon: const Icon(Icons.edit_rounded, size: 16, color: AppTheme.textSecondary),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
           ),
           const SizedBox(width: 8),
-          ElevatedButton(
-            onPressed: () {
-              final v = double.tryParse(_adjCtrl.text);
-              if (v != null) _adjust(v);
+          IconButton(
+            onPressed: () async {
+              final ok = await showConfirmDialog(context, 
+                title: 'Hapus Riwayat Restock', 
+                content: 'Yakin hapus data ini? Stok akan dikurangi otomatis sesuai jumlah batch ini.');
+              if (ok) {
+                await ref.read(restockNotifierProvider.notifier).deleteRestock(record);
+              }
             },
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              textStyle: const TextStyle(fontSize: 12),
-            ),
-            child: const Text('Update'),
+            icon: const Icon(Icons.delete_outline_rounded, size: 16, color: AppTheme.danger),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
           ),
-        ])),
-      ]),
+        ]),
+      ),
+    );
+  }
+
+  Widget _miniBadge(IconData icon, String label, PaymentStatus status) {
+    final color = status == PaymentStatus.paid ? AppTheme.success : AppTheme.warning;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: color),
+          const SizedBox(width: 4),
+          Flexible(child: Text(label, style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+        ],
+      ),
     );
   }
 }
