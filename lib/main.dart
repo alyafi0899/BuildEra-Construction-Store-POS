@@ -78,7 +78,7 @@ Future<void> main(List<String> args) async {
   if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
     await windowManager.ensureInitialized();
     WindowOptions windowOptions = const WindowOptions(
-      size: Size(1280, 800),
+      size: Size(1920, 1080),
       center: true,
       backgroundColor: Color(0xFF0F1117),
       skipTaskbar: false,

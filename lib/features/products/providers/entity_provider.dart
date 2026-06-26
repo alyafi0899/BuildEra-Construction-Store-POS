@@ -1,14 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:uuid/uuid.dart';
 import '../models/supplier.dart';
 import '../models/shipping_service.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../core/sync/models/sync_task.dart';
 import '../../../core/sync/providers/sync_provider.dart';
 import '../../../core/sync/services/local_database.dart';
-
-final _uuid = const Uuid();
 
 // ── Repository ─────────────────────────────────────────────────────────────
 
