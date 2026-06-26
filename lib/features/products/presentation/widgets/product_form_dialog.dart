@@ -1,18 +1,25 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/image_helper.dart';
+import '../../../../core/utils/formatters.dart';
 import '../../../../shared/models/product.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../providers/product_provider.dart';
+import '../../providers/entity_provider.dart';
+import '../../models/supplier.dart';
+import '../../models/shipping_service.dart';
 import '../../../auth/providers/auth_provider.dart';
 
 import '../../../../core/utils/barcode_helper.dart';
 import '../../providers/barcode_history_provider.dart';
+
+import '../../models/product_financials.dart';
 
 final _uuid = Uuid();
 
@@ -35,6 +42,7 @@ class ProductFormDialog extends ConsumerStatefulWidget {
 class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _name, _barcode, _description, _costPrice, _basePrice, _stock;
+  late final TextEditingController _supplierPrice, _supplierShippingCost, _supplierName, _shippingServiceName;
   late String _category, _baseUnit;
   String? _defaultUnitName;
   late List<_UnitEntry> _units;
@@ -43,16 +51,37 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   bool _saving = false;
   bool _generatingBarcode = false;
 
+  // Financial state
+  bool _isManualCost = false;
+  PaymentStatus _supplierPaymentStatus = PaymentStatus.notApplicable;
+  PaymentStatus _shippingPaymentStatus = PaymentStatus.notApplicable;
+  
+  String? _selectedSupplierId;
+  String? _selectedShippingId;
+
   @override
   void initState() {
     super.initState();
     final p = widget.product;
+    final f = p?.financials ?? const ProductFinancials();
+    
     _name      = TextEditingController(text: p?.name ?? '');
     _barcode   = TextEditingController(text: p?.barcode ?? '');
     _description = TextEditingController(text: p?.description ?? '');
     _costPrice = TextEditingController(text: p != null ? p.costPrice.toStringAsFixed(0) : '');
     _basePrice = TextEditingController(text: p != null ? p.basePrice.toStringAsFixed(0) : '');
     _stock     = TextEditingController(text: p != null ? p.stock.toStringAsFixed(0) : '0');
+    
+    _supplierPrice = TextEditingController(text: f.supplierPrice > 0 ? f.supplierPrice.toStringAsFixed(0) : '');
+    _supplierShippingCost = TextEditingController(text: f.supplierShippingCost > 0 ? f.supplierShippingCost.toStringAsFixed(0) : '');
+    _supplierName = TextEditingController(text: f.supplierName ?? '');
+    _shippingServiceName = TextEditingController(text: f.shippingServiceName ?? '');
+    
+    _isManualCost = f.isManualCost;
+    _supplierPaymentStatus = f.supplierPaymentStatus;
+    _shippingPaymentStatus = f.shippingPaymentStatus;
+
+    // We'll resolve supplier/shipping IDs after builders in build method or just keep them null if not found
     _category  = p?.category.isNotEmpty == true ? p!.category : AppConstants.categories.first;
     _baseUnit  = p?.baseUnit ?? 'pcs';
     _defaultUnitName = p?.defaultUnitName;
@@ -68,7 +97,42 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
     _costPrice.dispose();
     _basePrice.dispose();
     _stock.dispose();
+    _supplierPrice.dispose();
+    _supplierShippingCost.dispose();
+    _supplierName.dispose();
+    _shippingServiceName.dispose();
     super.dispose();
+  }
+
+  void _updateCalculatedCost() {
+    if (_isManualCost) return;
+    
+    final supplierPrice = double.tryParse(_supplierPrice.text) ?? 0;
+    final shippingCost = double.tryParse(_supplierShippingCost.text) ?? 0;
+    final qty = double.tryParse(_stock.text) ?? 0;
+    
+    if (qty > 0) {
+      final totalCost = (supplierPrice + shippingCost) / qty;
+      setState(() {
+        _costPrice.text = totalCost.toStringAsFixed(0);
+      });
+    }
+  }
+
+  void _suggestPrice() {
+    final cost = double.tryParse(_costPrice.text) ?? 0;
+    if (cost > 0) {
+      final suggested = cost * 1.1; // +10%
+      setState(() {
+        _basePrice.text = suggested.toStringAsFixed(0);
+      });
+    }
+  }
+
+  double get _netProfit {
+    final cost = double.tryParse(_costPrice.text) ?? 0;
+    final sell = double.tryParse(_basePrice.text) ?? 0;
+    return sell - cost;
   }
 
   Future<void> _pickImage() async {
@@ -119,6 +183,17 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
     final user = ref.read(authStateProvider).value;
     if (user == null) return;
 
+    final suppliers = ref.read(suppliersProvider).asData?.value ?? [];
+    final shippings = ref.read(shippingServicesProvider).asData?.value ?? [];
+    
+    final supplierName = _selectedSupplierId != null 
+        ? suppliers.firstWhereOrNull((s) => s.id == _selectedSupplierId)?.name 
+        : _supplierName.text.trim().isEmpty ? null : _supplierName.text.trim();
+        
+    final shippingName = _selectedShippingId != null 
+        ? shippings.firstWhereOrNull((s) => s.id == _selectedShippingId)?.name 
+        : _shippingServiceName.text.trim().isEmpty ? null : _shippingServiceName.text.trim();
+
     for (final u in _units) {
       if (u.unitName.trim().isNotEmpty) {
         validUnits.add(u.toUnit(productId));
@@ -148,6 +223,15 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
         defaultUnitName: _defaultUnitName,
         stock:     double.tryParse(_stock.text) ?? 0,
         imagePath: imagePath,
+        financials: ProductFinancials(
+          supplierPrice: double.tryParse(_supplierPrice.text) ?? 0,
+          supplierShippingCost: double.tryParse(_supplierShippingCost.text) ?? 0,
+          isManualCost: _isManualCost,
+          supplierName: supplierName,
+          supplierPaymentStatus: _supplierPaymentStatus,
+          shippingServiceName: shippingName,
+          shippingPaymentStatus: _shippingPaymentStatus,
+        ),
         createdAt: widget.product?.createdAt ?? DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -337,43 +421,338 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                         Expanded(
                           child: TextFormField(
                             controller:   _stock,
-                            decoration:   const InputDecoration(labelText: 'Stok Awal'),
+                            decoration:   const InputDecoration(labelText: 'Jumlah Barang *'),
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            onChanged: (_) => _updateCalculatedCost(),
+                            validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
                           ),
                         ),
                       ]),
+                      const SizedBox(height: 24),
+
+                      // ── Section: Biaya & Supplier ──────────────────
+                      _sectionLabel(context, 'Biaya & Supplier'),
                       const SizedBox(height: 16),
 
-                      // Row 3: cost price + base price
-                      Row(children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller:   _costPrice,
-                            decoration:   const InputDecoration(
-                              labelText:  'Harga Modal (Rp) *',
-                              prefixText: 'Rp ',
-                              helperText: 'Harga beli dari supplier',
-                            ),
-                            keyboardType: TextInputType.number,
-                            validator:    (v) =>
-                                (double.tryParse(v ?? '') == null) ? 'Masukkan angka valid' : null,
-                          ),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surfaceAlt.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppTheme.border),
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: TextFormField(
-                            controller:   _basePrice,
-                            decoration:   const InputDecoration(
-                              labelText:  'Harga Jual Dasar (Rp) *',
-                              prefixText: 'Rp ',
-                              helperText: 'Harga jual default untuk satuan dasar',
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('Metode Perhitungan Modal', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                      Text('Pilih Otomatis jika ingin menghitung modal dari total beli + ongkir', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.bg,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Text('Otomatis', style: TextStyle(fontSize: 11, fontWeight: !_isManualCost ? FontWeight.bold : FontWeight.normal, color: !_isManualCost ? AppTheme.accent : AppTheme.textMuted)),
+                                      Switch(
+                                        value: _isManualCost,
+                                        onChanged: (v) => setState(() => _isManualCost = v),
+                                        activeThumbColor: AppTheme.accent,
+                                      ),
+                                      Text('Manual', style: TextStyle(fontSize: 11, fontWeight: _isManualCost ? FontWeight.bold : FontWeight.normal, color: _isManualCost ? AppTheme.accent : AppTheme.textMuted)),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                            keyboardType: TextInputType.number,
-                            validator:    (v) =>
-                                (double.tryParse(v ?? '') == null) ? 'Masukkan angka valid' : null,
-                          ),
+                            const Divider(height: 32),
+                            
+                            if (!_isManualCost) ...[
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _supplierPrice,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Harga Total Supplier (Rp)',
+                                        prefixText: 'Rp ',
+                                        isDense: true,
+                                      ),
+                                      keyboardType: TextInputType.number,
+                                      onChanged: (_) => _updateCalculatedCost(),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _supplierShippingCost,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Total Ongkos Kirim (Rp)',
+                                        prefixText: 'Rp ',
+                                        isDense: true,
+                                      ),
+                                      keyboardType: TextInputType.number,
+                                      onChanged: (_) => _updateCalculatedCost(),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                            ],
+
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: _costPrice,
+                                    readOnly: !_isManualCost,
+                                    decoration: InputDecoration(
+                                      labelText: 'Total Modal per Unit (Rp) *',
+                                      prefixText: 'Rp ',
+                                      fillColor: !_isManualCost ? AppTheme.bg.withValues(alpha: 0.5) : null,
+                                      filled: !_isManualCost,
+                                      helperText: !_isManualCost ? 'Dihitung otomatis: (Beli+Ongkir)/Qty' : 'Input harga modal akhir per unit',
+                                    ),
+                                    keyboardType: TextInputType.number,
+                                    onChanged: (_) => setState(() {}), // Trigger profit update
+                                    validator: (v) => double.tryParse(v ?? '') == null ? 'Wajib diisi' : null,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      TextFormField(
+                                        controller: _basePrice,
+                                        decoration: InputDecoration(
+                                          labelText: 'Harga Jual per Unit (Rp) *',
+                                          prefixText: 'Rp ',
+                                          suffixIcon: IconButton(
+                                            icon: const Icon(Icons.lightbulb_outline_rounded, color: AppTheme.warning, size: 20),
+                                            tooltip: 'Saran Harga (+10%)',
+                                            onPressed: _suggestPrice,
+                                          ),
+                                        ),
+                                        keyboardType: TextInputType.number,
+                                        onChanged: (_) => setState(() {}),
+                                        validator: (v) {
+                                          final sell = double.tryParse(v ?? '') ?? 0;
+                                          final cost = double.tryParse(_costPrice.text) ?? 0;
+                                          if (sell <= 0) return 'Wajib diisi';
+                                          if (sell < cost) return 'Harga jual di bawah modal';
+                                          return null;
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _netProfit >= 0 ? AppTheme.success.withValues(alpha: 0.1) : AppTheme.danger.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: (_netProfit >= 0 ? AppTheme.success : AppTheme.danger).withValues(alpha: 0.3)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(_netProfit >= 0 ? Icons.trending_up_rounded : Icons.trending_down_rounded, 
+                                    color: _netProfit >= 0 ? AppTheme.success : AppTheme.danger, size: 20),
+                                  const SizedBox(width: 12),
+                                  const Text('Estimasi Profit Bersih:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                                  const Spacer(),
+                                  Text(Formatters.currency(_netProfit), 
+                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: _netProfit >= 0 ? AppTheme.success : AppTheme.danger)),
+                                  Text(' / unit', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                      ]),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // ── Section: Pengiriman & Supplier (Detail) ─────
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Text('Informasi Supplier', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                    const Spacer(),
+                                    IconButton(
+                                      onPressed: () => _showQuickAddSupplier(context),
+                                      icon: const Icon(Icons.add_business_rounded, size: 16, color: AppTheme.accent),
+                                      tooltip: 'Supplier Baru',
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                ref.watch(suppliersProvider).when(
+                                  data: (list) => SizedBox(
+                                    height: 48,
+                                    child: DropdownButtonFormField<String?>(
+                                      initialValue: list.any((s) => s.id == _selectedSupplierId) ? _selectedSupplierId : (widget.product?.financials.supplierName != null ? list.firstWhereOrNull((s) => s.name == widget.product?.financials.supplierName)?.id : null),
+                                      isExpanded: true,
+                                      decoration: const InputDecoration(labelText: 'Pilih Supplier', isDense: true),
+                                      dropdownColor: AppTheme.surfaceAlt,
+                                      items: [
+                                        const DropdownMenuItem(value: null, child: Text('Input Manual / Umum', style: TextStyle(fontSize: 12))),
+                                        ...list.map((s) => DropdownMenuItem(
+                                          value: s.id,
+                                          child: Row(
+                                            children: [
+                                              Expanded(child: Text(s.name, style: const TextStyle(fontSize: 12))),
+                                              IconButton(
+                                                icon: const Icon(Icons.edit_rounded, size: 14, color: AppTheme.textMuted),
+                                                onPressed: () => _showQuickAddSupplier(context, supplier: s),
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              IconButton(
+                                                icon: const Icon(Icons.delete_outline_rounded, size: 14, color: AppTheme.danger),
+                                                onPressed: () async {
+                                                  final ok = await showConfirmDialog(context, 
+                                                    title: 'Hapus Supplier', 
+                                                    content: 'Yakin hapus supplier "${s.name}"?');
+                                                  if (ok) {
+                                                    await ref.read(entityRepositoryProvider).deleteSupplier(s.id);
+                                                    setState(() => _selectedSupplierId = null);
+                                                  }
+                                                },
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(),
+                                              ),
+                                            ],
+                                          ),
+                                        )),
+                                      ],
+                                      onChanged: (v) => setState(() => _selectedSupplierId = v),
+                                    ),
+                                  ),
+                                  loading: () => const AppLoading(),
+                                  error: (_, __) => const Text('Gagal memuat'),
+                                ),
+                                if (_selectedSupplierId == null) ...[
+                                  const SizedBox(height: 8),
+                                  TextFormField(
+                                    controller: _supplierName,
+                                    decoration: const InputDecoration(labelText: 'Nama Supplier (Manual)', hintText: 'Opsional', isDense: true),
+                                  ),
+                                ],
+                                const SizedBox(height: 8),
+                                _paymentStatusDropdown(
+                                  label: 'Status Bayar Barang',
+                                  value: _supplierPaymentStatus,
+                                  onChanged: (v) => setState(() => _supplierPaymentStatus = v!),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 24),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Text('Informasi Ekspedisi / Kurir', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                    const Spacer(),
+                                    IconButton(
+                                      onPressed: () => _showQuickAddShipping(context),
+                                      icon: const Icon(Icons.local_shipping_rounded, size: 16, color: AppTheme.accent),
+                                      tooltip: 'Ekspedisi Baru',
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                ref.watch(shippingServicesProvider).when(
+                                  data: (list) => SizedBox(
+                                    height: 48,
+                                    child: DropdownButtonFormField<String?>(
+                                      initialValue: list.any((s) => s.id == _selectedShippingId) ? _selectedShippingId : (widget.product?.financials.shippingServiceName != null ? list.firstWhereOrNull((s) => s.name == widget.product?.financials.shippingServiceName)?.id : null),
+                                      isExpanded: true,
+                                      decoration: const InputDecoration(labelText: 'Pilih Ekspedisi', isDense: true),
+                                      dropdownColor: AppTheme.surfaceAlt,
+                                      items: [
+                                        const DropdownMenuItem(value: null, child: Text('Input Manual / Umum', style: TextStyle(fontSize: 12))),
+                                        ...list.map((s) => DropdownMenuItem(
+                                          value: s.id,
+                                          child: Row(
+                                            children: [
+                                              Expanded(child: Text(s.name, style: const TextStyle(fontSize: 12))),
+                                              IconButton(
+                                                icon: const Icon(Icons.edit_rounded, size: 14, color: AppTheme.textMuted),
+                                                onPressed: () => _showQuickAddShipping(context, shipping: s),
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              IconButton(
+                                                icon: const Icon(Icons.delete_outline_rounded, size: 14, color: AppTheme.danger),
+                                                onPressed: () async {
+                                                  final ok = await showConfirmDialog(context, 
+                                                    title: 'Hapus Ekspedisi', 
+                                                    content: 'Yakin hapus ekspedisi "${s.name}"?');
+                                                  if (ok) {
+                                                    await ref.read(entityRepositoryProvider).deleteShippingService(s.id);
+                                                    setState(() => _selectedShippingId = null);
+                                                  }
+                                                },
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(),
+                                              ),
+                                            ],
+                                          ),
+                                        )),
+                                      ],
+                                      onChanged: (v) => setState(() => _selectedShippingId = v),
+                                    ),
+                                  ),
+                                  loading: () => const AppLoading(),
+                                  error: (_, __) => const Text('Gagal memuat'),
+                                ),
+                                if (_selectedShippingId == null) ...[
+                                  const SizedBox(height: 8),
+                                  TextFormField(
+                                    controller: _shippingServiceName,
+                                    decoration: const InputDecoration(labelText: 'Nama Ekspedisi (Manual)', hintText: 'Opsional', isDense: true),
+                                  ),
+                                ],
+                                const SizedBox(height: 8),
+                                _paymentStatusDropdown(
+                                  label: 'Status Bayar Ongkir',
+                                  value: _shippingPaymentStatus,
+                                  onChanged: (v) => setState(() => _shippingPaymentStatus = v!),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 28),
 
                       Row(children: [
@@ -498,6 +877,145 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
         ),
       ),
     );
+  }
+
+  Widget _paymentStatusDropdown({
+    required String label,
+    required PaymentStatus value,
+    required ValueChanged<PaymentStatus?> onChanged,
+  }) {
+    return DropdownButtonFormField<PaymentStatus>(
+      initialValue: value,
+      isExpanded: true,
+      decoration: InputDecoration(labelText: label, isDense: true),
+      dropdownColor: AppTheme.surfaceAlt,
+      items: PaymentStatus.values.map((s) => DropdownMenuItem(
+        value: s,
+        child: Row(
+          children: [
+            Container(
+              width: 8, height: 8,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: _statusColor(s)),
+            ),
+            const SizedBox(width: 8),
+            Text(s.label, style: const TextStyle(fontSize: 12)),
+          ],
+        ),
+      )).toList(),
+      onChanged: onChanged,
+    );
+  }
+
+  void _showQuickAddSupplier(BuildContext context, {Supplier? supplier}) {
+    final nameCtrl = TextEditingController(text: supplier?.name);
+    final phoneCtrl = TextEditingController(text: supplier?.phone);
+    final addrCtrl = TextEditingController(text: supplier?.address);
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(supplier == null ? 'Tambah Supplier Baru' : 'Edit Supplier'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Nama Perusahaan/Sales *', isDense: true),
+                validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: phoneCtrl,
+                decoration: const InputDecoration(labelText: 'Nomor HP/WA', isDense: true),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: addrCtrl,
+                decoration: const InputDecoration(labelText: 'Alamat', isDense: true),
+                maxLines: 2,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () async {
+              if (formKey.currentState!.validate()) {
+                final s = (supplier ?? Supplier(id: _uuid.v4(), name: '', createdAt: DateTime.now())).copyWith(
+                  name: nameCtrl.text.trim(),
+                  phone: phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+                  address: addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
+                );
+                await ref.read(entityRepositoryProvider).saveSupplier(s);
+                setState(() => _selectedSupplierId = s.id);
+                if (context.mounted) Navigator.pop(context);
+              }
+            },
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showQuickAddShipping(BuildContext context, {ShippingService? shipping}) {
+    final nameCtrl = TextEditingController(text: shipping?.name);
+    final phoneCtrl = TextEditingController(text: shipping?.phone);
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(shipping == null ? 'Tambah Ekspedisi Baru' : 'Edit Ekspedisi'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Nama Ekspedisi/Supir *', isDense: true),
+                validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: phoneCtrl,
+                decoration: const InputDecoration(labelText: 'Nomor HP/WA', isDense: true),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () async {
+              if (formKey.currentState!.validate()) {
+                final s = (shipping ?? ShippingService(id: _uuid.v4(), name: '', createdAt: DateTime.now())).copyWith(
+                  name: nameCtrl.text.trim(),
+                  phone: phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+                );
+                await ref.read(entityRepositoryProvider).saveShippingService(s);
+                setState(() => _selectedShippingId = s.id);
+                if (context.mounted) Navigator.pop(context);
+              }
+            },
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _statusColor(PaymentStatus s) {
+    switch (s) {
+      case PaymentStatus.paid: return AppTheme.success;
+      case PaymentStatus.unpaid: return AppTheme.warning;
+      case PaymentStatus.notApplicable: return AppTheme.textMuted;
+    }
   }
 
   Widget _sectionLabel(BuildContext context, String text) {

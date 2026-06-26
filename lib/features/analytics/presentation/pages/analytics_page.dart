@@ -8,6 +8,9 @@ import '../../../payment/providers/transaction_provider.dart';
 import '../../../../shared/models/transaction.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../../core/utils/report_helper.dart';
+import '../../../products/models/product_financials.dart';
+import '../../../products/providers/product_provider.dart';
+import '../../../../shared/models/product.dart';
 
 class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({super.key});
@@ -25,7 +28,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     super.dispose();
   }
 
-  void _downloadReport(WidgetRef ref, List<Transaction> allTxs, String type) async {
+  void _downloadReport(WidgetRef ref, List<Transaction> allTxs, List<Product> allProducts, String type) async {
     final now = DateTime.now();
     List<Transaction> filtered = [];
     String periodName = '';
@@ -68,6 +71,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     final settings = ref.read(settingsProvider);
     await ReportHelper.generateAndDownloadReport(
       transactions: filtered, 
+      products: allProducts,
       periodName: periodName, 
       settings: settings
     );
@@ -79,6 +83,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       builder: (context, ref, child) {
         final summaryAsync = ref.watch(salesSummaryProvider);
         final transactionsAsync = ref.watch(transactionsProvider);
+        final productsAsync = ref.watch(productsProvider);
 
         return Scaffold(
           backgroundColor: AppTheme.bg,
@@ -90,9 +95,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               subtitle: 'Ringkasan performa toko secara keseluruhan',
               icon: Icons.bar_chart_rounded,
               actions: [
-                if (transactionsAsync.hasValue)
+                if (transactionsAsync.hasValue && productsAsync.hasValue)
                   PopupMenuButton<String>(
-                    onSelected: (val) => _downloadReport(ref, transactionsAsync.value!, val),
+                    onSelected: (val) => _downloadReport(ref, transactionsAsync.value!, productsAsync.value!, val),
                     child: OutlinedButton.icon(
                       onPressed: null, // Let popup handle it
                       icon: const Icon(Icons.download_rounded, size: 16),
@@ -133,37 +138,82 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // ── KPI Row ────────────────────────────────────────────
+                        // ── Profit & Performance Cards ───────────────────────
+                        Row(children: [
+                          Expanded(child: StatCard(
+                            label:   'Net Profit Hari Ini',
+                            value:   Formatters.currency(summary.todayNetProfit),
+                            icon:    Icons.today_rounded,
+                            accentColor: AppTheme.success,
+                            subtitle: 'Dari ${Formatters.currency(summary.todayRevenue)} omzet',
+                          )),
+                          const SizedBox(width: 16),
+                          Expanded(child: StatCard(
+                            label:   'Net Profit Bulan Ini',
+                            value:   Formatters.currency(summary.monthlyNetProfit),
+                            icon:    Icons.calendar_month_rounded,
+                            accentColor: AppTheme.success,
+                            subtitle: 'Dari ${Formatters.currency(summary.monthlyRevenue)} omzet',
+                          )),
+                          const SizedBox(width: 16),
+                          Expanded(child: StatCard(
+                            label:   'Potensi Profit Stok',
+                            value:   Formatters.currency(summary.potentialInventoryProfit),
+                            icon:    Icons.inventory_2_rounded,
+                            accentColor: AppTheme.info,
+                            subtitle: 'Jika stok sisa terjual',
+                          )),
+                          const SizedBox(width: 16),
+                          Expanded(child: StatCard(
+                            label:       'Maksimum Profit',
+                            value:       Formatters.currency(summary.maxInventoryProfit),
+                            icon:        Icons.auto_graph_rounded,
+                            accentColor: AppTheme.warning,
+                            subtitle:    'Total Estimasi Profit',
+                          )),
+                        ]),
+                        const SizedBox(height: 24),
+
+                        // ── Payment Reminders ─────────────────────────────────
+                        if (summary.unpaidSupplierProducts > 0 || summary.unpaidShippingProducts > 0) ...[
+                          _PaymentReminders(
+                            unpaidSupplier: summary.unpaidSupplierProducts,
+                            unpaidShipping: summary.unpaidShippingProducts,
+                          ),
+                          const SizedBox(height: 24),
+                        ],
+
+                        // ── KPI Row (Total) ───────────────────────────────────
                         Row(children: [
                           Expanded(child: StatCard(
                             label:   'Total Pendapatan',
                             value:   Formatters.currency(summary.totalRevenue),
                             icon:    Icons.attach_money_rounded,
-                            subtitle: 'Omzet Gross',
-                          )),
-                          const SizedBox(width: 16),
-                          Expanded(child: StatCard(
-                            label:   'Total Laba Kotor',
-                            value:   Formatters.currency(summary.totalGrossProfit),
-                            icon:    Icons.trending_up_rounded,
-                            accentColor: AppTheme.info,
-                            subtitle: 'Profit Potensial',
+                            subtitle: 'Seluruh Transaksi',
                           )),
                           const SizedBox(width: 16),
                           Expanded(child: StatCard(
                             label:   'Total Laba Bersih',
                             value:   Formatters.currency(summary.totalNetProfit),
-                            icon:    Icons.auto_graph_rounded,
+                            icon:    Icons.trending_up_rounded,
                             accentColor: AppTheme.success,
-                            subtitle: 'Profit Aktual',
+                            subtitle: 'Seluruh Transaksi',
                           )),
                           const SizedBox(width: 16),
                           Expanded(child: StatCard(
-                            label:       'Produk Terjual',
+                            label:   'Rata-rata Order',
+                            value:   Formatters.currency(summary.avgOrderValue),
+                            icon:    Icons.shopping_bag_rounded,
+                            accentColor: AppTheme.accentLight,
+                            subtitle: 'Per Transaksi',
+                          )),
+                          const SizedBox(width: 16),
+                          Expanded(child: StatCard(
+                            label:       'Produk Terdaftar',
                             value:       summary.topProducts.length.toString(),
                             icon:        Icons.inventory_2_rounded,
                             accentColor: AppTheme.warning,
-                            subtitle:    'SKU Aktif',
+                            subtitle:    'Total SKU',
                           )),
                         ]),
                         const SizedBox(height: 24),
@@ -393,8 +443,10 @@ class _DailyExpandableRowState extends State<_DailyExpandableRow> {
               IconButton(
                 onPressed: () {
                   final settings = ref.read(settingsProvider);
+                  final products = ref.read(productsProvider).asData?.value ?? [];
                   ReportHelper.generateAndDownloadReport(
                     transactions: s.transactions, 
+                    products: products,
                     periodName: 'Hari Ini (${s.date})', 
                     settings: settings
                   );
@@ -486,6 +538,129 @@ class _DailyExpandableRowState extends State<_DailyExpandableRow> {
 
   Widget _smallTh(String label, [TextAlign align = TextAlign.left]) {
     return Text(label, textAlign: align, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textMuted));
+  }
+}
+
+class _PaymentReminders extends ConsumerWidget {
+  final int unpaidSupplier;
+  final int unpaidShipping;
+  const _PaymentReminders({required this.unpaidSupplier, required this.unpaidShipping});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final productsAsync = ref.watch(productsProvider);
+    
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionHeader(
+            title: 'Tagihan Belum Dibayar',
+            icon: Icons.notification_important_rounded,
+            color: AppTheme.warning,
+          ),
+          const SizedBox(height: 16),
+          productsAsync.when(
+            data: (products) {
+              final suppliers = <String, ({double amount, int count})>{};
+              final shippers = <String, ({double amount, int count})>{};
+              
+              for (final p in products) {
+                if (p.financials.supplierPaymentStatus == PaymentStatus.unpaid) {
+                  final name = p.financials.supplierName ?? 'Supplier Umum';
+                  final prev = suppliers[name] ?? (amount: 0.0, count: 0);
+                  suppliers[name] = (amount: prev.amount + p.financials.supplierPrice, count: prev.count + 1);
+                }
+                if (p.financials.shippingPaymentStatus == PaymentStatus.unpaid) {
+                  final name = p.financials.shippingServiceName ?? 'Ekspedisi Umum';
+                  final prev = shippers[name] ?? (amount: 0.0, count: 0);
+                  shippers[name] = (amount: prev.amount + p.financials.supplierShippingCost, count: prev.count + 1);
+                }
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _BillList(
+                      title: 'Supplier',
+                      icon: Icons.business_rounded,
+                      bills: suppliers,
+                    ),
+                  ),
+                  const SizedBox(width: 24),
+                  Expanded(
+                    child: _BillList(
+                      title: 'Ekspedisi',
+                      icon: Icons.local_shipping_rounded,
+                      bills: shippers,
+                    ),
+                  ),
+                ],
+              );
+            },
+            loading: () => const AppLoading(),
+            error: (_, __) => const Text('Gagal memuat data tagihan'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BillList extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Map<String, ({double amount, int count})> bills;
+
+  const _BillList({required this.title, required this.icon, required this.bills});
+
+  @override
+  Widget build(BuildContext context) {
+    if (bills.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.success.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(children: [
+          const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 16),
+          const SizedBox(width: 8),
+          Text('Semua tagihan $title lunas', style: const TextStyle(color: AppTheme.success, fontSize: 12)),
+        ]),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Icon(icon, size: 14, color: AppTheme.textSecondary),
+          const SizedBox(width: 8),
+          Text(title.toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: AppTheme.textSecondary, letterSpacing: 0.5)),
+        ]),
+        const SizedBox(height: 12),
+        ...bills.entries.map((e) => Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceAlt,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.warning.withValues(alpha: 0.2)),
+            ),
+            child: Row(children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(e.key, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                Text('${e.value.count} Produk', style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+              ])),
+              Text(Formatters.currency(e.value.amount), style: const TextStyle(color: AppTheme.warning, fontWeight: FontWeight.w900, fontSize: 13)),
+            ]),
+          ),
+        )),
+      ],
+    );
   }
 }
 

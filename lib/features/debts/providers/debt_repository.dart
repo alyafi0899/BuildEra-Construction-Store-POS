@@ -28,7 +28,9 @@ class DebtRepository {
   }
 
   List<Customer> _customersFromBox(Box box) {
-    return box.values.map((d) => Customer.fromMap(Map<String, dynamic>.from(d as Map))).toList();
+    final list = box.values.map((d) => Customer.fromMap(Map<String, dynamic>.from(d as Map))).toList();
+    list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return list;
   }
 
   Future<void> saveCustomer(Customer c) async {

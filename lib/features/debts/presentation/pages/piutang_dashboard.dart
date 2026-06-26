@@ -4,7 +4,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../pages/customer_debt_detail_page.dart';
-import '../pages/customer_management_page.dart';
+import '../pages/customer_list_page.dart';
 import '../../providers/debt_repository.dart';
 import '../../utils/debt_report_helper.dart';
 import '../../models/customer.dart';
@@ -112,70 +112,82 @@ class PiutangDashboard extends ConsumerWidget {
   }
 
   Widget _buildCustomerDebtList(BuildContext context, AsyncValue<List<Customer>> customers) {
-    return customers.when(
-      loading: () => const AppLoading(),
-      error:   (e, _) => Text('Error: $e'),
-      data: (custList) {
-        final withDebt = custList.where((c) => c.totalOutstanding > 0).toList()
-          ..sort((a, b) => b.totalOutstanding.compareTo(a.totalOutstanding));
+    return Consumer(
+      builder: (context, ref, child) {
+        return customers.when(
+          loading: () => const AppLoading(),
+          error:   (e, _) => Text('Error: $e'),
+          data: (custList) {
+            final withDebt = custList.where((c) => c.totalOutstanding > 0).toList()
+              ..sort((a, b) => b.totalOutstanding.compareTo(a.totalOutstanding));
 
-        if (withDebt.isEmpty) {
-          return const EmptyState(
-            icon: Icons.check_circle_outline_rounded,
-            title: 'Tidak ada piutang aktif',
-            subtitle: 'Semua pelanggan telah melunasi kewajiban mereka',
-          );
-        }
+            if (withDebt.isEmpty) {
+              return const EmptyState(
+                icon: Icons.check_circle_outline_rounded,
+                title: 'Tidak ada piutang aktif',
+                subtitle: 'Semua pelanggan telah melunasi kewajiban mereka',
+              );
+            }
 
-        return ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: withDebt.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
-          itemBuilder: (context, i) {
-            final c = withDebt[i];
-            return InkWell(
-              onTap: () => _navigateToCustomerDetail(context, c),
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceAlt,
+            return ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: withDebt.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (context, i) {
+                final c = withDebt[i];
+                return InkWell(
+                  onTap: () => _navigateToCustomerDetail(context, c),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.border),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 40, height: 40,
-                      decoration: const BoxDecoration(color: AppTheme.bg, shape: BoxShape.circle),
-                      child: const Icon(Icons.person_rounded, size: 20, color: AppTheme.textSecondary),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceAlt,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.border),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(c.name, style: Theme.of(context).textTheme.titleMedium),
-                          Text(c.phone, style: Theme.of(context).textTheme.bodySmall),
-                        ],
-                      ),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                    child: Row(
                       children: [
-                        Text('Sisa Saldo', style: Theme.of(context).textTheme.bodySmall),
-                        Text(
-                          Formatters.currency(c.totalOutstanding),
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.warning, fontSize: 16),
+                        Container(
+                          width: 40, height: 40,
+                          decoration: const BoxDecoration(color: AppTheme.bg, shape: BoxShape.circle),
+                          child: const Icon(Icons.person_rounded, size: 20, color: AppTheme.textSecondary),
                         ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(c.name, style: Theme.of(context).textTheme.titleMedium),
+                              Text(c.phone, style: Theme.of(context).textTheme.bodySmall),
+                            ],
+                          ),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text('Sisa Saldo', style: Theme.of(context).textTheme.bodySmall),
+                            Text(
+                              Formatters.currency(c.totalOutstanding),
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.warning, fontSize: 16),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 16),
+                        IconButton(
+                          icon: const Icon(Icons.edit_rounded, size: 20, color: AppTheme.accent),
+                          onPressed: () {
+                            _showEditCustomerDialog(context, ref, c);
+                          },
+                          tooltip: 'Edit Data Pelanggan',
+                        ),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
                       ],
                     ),
-                    const SizedBox(width: 16),
-                    const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
             );
           },
         );
@@ -183,11 +195,67 @@ class PiutangDashboard extends ConsumerWidget {
     );
   }
 
+  void _showEditCustomerDialog(BuildContext context, WidgetRef ref, Customer customer) {
+    final nameCtrl = TextEditingController(text: customer.name);
+    final phoneCtrl = TextEditingController(text: customer.phone);
+    final addrCtrl = TextEditingController(text: customer.address);
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Data Pelanggan'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Nama Lengkap *', isDense: true),
+                validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: phoneCtrl,
+                decoration: const InputDecoration(labelText: 'Nomor HP', isDense: true),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: addrCtrl,
+                decoration: const InputDecoration(labelText: 'Alamat', isDense: true),
+                maxLines: 2,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () async {
+              if (formKey.currentState!.validate()) {
+                final updated = customer.copyWith(
+                  name: nameCtrl.text.trim(),
+                  phone: phoneCtrl.text.trim(),
+                  address: addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
+                );
+                await ref.read(debtRepositoryProvider).saveCustomer(updated);
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  showSuccess(context, 'Data pelanggan diperbarui');
+                }
+              }
+            },
+            child: const Text('Simpan Perubahan'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _navigateToCustomerManagement(BuildContext context) {
-    // This assumes MainShell uses IndexStack. 
-    // Usually we'd use Navigator, but the instructions implied pages inside MainShell.
-    // However, for deep management we can just push a full page.
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerManagementPage()));
+    // Navigate to the full customer management page
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerListPage()));
   }
 
   void _navigateToCustomerDetail(BuildContext context, Customer customer) {

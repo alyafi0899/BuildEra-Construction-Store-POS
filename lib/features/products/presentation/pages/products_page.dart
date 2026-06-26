@@ -15,6 +15,7 @@ import '../../providers/barcode_history_provider.dart';
 import '../../providers/product_provider.dart';
 import '../widgets/product_form_dialog.dart';
 import '../widgets/excel_import_dialog.dart';
+import '../../models/product_financials.dart';
 
 class ProductsPage extends ConsumerStatefulWidget {
   const ProductsPage({super.key});
@@ -27,9 +28,14 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
   final _searchCtrl = TextEditingController();
   String _search = '';
   String? _categoryFilter;
-  String _sortBy = 'name'; // 'name', 'category', 'cost', 'price', 'stock'
+  String _sortBy = 'name'; // 'name', 'category', 'cost', 'price', 'stock', 'profit'
   bool _sortAsc = true;
   final Set<String> _selectedIds = {};
+
+  // New Filters
+  String _stockFilter = 'all'; // 'all', 'in', 'low', 'out'
+  String _supplierFilter = 'all'; // 'all', 'paid', 'unpaid'
+  String _shippingFilter = 'all'; // 'all', 'paid', 'unpaid'
 
   bool _isGenerating = false;
 
@@ -235,72 +241,103 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
 
         // Filters & Sorting
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
           color:   AppTheme.surface,
-          child:   Row(children: [
-            SizedBox(
-              width: 260,
-              child: AppSearchField(
-                controller: _searchCtrl,
-                hintText:   'Cari produk atau barcode...',
-                onChanged:  (v) => setState(() => _search = v),
-                onClear:    () => setState(() { _search = ''; _searchCtrl.clear(); }),
-              ),
-            ),
-            const SizedBox(width: 16),
-            SizedBox(
-              width: 180,
-              child: DropdownButtonFormField<String?>(
-                initialValue:   _categoryFilter,
-                decoration:     const InputDecoration(labelText: 'Kategori', isDense: true),
-                dropdownColor:  AppTheme.surfaceAlt,
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('Semua Kategori')),
-                  ...AppConstants.categories.map((c) => DropdownMenuItem(value: c, child: Text(c))),
-                ],
-                onChanged: (v) => setState(() => _categoryFilter = v),
-              ),
-            ),
-            const SizedBox(width: 16),
-            SizedBox(
-              width: 180,
-              child: DropdownButtonFormField<String>(
-                initialValue:   _sortBy,
-                decoration:     const InputDecoration(labelText: 'Urutkan', isDense: true),
-                dropdownColor:  AppTheme.surfaceAlt,
-                items: const [
-                  DropdownMenuItem(value: 'name',     child: Text('Nama (A-Z)')),
-                  DropdownMenuItem(value: 'category', child: Text('Kategori')),
-                  DropdownMenuItem(value: 'stock',    child: Text('Stok')),
-                  DropdownMenuItem(value: 'cost',     child: Text('Harga Modal')),
-                  DropdownMenuItem(value: 'price',    child: Text('Harga Jual')),
-                  DropdownMenuItem(value: 'created',  child: Text('Tanggal Dibuat')),
-                  DropdownMenuItem(value: 'updated',  child: Text('Terakhir Diubah')),
-                ],
-                onChanged: (v) => setState(() => _sortBy = v!),
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton(
-              onPressed: () => setState(() => _sortAsc = !_sortAsc),
-              icon: Icon(_sortAsc ? Icons.south_rounded : Icons.north_rounded, color: AppTheme.accent),
-              tooltip: _sortAsc ? 'Ascending' : 'Descending',
-            ),
-            const SizedBox(width: 16),
-            if (_selectedIds.isNotEmpty)
-              ElevatedButton.icon(
-                onPressed: _bulkDelete,
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
-                icon: const Icon(Icons.delete_sweep_rounded, size: 18),
-                label: Text('Hapus (${_selectedIds.length})'),
-              ),
-            const Spacer(),
-            productsAsync.when(
-              data: (p) => Text('${p.length} produk', style: Theme.of(context).textTheme.bodySmall),
-              loading: () => const SizedBox(),
-              error: (_, __) => const SizedBox(),
-            ),
-          ]),
+          child:   Column(
+            children: [
+              Row(children: [
+                SizedBox(
+                  width: 260,
+                  child: AppSearchField(
+                    controller: _searchCtrl,
+                    hintText:   'Cari produk atau barcode...',
+                    onChanged:  (v) => setState(() => _search = v),
+                    onClear:    () => setState(() { _search = ''; _searchCtrl.clear(); }),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                SizedBox(
+                  width: 160,
+                  height: 48,
+                  child: DropdownButtonFormField<String?>(
+                    initialValue:   _categoryFilter,
+                    isExpanded:     true,
+                    decoration:     const InputDecoration(labelText: 'Kategori', isDense: true),
+                    dropdownColor:  AppTheme.surfaceAlt,
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('Semua Kategori')),
+                      ...AppConstants.categories.map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis))),
+                    ],
+                    onChanged: (v) => setState(() => _categoryFilter = v),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                SizedBox(
+                  width: 160,
+                  height: 48,
+                  child: DropdownButtonFormField<String>(
+                    initialValue:   _sortBy,
+                    isExpanded:     true,
+                    decoration:     const InputDecoration(labelText: 'Urutkan', isDense: true),
+                    dropdownColor:  AppTheme.surfaceAlt,
+                    items: const [
+                      DropdownMenuItem(value: 'name',     child: Text('Nama (A-Z)')),
+                      DropdownMenuItem(value: 'category', child: Text('Kategori')),
+                      DropdownMenuItem(value: 'stock',    child: Text('Stok')),
+                      DropdownMenuItem(value: 'cost',     child: Text('Harga Modal')),
+                      DropdownMenuItem(value: 'price',    child: Text('Harga Jual')),
+                      DropdownMenuItem(value: 'profit',   child: Text('Profit Satuan')),
+                      DropdownMenuItem(value: 'created',  child: Text('Tanggal Dibuat')),
+                      DropdownMenuItem(value: 'updated',  child: Text('Terakhir Diubah')),
+                    ],
+                    onChanged: (v) => setState(() => _sortBy = v!),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () => setState(() => _sortAsc = !_sortAsc),
+                  icon: Icon(_sortAsc ? Icons.south_rounded : Icons.north_rounded, color: AppTheme.accent),
+                  tooltip: _sortAsc ? 'Ascending' : 'Descending',
+                ),
+                const SizedBox(width: 16),
+                if (_selectedIds.isNotEmpty)
+                  ElevatedButton.icon(
+                    onPressed: _bulkDelete,
+                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
+                    icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+                    label: Text('Hapus (${_selectedIds.length})'),
+                  ),
+                const Spacer(),
+                productsAsync.when(
+                  data: (p) => Text('${p.length} produk', style: Theme.of(context).textTheme.bodySmall),
+                  loading: () => const SizedBox(),
+                  error: (_, __) => const SizedBox(),
+                ),
+              ]),
+              const SizedBox(height: 12),
+              Row(children: [
+                const Icon(Icons.filter_list_rounded, size: 18, color: AppTheme.textMuted),
+                const SizedBox(width: 12),
+                _FilterLabel('Stok:'),
+                _FilterTab(label: 'Semua', selected: _stockFilter == 'all', onTap: () => setState(() => _stockFilter = 'all')),
+                _FilterTab(label: 'Tersedia', selected: _stockFilter == 'in', onTap: () => setState(() => _stockFilter = 'in')),
+                _FilterTab(label: 'Rendah', selected: _stockFilter == 'low', onTap: () => setState(() => _stockFilter = 'low')),
+                _FilterTab(label: 'Habis', selected: _stockFilter == 'out', onTap: () => setState(() => _stockFilter = 'out')),
+                
+                const SizedBox(width: 24),
+                _FilterLabel('Bayar Supplier:'),
+                _FilterTab(label: 'Semua', selected: _supplierFilter == 'all', onTap: () => setState(() => _supplierFilter = 'all')),
+                _FilterTab(label: 'Lunas', selected: _supplierFilter == 'paid', onTap: () => setState(() => _supplierFilter = 'paid')),
+                _FilterTab(label: 'Belum', selected: _supplierFilter == 'unpaid', onTap: () => setState(() => _supplierFilter = 'unpaid')),
+
+                const SizedBox(width: 24),
+                _FilterLabel('Bayar Ongkir:'),
+                _FilterTab(label: 'Semua', selected: _shippingFilter == 'all', onTap: () => setState(() => _shippingFilter = 'all')),
+                _FilterTab(label: 'Lunas', selected: _shippingFilter == 'paid', onTap: () => setState(() => _shippingFilter = 'paid')),
+                _FilterTab(label: 'Belum', selected: _shippingFilter == 'unpaid', onTap: () => setState(() => _shippingFilter = 'unpaid')),
+              ]),
+            ],
+          ),
         ),
 
         // Table
@@ -314,7 +351,22 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                   p.name.toLowerCase().contains(_search.toLowerCase()) ||
                   (p.barcode?.contains(_search) ?? false);
               final matchCat = _categoryFilter == null || p.category == _categoryFilter;
-              return matchSearch && matchCat;
+              
+              // New Filters
+              bool matchStock = true;
+              if (_stockFilter == 'in') matchStock = p.stock > 10;
+              if (_stockFilter == 'low') matchStock = p.isLowStock && p.stock > 0;
+              if (_stockFilter == 'out') matchStock = p.stock <= 0;
+              
+              bool matchSupplier = true;
+              if (_supplierFilter == 'paid') matchSupplier = p.financials.supplierPaymentStatus == PaymentStatus.paid;
+              if (_supplierFilter == 'unpaid') matchSupplier = p.financials.supplierPaymentStatus == PaymentStatus.unpaid;
+
+              bool matchShipping = true;
+              if (_shippingFilter == 'paid') matchShipping = p.financials.shippingPaymentStatus == PaymentStatus.paid;
+              if (_shippingFilter == 'unpaid') matchShipping = p.financials.shippingPaymentStatus == PaymentStatus.unpaid;
+
+              return matchSearch && matchCat && matchStock && matchSupplier && matchShipping;
             }).toList();
 
             // Apply Sorting
@@ -325,6 +377,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                 case 'stock':    cmp = a.stock.compareTo(b.stock); break;
                 case 'cost':     cmp = a.costPrice.compareTo(b.costPrice); break;
                 case 'price':    cmp = a.basePrice.compareTo(b.basePrice); break;
+                case 'profit':   cmp = (a.basePrice - a.costPrice).compareTo(b.basePrice - b.costPrice); break;
                 case 'created':  cmp = a.createdAt.compareTo(b.createdAt); break;
                 case 'updated':  cmp = a.updatedAt.compareTo(b.updatedAt); break;
                 default:         cmp = a.name.toLowerCase().compareTo(b.name.toLowerCase());
@@ -412,12 +465,12 @@ class _ProductTableState extends State<_ProductTable> {
               ),
               _th('Produk',    flex: 4),
               _th('Kategori',  flex: 2),
-              _th('Barcode',   flex: 2),
+              _th('Supplier & Ongkir', flex: 2),
               _th('Stok',      flex: 1, align: TextAlign.right),
-              _th('Harga Modal', flex: 2, align: TextAlign.right),
-              _th('Harga Jual',  flex: 2, align: TextAlign.right),
-              _th('Satuan Jual', flex: 3),
-              _th('Aksi',      flex: 2, align: TextAlign.center),
+              _th('Modal', flex: 1, align: TextAlign.right),
+              _th('Harga Jual',  flex: 1, align: TextAlign.right),
+              _th('Profit', flex: 1, align: TextAlign.right),
+              _th('Aksi',      flex: 1, align: TextAlign.center),
             ]),
           ),
           // Rows
@@ -464,6 +517,9 @@ class _ProductRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final profit = product.basePrice - product.costPrice;
+    final f = product.financials;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -493,13 +549,34 @@ class _ProductRow extends ConsumerWidget {
             ProductImage(imagePath: product.imagePath, size: 36),
             const SizedBox(width: 12),
             Flexible(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(product.name, style: Theme.of(context).textTheme.titleMedium, overflow: TextOverflow.ellipsis),
-              Text(product.baseUnit, style: Theme.of(context).textTheme.bodySmall),
+              Text(product.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13), overflow: TextOverflow.ellipsis),
+              Row(
+                children: [
+                  Text(product.baseUnit, style: Theme.of(context).textTheme.bodySmall),
+                  if (product.barcode != null) ...[
+                    const SizedBox(width: 8),
+                    Text('• ${product.barcode}', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace', fontSize: 10)),
+                  ],
+                ],
+              ),
             ])),
           ]),
         )),
-        Expanded(flex: 2, child: Text(product.category, style: Theme.of(context).textTheme.bodyMedium)),
-        Expanded(flex: 2, child: Text(product.barcode ?? '—', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'))),
+        Expanded(flex: 2, child: Text(product.category, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12))),
+        
+        // Supplier & Shipping Info
+        Expanded(flex: 2, child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (f.supplierName != null)
+              _statusBadge(Icons.business_rounded, f.supplierName!, f.supplierPaymentStatus),
+            if (f.shippingServiceName != null)
+              _statusBadge(Icons.local_shipping_rounded, f.shippingServiceName!, f.shippingPaymentStatus),
+            if (f.supplierName == null && f.shippingServiceName == null)
+              const Text('—', style: TextStyle(color: AppTheme.textMuted)),
+          ],
+        )),
+
         Expanded(flex: 1, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
           if (product.isLowStock)
             const Padding(
@@ -512,49 +589,23 @@ class _ProductRow extends ConsumerWidget {
             style: TextStyle(
               color:      product.isLowStock ? AppTheme.warning : AppTheme.textPrimary,
               fontWeight: FontWeight.w600,
+              fontSize: 13,
             ),
           ),
         ])),
-        Expanded(flex: 2, child: Text(Formatters.currency(product.costPrice), textAlign: TextAlign.right, style: Theme.of(context).textTheme.bodySmall)),
-        Expanded(flex: 2, child: Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Text(Formatters.currency(product.basePrice), style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
-            if (product.defaultUnitName != null && product.defaultUnitName != product.baseUnit) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceAlt,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: AppTheme.border),
-                ),
-                child: Text(
-                  product.defaultUnitName!,
-                  style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-          ],
-        )),
-        Expanded(flex: 3, child: Wrap(
-          spacing: 4, runSpacing: 4,
-          children: product.units.map((u) => Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color:        AppTheme.surfaceAlt,
-              borderRadius: BorderRadius.circular(4),
-              border:       Border.all(color: AppTheme.border),
-            ),
-            child: Text(u.unitName, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
-          )).toList(),
-        )),
-        Expanded(flex: 2, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Expanded(flex: 1, child: Text(Formatters.currency(product.costPrice), textAlign: TextAlign.right, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11))),
+        Expanded(flex: 1, child: Text(Formatters.currency(product.basePrice), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+        Expanded(flex: 1, child: Text(Formatters.currency(profit), textAlign: TextAlign.right, style: TextStyle(color: profit >= 0 ? AppTheme.success : AppTheme.danger, fontWeight: FontWeight.bold, fontSize: 12))),
+        
+        Expanded(flex: 1, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           IconButton(
             onPressed: () => ProductFormDialog.show(context, product: product),
             icon: const Icon(Icons.edit_rounded, size: 16, color: AppTheme.textSecondary),
             tooltip: 'Edit',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
           ),
+          const SizedBox(width: 4),
           IconButton(
             onPressed: () async {
               final ok = await showConfirmDialog(context,
@@ -571,9 +622,70 @@ class _ProductRow extends ConsumerWidget {
             },
             icon: const Icon(Icons.delete_rounded, size: 16, color: AppTheme.danger),
             tooltip: 'Hapus',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
           ),
         ])),
       ]),
+    );
+  }
+
+  Widget _statusBadge(IconData icon, String label, PaymentStatus status) {
+    if (status == PaymentStatus.notApplicable) return const SizedBox();
+    
+    final color = status == PaymentStatus.paid ? AppTheme.success : AppTheme.warning;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: color),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(label, 
+              style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.bold),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterLabel extends StatelessWidget {
+  final String label;
+  const _FilterLabel(this.label);
+  @override
+  Widget build(BuildContext context) {
+    return Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textMuted));
+  }
+}
+
+class _FilterTab extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  const _FilterTab({required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: selected ? AppTheme.accent.withValues(alpha: 0.1) : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: selected ? AppTheme.accent : AppTheme.border),
+          ),
+          child: Text(label, style: TextStyle(fontSize: 10, fontWeight: selected ? FontWeight.bold : FontWeight.normal, color: selected ? AppTheme.accent : AppTheme.textSecondary)),
+        ),
+      ),
     );
   }
 }

@@ -165,17 +165,18 @@ class SectionHeader extends StatelessWidget {
   final String   title;
   final Widget?  trailing;
   final IconData? icon;
+  final Color?   color;
 
-  const SectionHeader({super.key, required this.title, this.trailing, this.icon});
+  const SectionHeader({super.key, required this.title, this.trailing, this.icon, this.color});
 
   @override
   Widget build(BuildContext context) {
     return Row(children: [
       if (icon != null) ...[
-        Icon(icon, color: AppTheme.accent, size: 18),
+        Icon(icon, color: color ?? AppTheme.accent, size: 18),
         const SizedBox(width: 8),
       ],
-      Text(title, style: Theme.of(context).textTheme.titleLarge),
+      Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: color)),
       const Spacer(),
       if (trailing != null) trailing!,
     ]);

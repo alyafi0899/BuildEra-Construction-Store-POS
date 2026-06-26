@@ -6,15 +6,16 @@ import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../models/customer.dart';
 import '../../providers/debt_repository.dart';
+import '../pages/customer_debt_detail_page.dart';
 
-class CustomerManagementPage extends ConsumerStatefulWidget {
-  const CustomerManagementPage({super.key});
+class CustomerListPage extends ConsumerStatefulWidget {
+  const CustomerListPage({super.key});
 
   @override
-  ConsumerState<CustomerManagementPage> createState() => _CustomerManagementPageState();
+  ConsumerState<CustomerListPage> createState() => _CustomerListPageState();
 }
 
-class _CustomerManagementPageState extends ConsumerState<CustomerManagementPage> {
+class _CustomerListPageState extends ConsumerState<CustomerListPage> {
   final _searchCtrl = TextEditingController();
   String _search = '';
 
@@ -170,52 +171,61 @@ class _CustomerRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.border),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 48, height: 48,
-            decoration: BoxDecoration(
-              color: AppTheme.accent.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
+      child: InkWell(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => CustomerDebtDetailPage(customer: customer)),
+        ),
+        borderRadius: BorderRadius.circular(12),
+        child: Row(
+          children: [
+            Container(
+              width: 48, height: 48,
+              decoration: BoxDecoration(
+                color: AppTheme.accent.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.person_rounded, color: AppTheme.accent),
             ),
-            child: const Icon(Icons.person_rounded, color: AppTheme.accent),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(customer.name, style: Theme.of(context).textTheme.titleLarge),
+                  Text(customer.phone, style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(customer.name, style: Theme.of(context).textTheme.titleLarge),
-                Text(customer.phone, style: Theme.of(context).textTheme.bodySmall),
+                Text('Total Piutang', style: Theme.of(context).textTheme.bodySmall),
+                Text(
+                  Formatters.currency(customer.totalOutstanding),
+                  style: TextStyle(
+                    color: customer.totalOutstanding > 0 ? AppTheme.warning : AppTheme.success,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
               ],
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text('Total Piutang', style: Theme.of(context).textTheme.bodySmall),
-              Text(
-                Formatters.currency(customer.totalOutstanding),
-                style: TextStyle(
-                  color: customer.totalOutstanding > 0 ? AppTheme.warning : AppTheme.success,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(width: 24),
-          IconButton(
-            onPressed: onEdit,
-            icon: const Icon(Icons.edit_rounded, size: 20, color: AppTheme.textSecondary),
-            tooltip: 'Edit',
-          ),
-          IconButton(
-            onPressed: onDelete,
-            icon: const Icon(Icons.delete_rounded, size: 20, color: AppTheme.danger),
-            tooltip: 'Hapus',
-          ),
-        ],
+            const SizedBox(width: 24),
+            IconButton(
+              onPressed: onEdit,
+              icon: const Icon(Icons.edit_rounded, size: 20, color: AppTheme.textSecondary),
+              tooltip: 'Edit',
+            ),
+            IconButton(
+              onPressed: onDelete,
+              icon: const Icon(Icons.delete_rounded, size: 20, color: AppTheme.danger),
+              tooltip: 'Hapus',
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
+          ],
+        ),
       ),
     );
   }
@@ -257,7 +267,7 @@ class _CustomerFormDialogState extends ConsumerState<_CustomerFormDialog> {
   Future<void> _save() async {
     if (_formKey.currentState!.validate()) {
       final customer = (widget.customer ?? Customer(
-        id: Uuid().v4(),
+        id: const Uuid().v4(),
         name: '',
         phone: '',
         createdAt: DateTime.now(),

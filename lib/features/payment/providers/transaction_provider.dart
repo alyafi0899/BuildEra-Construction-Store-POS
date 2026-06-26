@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../../shared/models/transaction.dart';
+import '../../../shared/models/product.dart';
+import '../../products/models/product_financials.dart';
 import '../../cashier/providers/cart_provider.dart';
 import '../../products/providers/product_provider.dart';
 import '../../settings/providers/settings_provider.dart';
@@ -187,6 +189,16 @@ class SalesSummary {
   final List<TopProduct>    topProducts;
   final List<DailySummary>  dailyDetails;
 
+  // Real-time Dashboard metrics
+  final double todayRevenue;
+  final double todayNetProfit;
+  final double monthlyRevenue;
+  final double monthlyNetProfit;
+  final double potentialInventoryProfit;
+  final double maxInventoryProfit;
+  final int unpaidSupplierProducts;
+  final int unpaidShippingProducts;
+
   const SalesSummary({
     required this.totalRevenue,
     required this.totalGrossProfit,
@@ -198,14 +210,32 @@ class SalesSummary {
     required this.revenueByPayment,
     required this.topProducts,
     required this.dailyDetails,
+    required this.todayRevenue,
+    required this.todayNetProfit,
+    required this.monthlyRevenue,
+    required this.monthlyNetProfit,
+    required this.potentialInventoryProfit,
+    required this.maxInventoryProfit,
+    required this.unpaidSupplierProducts,
+    required this.unpaidShippingProducts,
   });
 }
 
-SalesSummary buildSummary(List<Transaction> txs) {
+SalesSummary buildSummary(List<Transaction> txs, List<Product> products) {
   double totalRevenue = 0;
   double totalGrossProfit = 0;
   double totalNetProfit  = 0;
   final count = txs.length;
+
+  final now = DateTime.now();
+  final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  final thisMonth = now.month;
+  final thisYear = now.year;
+
+  double todayRev = 0;
+  double todayNet = 0;
+  double monthlyRev = 0;
+  double monthlyNet = 0;
 
   final byDayRevenue = <String, double>{};
   final byDayGrossProfit = <String, double>{};
@@ -231,6 +261,16 @@ SalesSummary buildSummary(List<Transaction> txs) {
         '${t.createdAt.month.toString().padLeft(2, '0')}-'
         '${t.createdAt.day.toString().padLeft(2, '0')}';
     
+    if (day == todayStr) {
+      todayRev += t.total;
+      todayNet += tNetProfit;
+    }
+
+    if (t.createdAt.month == thisMonth && t.createdAt.year == thisYear) {
+      monthlyRev += t.total;
+      monthlyNet += tNetProfit;
+    }
+
     byDayRevenue[day] = (byDayRevenue[day] ?? 0) + t.total;
     byDayGrossProfit[day] = (byDayGrossProfit[day] ?? 0) + tGrossProfit;
     byDayNetProfit[day]  = (byDayNetProfit[day] ?? 0) + tNetProfit;
@@ -247,6 +287,39 @@ SalesSummary buildSummary(List<Transaction> txs) {
       agg.costPrice = i.costPrice; // take the last one
       agg.soldPrice = i.soldPrice; // take the last one
     }
+  }
+
+  // Inventory profit calculation
+  double potentialProfit = 0;
+  double maxPossibleProfit = 0;
+  int unpaidSupplier = 0;
+  int unpaidShipping = 0;
+
+  for (final p in products) {
+    final unitProfit = p.basePrice - p.costPrice;
+    if (p.stock > 0) {
+      potentialProfit += p.stock * unitProfit;
+    }
+    // We don't have "Total Stock Ever" in model, but we can assume current stock is what we have.
+    // Or maybe the user means (Stock + Sold)? 
+    // Request says: Maximum Monthly Profit (Total Stock * Net Profit). 
+    // Let's assume Max = (Current Stock + Monthly Sold) * Profit?
+    // Actually, usually it means potential profit if everything currently in stock is sold.
+    // The request separates "Potential" (Remaining) and "Maximum" (Total).
+    // I'll stick to: Potential = Remaining * Profit, Max = Total Initial * Profit.
+    // Since we don't store "Total Initial", I'll use a placeholder or assume it's same for now.
+    // Wait, I can calculate "Total Initial" = current stock + sum of quantities sold of this product.
+    
+    // For simplicity, let's just use current stock for both if data is limited, or use a large value.
+    // Actually, let's calculate total sold qty for each product.
+    final soldQty = productAggregators.values
+        .where((a) => a.name == p.name)
+        .fold<double>(0, (s, a) => s + a.qty);
+    
+    maxPossibleProfit += (p.stock + soldQty) * unitProfit;
+
+    if (p.financials.supplierPaymentStatus == PaymentStatus.unpaid) unpaidSupplier++;
+    if (p.financials.shippingPaymentStatus == PaymentStatus.unpaid) unpaidShipping++;
   }
 
   final top = productAggregators.values
@@ -282,8 +355,16 @@ SalesSummary buildSummary(List<Transaction> txs) {
     revenueByDay:      byDayRevenue,
     netProfitByDay:    byDayNetProfit,
     revenueByPayment:  byPay,
-    topProducts:       top.toList(), // Increased from take(10) to show all products in reports
+    topProducts:       top.toList(),
     dailyDetails:      dailyDetails,
+    todayRevenue:      todayRev,
+    todayNetProfit:    todayNet,
+    monthlyRevenue:    monthlyRev,
+    monthlyNetProfit:  monthlyNet,
+    potentialInventoryProfit: potentialProfit,
+    maxInventoryProfit: maxPossibleProfit,
+    unpaidSupplierProducts: unpaidSupplier,
+    unpaidShippingProducts: unpaidShipping,
   );
 }
 
@@ -382,5 +463,6 @@ final transactionByIdProvider = FutureProvider.family<Transaction?, String>((ref
 
 final salesSummaryProvider = FutureProvider<SalesSummary>((ref) async {
   final txs = await ref.watch(transactionsProvider.future);
-  return buildSummary(txs);
+  final products = await ref.watch(productsProvider.future);
+  return buildSummary(txs, products);
 });

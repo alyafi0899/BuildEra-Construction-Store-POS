@@ -444,6 +444,7 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
       height: 40,
       child: DropdownButtonFormField<String>(
         initialValue: _sortBy,
+        isExpanded: true,
         decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
         dropdownColor: AppTheme.surfaceAlt,
         items: const [
@@ -478,10 +479,11 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
           ]),
           const SizedBox(height: 12),
           SizedBox(
-            height: 50,
+            height: 48,
             child: DropdownButtonFormField<String?>(
               initialValue: profiles.any((p) => p.id == _selectedProfileId) ? _selectedProfileId : null,
               isDense: true,
+              isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'Pilih Profil',
                 isDense: true,

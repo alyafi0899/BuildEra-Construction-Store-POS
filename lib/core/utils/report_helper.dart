@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:open_filex/open_filex.dart';
 import '../../../shared/models/transaction.dart';
+import '../../../shared/models/product.dart';
 import '../../features/settings/models/store_settings.dart';
 import '../utils/formatters.dart';
 import '../../features/payment/providers/transaction_provider.dart';
@@ -23,12 +24,13 @@ class ReportHelper {
 
   static Future<void> generateAndDownloadReport({
     required List<Transaction> transactions,
+    required List<Product> products,
     required String periodName,
     required StoreSettings settings,
     bool isShare = false,
   }) async {
     final pdf = pw.Document();
-    final summary = buildSummary(transactions);
+    final summary = buildSummary(transactions, products);
 
     pdf.addPage(
       pw.MultiPage(

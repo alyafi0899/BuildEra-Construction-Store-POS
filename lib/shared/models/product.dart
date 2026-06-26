@@ -1,3 +1,5 @@
+import '../../features/products/models/product_financials.dart';
+
 class ProductUnit {
   final String id;
   final String productId;
@@ -55,6 +57,7 @@ class Product {
   final String? defaultUnitName;
   final double stock;
   final String? imagePath;
+  final ProductFinancials financials;
   final DateTime createdAt;
   final DateTime updatedAt;
   final List<ProductUnit> units;
@@ -71,6 +74,7 @@ class Product {
     this.defaultUnitName,
     required this.stock,
     this.imagePath,
+    this.financials = const ProductFinancials(),
     required this.createdAt,
     required this.updatedAt,
     this.units = const [],
@@ -89,6 +93,7 @@ class Product {
         defaultUnitName: m['default_unit_name'] as String?,
         stock:     (m['stock'] as num? ?? 0).toDouble(),
         imagePath: m['image_path'] as String?,
+        financials: ProductFinancials.fromMap(Map<String, dynamic>.from(m['financials'] as Map? ?? {})),
         createdAt: DateTime.tryParse(m['created_at'] as String? ?? '') ?? DateTime.now(),
         updatedAt: DateTime.tryParse(m['updated_at'] as String? ?? '') ?? DateTime.now(),
         units:     units,
@@ -106,6 +111,7 @@ class Product {
         'default_unit_name': defaultUnitName,
         'stock':       stock,
         'image_path':  imagePath,
+        'financials':  financials.toMap(),
         'created_at':  createdAt.toIso8601String(),
         'updated_at':  updatedAt.toIso8601String(),
       };
@@ -153,6 +159,7 @@ class Product {
     String? defaultUnitName,
     double? stock,
     String? imagePath,
+    ProductFinancials? financials,
     DateTime? createdAt,
     DateTime? updatedAt,
     List<ProductUnit>? units,
@@ -169,6 +176,7 @@ class Product {
         defaultUnitName: defaultUnitName ?? this.defaultUnitName,
         stock:     stock ?? this.stock,
         imagePath: imagePath ?? this.imagePath,
+        financials: financials ?? this.financials,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? DateTime.now(),
         units:     units ?? this.units,

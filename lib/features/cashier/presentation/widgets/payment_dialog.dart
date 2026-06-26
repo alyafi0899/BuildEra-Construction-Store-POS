@@ -304,24 +304,28 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
             ],
           ),
           const SizedBox(height: 8),
-          customersAsync.when(
-            loading: () => const AppLoading(),
-            error:   (_, __) => const Text('Gagal memuat data pelanggan'),
-            data: (customers) => DropdownButtonFormField<String>(
-              initialValue: customers.any((c) => c.id == _selectedCustomer?.id) ? _selectedCustomer?.id : null,
-              decoration: const InputDecoration(
-                isDense: true,
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                prefixIcon: Icon(Icons.person_outline, size: 20),
+          SizedBox(
+            height: 48,
+            child: customersAsync.when(
+              loading: () => const AppLoading(),
+              error:   (_, __) => const Text('Gagal memuat data pelanggan'),
+              data: (customers) => DropdownButtonFormField<String>(
+                initialValue: customers.any((c) => c.id == _selectedCustomer?.id) ? _selectedCustomer?.id : null,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  prefixIcon: Icon(Icons.person_outline, size: 20),
+                ),
+                hint: const Text('Pilih dari daftar...', style: TextStyle(fontSize: 13)),
+                items: customers.map((c) => DropdownMenuItem(
+                  value: c.id,
+                  child: Text('${c.name} (${c.phone})', style: const TextStyle(fontSize: 13)),
+                )).toList(),
+                onChanged: (v) => setState(() {
+                  _selectedCustomer = customers.firstWhereOrNull((c) => c.id == v);
+                }),
               ),
-              hint: const Text('Pilih dari daftar...', style: TextStyle(fontSize: 13)),
-              items: customers.map((c) => DropdownMenuItem(
-                value: c.id,
-                child: Text('${c.name} (${c.phone})', style: const TextStyle(fontSize: 13)),
-              )).toList(),
-              onChanged: (v) => setState(() {
-                _selectedCustomer = customers.firstWhereOrNull((c) => c.id == v);
-              }),
             ),
           ),
           const SizedBox(height: 16),
