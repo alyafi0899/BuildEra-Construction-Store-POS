@@ -69,12 +69,7 @@ Future<void> main(List<String> args) async {
 
   await LocalDatabase.init();
 
-  // Show splash screen immediately
-  runApp(const MaterialApp(
-    debugShowCheckedModeBanner: false,
-    home: SplashScreen(),
-  ));
-
+  // 1. Initialize Window Manager ASAP for Windows/Desktop
   if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
     await windowManager.ensureInitialized();
     WindowOptions windowOptions = const WindowOptions(
@@ -82,15 +77,29 @@ Future<void> main(List<String> args) async {
       center: true,
       backgroundColor: Color(0xFF0F1117),
       skipTaskbar: false,
+      title: 'BuildEra',
       titleBarStyle: TitleBarStyle.normal,
     );
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.show();
-      await windowManager.focus();
-    });
+    await windowManager.waitUntilReadyToShow(windowOptions);
+    await windowManager.show();
+    await windowManager.focus();
   }
 
+  // 2. Start initialization timer for Brand Identity (Min 3.0s)
+  final stopwatch = Stopwatch()..start();
+
+  // Show splash screen immediately
+  runApp(MaterialApp(
+    debugShowCheckedModeBanner: false,
+    theme: AppTheme.dark,
+    home: const SplashScreen(status: 'Menginisialisasi Sistem...'),
+  ));
+
+  // Yield to allow the splash screen to render
+  await Future.delayed(const Duration(milliseconds: 100));
+
   try {
+    // Perform all heavy lifting while splash is showing
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
@@ -102,6 +111,12 @@ Future<void> main(List<String> args) async {
     }
 
     await initializeDateFormatting('id_ID', null);
+
+    // Ensure splash shows for at least 3 seconds
+    final elapsed = stopwatch.elapsedMilliseconds;
+    if (elapsed < 3000) {
+      await Future.delayed(Duration(milliseconds: 3000 - elapsed));
+    }
 
     runApp(const ProviderScope(child: KonstruksiPosApp()));
   } catch (e, stack) {
