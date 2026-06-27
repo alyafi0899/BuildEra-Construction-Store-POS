@@ -314,13 +314,14 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
                 isExpanded: true,
                 decoration: const InputDecoration(
                   isDense: true,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   prefixIcon: Icon(Icons.person_outline, size: 20),
                 ),
                 hint: const Text('Pilih dari daftar...', style: TextStyle(fontSize: 13)),
+                dropdownColor: AppTheme.surfaceAlt,
                 items: customers.map((c) => DropdownMenuItem(
                   value: c.id,
-                  child: Text('${c.name} (${c.phone})', style: const TextStyle(fontSize: 13)),
+                  child: Text('${c.name} (${c.phone})', style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
                 )).toList(),
                 onChanged: (v) => setState(() {
                   _selectedCustomer = customers.firstWhereOrNull((c) => c.id == v);

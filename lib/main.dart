@@ -172,20 +172,16 @@ class _MainShellState extends ConsumerState<MainShell> {
   ];
 
   @override
-  void initState() {
-    super.initState();
-    // Use Firestore-based sync instead of unreliable multi-window channels
-    ref.listenManual(cartProvider, (prev, next) {
+  Widget build(BuildContext context) {
+    // Listen to cart changes for Customer Display Sync
+    ref.listen(cartProvider, (prev, next) {
       final user = ref.read(authStateProvider).value;
       final settings = ref.read(appSettingsProvider);
       if (user != null && settings.isCustomerDisplayEnabled) {
         CustomerDisplayBridge.syncCart(user.uid, next);
       }
-    }, fireImmediately: true);
-  }
+    });
 
-  @override
-  Widget build(BuildContext context) {
     ref.watch(productsProvider);
 
     final autoAdd = ref.watch(scanModeProvider);

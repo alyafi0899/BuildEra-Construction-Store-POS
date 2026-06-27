@@ -391,30 +391,36 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Row 2: category + base unit + stock
                       Row(children: [
                         Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue:  _category,
-                            decoration:    const InputDecoration(labelText: 'Kategori *'),
-                            dropdownColor: AppTheme.surfaceAlt,
-                            isExpanded:    true,
-                            items: AppConstants.categories
-                                .map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis)))
-                                .toList(),
-                            onChanged: (v) => setState(() => _category = v!),
+                          child: SizedBox(
+                            height: 48,
+                            child: DropdownButtonFormField<String>(
+                              initialValue:  _category,
+                              decoration:    const InputDecoration(labelText: 'Kategori *', isDense: true),
+                              dropdownColor: AppTheme.surfaceAlt,
+                              isExpanded:    true,
+                              items: AppConstants.categories
+                                  .map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis)))
+                                  .toList(),
+                              onChanged: (v) => setState(() => _category = v!),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 16),
                         Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue:  _baseUnit,
-                            decoration:    const InputDecoration(labelText: 'Satuan Dasar *'),
-                            dropdownColor: AppTheme.surfaceAlt,
-                            items: AppConstants.baseUnits
-                                .map((u) => DropdownMenuItem(value: u, child: Text(u)))
-                                .toList(),
-                            onChanged: (v) => setState(() => _baseUnit = v!),
+                          child: SizedBox(
+                            height: 48,
+                            child: DropdownButtonFormField<String>(
+                              initialValue:  _baseUnit,
+                              decoration:    const InputDecoration(labelText: 'Satuan Dasar *', isDense: true),
+                              dropdownColor: AppTheme.surfaceAlt,
+                              isExpanded:    true,
+                              items: AppConstants.baseUnits
+                                  .map((u) => DropdownMenuItem(value: u, child: Text(u)))
+                                  .toList(),
+                              onChanged: (v) => setState(() => _baseUnit = v!),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -817,22 +823,27 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                         const SizedBox(height: 16),
                         _sectionLabel(context, 'Pengaturan Default'),
                         const SizedBox(height: 12),
-                        DropdownButtonFormField<String?>(
-                          initialValue: _defaultUnitName,
-                          decoration: const InputDecoration(
-                            labelText: 'Satuan Default di Kasir',
-                            helperText: 'Satuan ini akan otomatis terpilih saat produk discan/diklik',
+                        SizedBox(
+                          height: 60, // A bit higher for helper text
+                          child: DropdownButtonFormField<String?>(
+                            initialValue: _defaultUnitName,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Satuan Default di Kasir',
+                              helperText: 'Satuan ini akan otomatis terpilih saat produk discan/diklik',
+                              isDense: true,
+                            ),
+                            dropdownColor: AppTheme.surfaceAlt,
+                            items: [
+                              DropdownMenuItem(value: null, child: Text('Default (Satuan Pertama)')),
+                              DropdownMenuItem(value: _baseUnit, child: Text('Satuan Dasar ($_baseUnit)')),
+                              ..._units.where((u) => u.unitName.isNotEmpty).map((u) => DropdownMenuItem(
+                                value: u.unitName,
+                                child: Text(u.unitName),
+                              )),
+                            ],
+                            onChanged: (v) => setState(() => _defaultUnitName = v),
                           ),
-                          dropdownColor: AppTheme.surfaceAlt,
-                          items: [
-                            DropdownMenuItem(value: null, child: Text('Default (Satuan Pertama)')),
-                            DropdownMenuItem(value: _baseUnit, child: Text('Satuan Dasar ($_baseUnit)')),
-                            ..._units.where((u) => u.unitName.isNotEmpty).map((u) => DropdownMenuItem(
-                              value: u.unitName,
-                              child: Text(u.unitName),
-                            )),
-                          ],
-                          onChanged: (v) => setState(() => _defaultUnitName = v),
                         ),
                         const SizedBox(height: 16),
                         Text(

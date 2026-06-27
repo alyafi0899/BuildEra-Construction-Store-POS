@@ -82,7 +82,7 @@ class SyncNotifier extends Notifier<SyncState> {
 
   void _startSync() {
     _syncTimer?.cancel();
-    _syncTimer = Timer.periodic(const Duration(seconds: 5), (_) => processQueue());
+    _syncTimer = Timer.periodic(const Duration(seconds: 10), (_) => processQueue()); // Relax timer
     // Trigger immediate process
     Future.microtask(() => processQueue());
   }
@@ -100,16 +100,15 @@ class SyncNotifier extends Notifier<SyncState> {
     required SyncAction action,
     required Map<String, dynamic> data,
   }) async {
-    await addBatchToQueue([
-      SyncTask(
-        id: const Uuid().v4(),
-        collection: collection,
-        documentId: documentId,
-        action: action,
-        data: data,
-        createdAt: DateTime.now(),
-      )
-    ]);
+    final task = SyncTask(
+      id: const Uuid().v4(),
+      collection: collection,
+      documentId: documentId,
+      action: action,
+      data: data,
+      createdAt: DateTime.now(),
+    );
+    await addBatchToQueue([task]);
   }
 
   Future<void> addBatchToQueue(List<SyncTask> tasks) async {
@@ -117,28 +116,29 @@ class SyncNotifier extends Notifier<SyncState> {
 
     final Map<dynamic, dynamic> entries = {};
     for (final task in tasks) {
-      entries[const Uuid().v4()] = task.toMap();
+      entries[task.id] = task.toMap(); // Use task ID as key
     }
 
     await _queueBox!.putAll(entries);
     state = state.copyWith(pendingCount: _queueBox!.length);
     
     if (ref.read(isOnlineProvider)) {
-      // Don't await here to avoid blocking UI during large imports
       unawaited(processQueue());
     }
   }
 
-  Future<void> processQueue() async {
-    if (state.isSyncing || _queueBox == null || _queueBox!.isEmpty || !ref.read(isOnlineProvider)) return;
+  bool _isCurrentlyProcessing = false;
 
+  Future<void> processQueue() async {
+    if (_isCurrentlyProcessing || _queueBox == null || _queueBox!.isEmpty || !ref.read(isOnlineProvider)) return;
+
+    _isCurrentlyProcessing = true;
     state = state.copyWith(isSyncing: true);
     
     final db = FirebaseFirestore.instance;
     final userDoc = db.collection('users').doc(_uid!);
 
     try {
-      // Process in batches of 400 (Firestore limit is 500, we leave room for safety)
       while (_queueBox!.isNotEmpty && ref.read(isOnlineProvider)) {
         final batch = db.batch();
         final processedKeys = <dynamic>[];
@@ -146,7 +146,10 @@ class SyncNotifier extends Notifier<SyncState> {
 
         for (final key in keys) {
           final raw = _queueBox!.get(key);
-          if (raw == null) continue;
+          if (raw == null) {
+            processedKeys.add(key);
+            continue;
+          }
           
           final task = SyncTask.fromMap(raw);
           final docRef = userDoc.collection(task.collection).doc(task.documentId);
@@ -177,6 +180,7 @@ class SyncNotifier extends Notifier<SyncState> {
       debugPrint('Sync Batch Error: $e');
       state = state.copyWith(lastError: e.toString());
     } finally {
+      _isCurrentlyProcessing = false;
       state = state.copyWith(isSyncing: false);
     }
   }

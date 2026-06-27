@@ -266,16 +266,19 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                         const SizedBox(width: 16),
                         Expanded(
                           flex: 2,
-                          child: DropdownButtonFormField<ProductUnit>(
-                            initialValue: _selectedUnit,
-                            isExpanded: true,
-                            decoration: const InputDecoration(labelText: 'Satuan Pembelian', isDense: true),
-                            dropdownColor: AppTheme.surfaceAlt,
-                            items: widget.product.allUnits.map((u) => DropdownMenuItem(value: u, child: Text(u.unitName))).toList(),
-                            onChanged: (v) {
-                              setState(() => _selectedUnit = v!);
-                              _calculateCost();
-                            },
+                          child: SizedBox(
+                            height: 48,
+                            child: DropdownButtonFormField<ProductUnit>(
+                              initialValue: _selectedUnit,
+                              isExpanded: true,
+                              decoration: const InputDecoration(labelText: 'Satuan Pembelian', isDense: true),
+                              dropdownColor: AppTheme.surfaceAlt,
+                              items: widget.product.allUnits.map((u) => DropdownMenuItem(value: u, child: Text(u.unitName))).toList(),
+                              onChanged: (v) {
+                                setState(() => _selectedUnit = v!);
+                                _calculateCost();
+                              },
+                            ),
                           ),
                         ),
                         const Spacer(),
@@ -730,7 +733,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
         isExpanded: true,
         decoration: InputDecoration(labelText: label, isDense: true),
         dropdownColor: AppTheme.surfaceAlt,
-        items: [PaymentStatus.paid, PaymentStatus.unpaid].map((s) => DropdownMenuItem(
+        items: [PaymentStatus.paid, PaymentStatus.unpaid, PaymentStatus.partial].map((s) => DropdownMenuItem(
           value: s,
           child: Row(
             children: [

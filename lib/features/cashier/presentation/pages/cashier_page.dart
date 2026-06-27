@@ -500,19 +500,23 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
             const Text('Diskon Transaksi',
                 style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
             const Spacer(),
-            DropdownButton<DiscountType>(
-              value: cart.transDiscountType,
-              isDense: true,
-              underline: const SizedBox(),
-              style: const TextStyle(fontSize: 12, color: AppTheme.accent),
-              items: [
-                DropdownMenuItem(value: DiscountType.fixed, child: Text('Rp')),
-                DropdownMenuItem(
-                    value: DiscountType.percentage, child: Text('%')),
-              ],
-              onChanged: (v) => ref
-                  .read(cartProvider.notifier)
-                  .setTransDiscount(cart.transDiscountValue, v!),
+            SizedBox(
+              width: 50,
+              child: DropdownButton<DiscountType>(
+                value: cart.transDiscountType,
+                isDense: true,
+                isExpanded: true,
+                underline: const SizedBox(),
+                style: const TextStyle(fontSize: 12, color: AppTheme.accent),
+                items: [
+                  DropdownMenuItem(value: DiscountType.fixed, child: Text('Rp')),
+                  DropdownMenuItem(
+                      value: DiscountType.percentage, child: Text('%')),
+                ],
+                onChanged: (v) => ref
+                    .read(cartProvider.notifier)
+                    .setTransDiscount(cart.transDiscountValue, v!),
+              ),
             ),
             const SizedBox(width: 8),
             SizedBox(
@@ -700,26 +704,30 @@ class _CartItemTileState extends ConsumerState<_CartItemTile> {
         Row(children: [
           // Unit selector
           if (item.product.allUnits.length > 1)
-            DropdownButton<String>(
-              value: item.selectedUnit.unitName,
-              isDense: true,
-              underline: const SizedBox(),
-              dropdownColor: AppTheme.surfaceAlt,
-              style: const TextStyle(
-                  color: AppTheme.accent,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600),
-              items: item.product.allUnits
-                  .map((u) => DropdownMenuItem(
-                        value: u.unitName,
-                        child: Text(u.unitName),
-                      ))
-                  .toList(),
-              onChanged: (v) {
-                final u =
-                    item.product.allUnits.firstWhere((u) => u.unitName == v);
-                notifier.updateUnit(item.id, u);
-              },
+            SizedBox(
+              width: 80,
+              child: DropdownButton<String>(
+                value: item.selectedUnit.unitName,
+                isDense: true,
+                isExpanded: true,
+                underline: const SizedBox(),
+                dropdownColor: AppTheme.surfaceAlt,
+                style: const TextStyle(
+                    color: AppTheme.accent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600),
+                items: item.product.allUnits
+                    .map((u) => DropdownMenuItem(
+                          value: u.unitName,
+                          child: Text(u.unitName, overflow: TextOverflow.ellipsis),
+                        ))
+                    .toList(),
+                onChanged: (v) {
+                  final u =
+                      item.product.allUnits.firstWhere((u) => u.unitName == v);
+                  notifier.updateUnit(item.id, u);
+                },
+              ),
             )
           else
             Text(item.selectedUnit.unitName,
@@ -880,16 +888,20 @@ class _ItemEditDialogState extends ConsumerState<_ItemEditDialog> {
               const SizedBox(width: 12),
               Expanded(
                 flex: 2,
-                child: DropdownButtonFormField<DiscountType>(
-                  initialValue: _discountType,
-                  decoration: const InputDecoration(labelText: 'Tipe'),
-                  items: [
-                    DropdownMenuItem(
-                        value: DiscountType.fixed, child: Text('Rp')),
-                    DropdownMenuItem(
-                        value: DiscountType.percentage, child: Text('%')),
-                  ],
-                  onChanged: (v) => setState(() => _discountType = v!),
+                child: SizedBox(
+                  height: 48,
+                  child: DropdownButtonFormField<DiscountType>(
+                    initialValue: _discountType,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Tipe', isDense: true),
+                    items: [
+                      DropdownMenuItem(
+                          value: DiscountType.fixed, child: Text('Rp')),
+                      DropdownMenuItem(
+                          value: DiscountType.percentage, child: Text('%')),
+                    ],
+                    onChanged: (v) => setState(() => _discountType = v!),
+                  ),
                 ),
               ),
             ],

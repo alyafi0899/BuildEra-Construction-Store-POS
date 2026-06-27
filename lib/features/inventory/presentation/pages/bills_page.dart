@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/common_widgets.dart';
@@ -13,6 +14,8 @@ import '../../../../shared/models/product.dart';
 import '../../../products/models/supplier.dart';
 import '../../../products/models/shipping_service.dart';
 import '../../../products/providers/entity_provider.dart';
+import '../../models/bill_payment.dart';
+import '../../providers/bill_payment_provider.dart';
 
 class BillsPage extends ConsumerStatefulWidget {
   const BillsPage({super.key});
@@ -90,14 +93,10 @@ class _BillsPageState extends ConsumerState<BillsPage> with SingleTickerProvider
           int pendingCount = 0;
 
           void process(double total, double paid, PaymentStatus status) {
-            if (status == PaymentStatus.notApplicable) {
-              return;
-            }
+            if (status == PaymentStatus.notApplicable) return;
             totalCost += total;
             totalPaid += paid;
-            if (status != PaymentStatus.paid) {
-              pendingCount++;
-            }
+            if (status != PaymentStatus.paid) pendingCount++;
           }
 
           for (final p in pList) {
@@ -165,7 +164,7 @@ class _BillsList extends ConsumerStatefulWidget {
 }
 
 class _BillsListState extends ConsumerState<_BillsList> {
-  String _filter = 'unpaid'; // unpaid, paid, all
+  String _filter = 'unpaid';
 
   @override
   Widget build(BuildContext context) {
@@ -253,8 +252,6 @@ class _BillsListState extends ConsumerState<_BillsList> {
         _filterChip('Sudah Lunas', 'paid'),
         const SizedBox(width: 8),
         _filterChip('Semua', 'all'),
-        const Spacer(),
-        Text('${Formatters.decimal(0)} Terpilih', style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
       ]),
     );
   }
@@ -424,14 +421,6 @@ class _EntityExpandableGroupState extends State<_EntityExpandableGroup> {
   }
 }
 
-Map<K, List<V>> groupBy<V, K>(Iterable<V> values, K Function(V) key) {
-  var map = <K, List<V>>{};
-  for (var element in values) {
-    (map[key(element)] ??= []).add(element);
-  }
-  return map;
-}
-
 class _BillItem {
   final String id;
   final String name;
@@ -470,7 +459,7 @@ class _BillTile extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceAlt,
+        color: AppTheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: isPaid ? AppTheme.success.withValues(alpha: 0.2) : AppTheme.border),
       ),
@@ -522,29 +511,74 @@ class _BillTile extends ConsumerWidget {
               const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 20),
           ]),
           
-          if (item.paidAmount > 0) ...[
-            const Divider(height: 24),
-            Row(children: [
-              const Icon(Icons.history_rounded, size: 12, color: AppTheme.textMuted),
-              const SizedBox(width: 6),
-              Text('Sudah Dibayar: ${Formatters.currency(item.paidAmount)}', style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
-              const Spacer(),
-              LinearProgressIndicator(
-                value: item.paidAmount / item.amount,
-                backgroundColor: AppTheme.bg,
-                valueColor: const AlwaysStoppedAnimation(AppTheme.success),
-                minHeight: 4,
-              ).constrained(width: 80),
-            ]),
-          ],
+          _buildPaymentHistory(context, ref),
         ],
       ),
     );
   }
 
+  Widget _buildPaymentHistory(BuildContext context, WidgetRef ref) {
+    final paymentsAsync = ref.watch(billPaymentsProvider);
+    
+    return paymentsAsync.when(
+      data: (allPayments) {
+        final itemPayments = allPayments.where((p) => p.billId == item.id).toList();
+        if (itemPayments.isEmpty && item.paidAmount == 0) return const SizedBox();
+
+        return Column(
+          children: [
+            const Divider(height: 24),
+            Row(children: [
+              const Icon(Icons.history_rounded, size: 12, color: AppTheme.textMuted),
+              const SizedBox(width: 6),
+              Text('Riwayat Pembayaran:', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textMuted)),
+              const Spacer(),
+              LinearProgressIndicator(
+                value: item.amount > 0 ? (item.paidAmount / item.amount) : 0,
+                backgroundColor: AppTheme.bg,
+                valueColor: const AlwaysStoppedAnimation(AppTheme.success),
+                minHeight: 4,
+              ).constrained(width: 80),
+            ]),
+            const SizedBox(height: 12),
+            ...itemPayments.map((p) => Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(children: [
+                Text(Formatters.dateTime(p.createdAt), style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                const SizedBox(width: 12),
+                Expanded(child: Text(p.notes ?? 'Cicilan Pembayaran', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500))),
+                Text(Formatters.currency(p.amount), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.success)),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () async {
+                    final ok = await showConfirmDialog(context, title: 'Hapus Pembayaran', content: 'Hapus catatan pembayaran ini? Sisa hutang akan bertambah kembali.');
+                    if (ok) {
+                      await ref.read(billPaymentRepositoryProvider).deletePayment(p);
+                    }
+                  },
+                  icon: const Icon(Icons.delete_outline_rounded, size: 14, color: AppTheme.danger),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ]),
+            )),
+            if (itemPayments.isEmpty && item.paidAmount > 0)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 4),
+                child: Text('Data pembayaran lama (sebelum update riwayat)', style: TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: AppTheme.textMuted)),
+              ),
+          ],
+        );
+      },
+      loading: () => const SizedBox(),
+      error: (_, __) => const SizedBox(),
+    );
+  }
+
   void _showPaymentDialog(BuildContext context, WidgetRef ref) {
     final remaining = item.amount - item.paidAmount;
-    final ctrl = TextEditingController(text: remaining.toStringAsFixed(0));
+    final amountCtrl = TextEditingController(text: remaining.toStringAsFixed(0));
+    final notesCtrl = TextEditingController();
     
     showDialog(
       context: context,
@@ -555,17 +589,24 @@ class _BillTile extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Tagihan: ${item.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
-            Text('Total: ${Formatters.currency(item.amount)}', style: const TextStyle(fontSize: 12)),
-            Text('Sisa: ${Formatters.currency(remaining)}', style: const TextStyle(fontSize: 12, color: AppTheme.warning)),
+            Text('Sisa Hutang: ${Formatters.currency(remaining)}', style: const TextStyle(fontSize: 12, color: AppTheme.warning)),
             const SizedBox(height: 20),
             TextFormField(
-              controller: ctrl,
+              controller: amountCtrl,
               autofocus: true,
               decoration: const InputDecoration(
-                labelText: 'Jumlah Bayar (Rp)',
+                labelText: 'Jumlah Bayar (Rp) *',
                 prefixText: 'Rp ',
               ),
               keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: notesCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Keterangan / Catatan',
+                hintText: 'Contoh: Titip ke Supir, Transfer Bank, dll',
+              ),
             ),
           ],
         ),
@@ -573,32 +614,19 @@ class _BillTile extends ConsumerWidget {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
           ElevatedButton(
             onPressed: () async {
-              final val = double.tryParse(ctrl.text) ?? 0;
+              final val = double.tryParse(amountCtrl.text) ?? 0;
               if (val <= 0) return;
               
-              final newPaid = item.paidAmount + val;
-              PaymentStatus newStatus = PaymentStatus.partial;
-              if (newPaid >= item.amount) {
-                newStatus = PaymentStatus.paid;
-              }
+              final payment = BillPayment(
+                id: const Uuid().v4(),
+                billId: item.id,
+                amount: val,
+                notes: notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim(),
+                createdAt: DateTime.now(),
+                isInitialBill: item.isInitial,
+              );
 
-              if (item.isInitial) {
-                final p = item.original as Product;
-                await ref.read(productRepositoryProvider).updatePayment(
-                  p, 
-                  isSupplier: isSupplier, 
-                  paidAmount: val, 
-                  status: newStatus
-                );
-              } else {
-                final r = item.original as RestockRecord;
-                await ref.read(restockRepositoryProvider).updatePayment(
-                  r, 
-                  isSupplier: isSupplier, 
-                  paidAmount: val, 
-                  status: newStatus
-                );
-              }
+              await ref.read(billPaymentRepositoryProvider).savePayment(payment);
 
               if (context.mounted) {
                 Navigator.pop(context);
@@ -611,6 +639,14 @@ class _BillTile extends ConsumerWidget {
       ),
     );
   }
+}
+
+Map<K, List<V>> groupBy<V, K>(Iterable<V> values, K Function(V) key) {
+  var map = <K, List<V>>{};
+  for (var element in values) {
+    (map[key(element)] ??= []).add(element);
+  }
+  return map;
 }
 
 extension on Widget {

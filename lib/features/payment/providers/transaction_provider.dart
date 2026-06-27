@@ -323,9 +323,7 @@ SalesSummary buildSummary(List<Transaction> txs, List<Product> products, List<Re
     if (status == PaymentStatus.unpaid || status == PaymentStatus.partial) {
       final n = name ?? (isShip ? 'Ekspedisi Umum' : 'Supplier Umum');
       final remaining = total - paid;
-      if (remaining <= 0) {
-        return;
-      }
+      if (remaining <= 0) return;
 
       if (isShip) {
         final prev = shippingMap[n] ?? (amount: 0.0, count: 0);

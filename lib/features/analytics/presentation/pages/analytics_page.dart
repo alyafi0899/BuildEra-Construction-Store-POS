@@ -10,7 +10,6 @@ import '../../../settings/providers/settings_provider.dart';
 import '../../../../core/utils/report_helper.dart';
 import '../../../inventory/models/restock_record.dart';
 import '../../../inventory/providers/restock_provider.dart';
-import '../../../products/models/product_financials.dart';
 import '../../../products/providers/product_provider.dart';
 import '../../../../shared/models/product.dart';
 
