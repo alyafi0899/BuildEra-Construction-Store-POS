@@ -34,6 +34,7 @@ class AppConstants {
   static const String paymentQris     = 'QRIS';
   static const String paymentDebit    = 'Debit';
   static const String paymentTransfer = 'Transfer Bank';
+  static const String paymentPiutang  = 'Piutang';
 
-  static const List<String> paymentMethods = [paymentCash, paymentQris, paymentDebit, paymentTransfer];
+  static const List<String> paymentMethods = [paymentCash, paymentQris, paymentDebit, paymentTransfer, paymentPiutang];
 }

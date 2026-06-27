@@ -1,6 +1,79 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 
+// ── PageHeader ───────────────────────────────────────────────────────────
+
+class PageHeader extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  final IconData? icon;
+  final List<Widget>? actions;
+
+  const PageHeader({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.icon,
+    this.actions,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+      decoration: const BoxDecoration(
+        color: AppTheme.surface,
+        border: Border(bottom: BorderSide(color: AppTheme.border)),
+      ),
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.accent.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: AppTheme.accent, size: 24),
+            ),
+            const SizedBox(width: 16),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.headlineLarge,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle!,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (actions != null && actions!.isNotEmpty) ...[
+            const SizedBox(width: 16),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: actions!.expand((w) => [w, const SizedBox(width: 12)]).toList()
+                ..removeLast(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 // ── AppCard ───────────────────────────────────────────────────────────────
 
 class AppCard extends StatelessWidget {
@@ -92,17 +165,18 @@ class SectionHeader extends StatelessWidget {
   final String   title;
   final Widget?  trailing;
   final IconData? icon;
+  final Color?   color;
 
-  const SectionHeader({super.key, required this.title, this.trailing, this.icon});
+  const SectionHeader({super.key, required this.title, this.trailing, this.icon, this.color});
 
   @override
   Widget build(BuildContext context) {
     return Row(children: [
       if (icon != null) ...[
-        Icon(icon, color: AppTheme.accent, size: 18),
+        Icon(icon, color: color ?? AppTheme.accent, size: 18),
         const SizedBox(width: 8),
       ],
-      Text(title, style: Theme.of(context).textTheme.titleLarge),
+      Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: color)),
       const Spacer(),
       if (trailing != null) trailing!,
     ]);

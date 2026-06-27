@@ -77,4 +77,32 @@ class CartItem {
         discountValue: discountValue ?? this.discountValue,
         discountType:  discountType ?? this.discountType,
       );
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'product': product.toMap(),
+      'selectedUnit': selectedUnit.toMap(),
+      'quantity': quantity,
+      'costPrice': costPrice,
+      'originalPrice': originalPrice,
+      'soldPrice': soldPrice,
+      'discountValue': discountValue,
+      'discountType': discountType.name,
+    };
+  }
+
+  factory CartItem.fromMap(Map<String, dynamic> map) {
+    return CartItem(
+      id: map['id'],
+      product: Product.fromMap(map['product']),
+      selectedUnit: ProductUnit.fromMap(map['selectedUnit']),
+      quantity: map['quantity'],
+      costPrice: map['costPrice'],
+      originalPrice: map['originalPrice'],
+      soldPrice: map['soldPrice'],
+      discountValue: map['discountValue'],
+      discountType: DiscountType.values.byName(map['discountType']),
+    );
+  }
 }

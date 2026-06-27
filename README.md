@@ -1,4 +1,4 @@
-# Konstruksi POS - Construction Store Point of Sale System
+# Konstruksi POS - Construction Store Point of Sale System Plus Products Barcode Generator
 
 A modern Flutter-based Point of Sale (POS) system designed specifically for construction material stores. Built with Firebase backend, real-time inventory management, and comprehensive sales analytics.
 

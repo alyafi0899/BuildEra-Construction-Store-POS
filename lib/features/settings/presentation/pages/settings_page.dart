@@ -1,8 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../providers/settings_provider.dart';
+import '../../providers/app_settings_provider.dart';
 import '../../models/store_settings.dart';
+import '../../../auth/providers/auth_provider.dart';
+import '../../../../shared/widgets/common_widgets.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -72,18 +76,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       );
       
       ref.read(settingsProvider.notifier).updateSettings(settings);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Pengaturan berhasil disimpan'),
-          backgroundColor: AppTheme.success,
-        ),
-      );
+      showSuccess(context, 'Pengaturan berhasil disimpan');
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Sync UI with provider changes
     ref.listen(settingsProvider, (prev, next) {
       if (_businessNameCtrl.text.isEmpty && next.businessName.isNotEmpty) {
         _businessNameCtrl.text = next.businessName;
@@ -102,22 +101,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       backgroundColor: AppTheme.bg,
       body: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            color: AppTheme.surface,
-            child: Row(
-              children: [
-                const Icon(Icons.settings_rounded, color: AppTheme.accent, size: 24),
-                const SizedBox(width: 12),
-                Text('Pengaturan Toko', style: Theme.of(context).textTheme.headlineMedium),
-                const Spacer(),
-                ElevatedButton.icon(
-                  onPressed: _save,
-                  icon: const Icon(Icons.save_rounded, size: 18),
-                  label: const Text('Simpan Perubahan'),
-                ),
-              ],
-            ),
+          PageHeader(
+            title: 'Pengaturan Akun & Toko',
+            icon: Icons.settings_rounded,
+            actions: [
+              OutlinedButton.icon(
+                onPressed: () => ref.read(authRepositoryProvider).logout(),
+                icon: const Icon(Icons.logout, size: 18),
+                label: const Text('Keluar (Logout)'),
+                style: OutlinedButton.styleFrom(foregroundColor: AppTheme.danger, side: const BorderSide(color: AppTheme.danger)),
+              ),
+              ElevatedButton.icon(
+                onPressed: _save,
+                icon: const Icon(Icons.save_rounded, size: 18),
+                label: const Text('Simpan Perubahan'),
+              ),
+            ],
           ),
           Expanded(
             child: SingleChildScrollView(
@@ -134,7 +133,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         const SizedBox(height: 16),
                         Row(
                           children: [
-                            Expanded(child: _buildInput('Nama Bisnis', _businessNameCtrl, Icons.store_rounded)),
+                            Expanded(child: _buildInput('Nama Toko / Usaha', _businessNameCtrl, Icons.store_rounded)),
                             const SizedBox(width: 20),
                             Expanded(child: _buildInput('Nama Pemilik', _ownerNameCtrl, Icons.person_rounded)),
                           ],
@@ -144,13 +143,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                           children: [
                             Expanded(child: _buildInput('Nomor Telepon', _phoneCtrl, Icons.phone_rounded)),
                             const SizedBox(width: 20),
-                            Expanded(child: _buildInput('Email', _emailCtrl, Icons.email_rounded)),
+                            Expanded(child: _buildInput('Email Bisnis', _emailCtrl, Icons.business_outlined)),
                           ],
                         ),
                         const SizedBox(height: 20),
-                        _buildInput('Alamat', _addressCtrl, Icons.location_on_rounded, maxLines: 2),
+                        _buildInput('Alamat Toko', _addressCtrl, Icons.location_on_rounded, maxLines: 2),
                         const SizedBox(height: 20),
                         _buildInput('Deskripsi Toko', _descriptionCtrl, Icons.description_rounded, maxLines: 3),
+                        
+                        const SizedBox(height: 40),
+                        const _SectionTitle(title: 'Pengaturan Tampilan & Jendela'),
+                        const SizedBox(height: 16),
+                        _buildAppSettings(ref),
+
                         const SizedBox(height: 40),
                         Row(
                           children: [
@@ -200,6 +205,68 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ),
           style: const TextStyle(fontSize: 14),
         ),
+      ],
+    );
+  }
+
+  Widget _buildAppSettings(WidgetRef ref) {
+    final appSettings = ref.watch(appSettingsProvider);
+    final notifier = ref.read(appSettingsProvider.notifier);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceAlt,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        children: [
+          _buildSettingRow(
+            icon: Icons.fullscreen_rounded,
+            label: 'Layar Penuh (Full Screen)',
+            child: Switch.adaptive(
+              value: appSettings.isFullScreen,
+              onChanged: (v) => notifier.setFullScreen(v),
+              activeTrackColor: AppTheme.accent,
+            ),
+          ),
+          const Divider(height: 32),
+          _buildSettingRow(
+            icon: Icons.monitor_rounded,
+            label: 'Tampilan Pelanggan (Dual Display)',
+            child: Row(
+              children: [
+                if (appSettings.isCustomerDisplayEnabled)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: OutlinedButton.icon(
+                      onPressed: () => _openCustomerDisplayUrl(context),
+                      icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                      label: const Text('Buka Layar', style: TextStyle(fontSize: 12)),
+                    ),
+                  ),
+                Switch.adaptive(
+                  value: appSettings.isCustomerDisplayEnabled,
+                  onChanged: (v) => notifier.setCustomerDisplay(v),
+                  activeTrackColor: AppTheme.accent,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingRow({required IconData icon, required String label, required Widget child}) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: AppTheme.textSecondary),
+        const SizedBox(width: 12),
+        Text(label, style: const TextStyle(fontSize: 14)),
+        const Spacer(),
+        child,
       ],
     );
   }
@@ -262,6 +329,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ),
       ],
     );
+  }
+
+  void _openCustomerDisplayUrl(BuildContext context) async {
+    try {
+      // Launch a second instance of the current executable with the 'multi_window' argument
+      // This will trigger the dedicated boot path in main.dart
+      await Process.start(Platform.resolvedExecutable, ['multi_window', '1']);
+      
+      if (context.mounted) {
+        showSuccess(context, 'Membuka jendela pelanggan...');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        showError(context, 'Gagal membuka jendela: $e');
+      }
+    }
   }
 }
 

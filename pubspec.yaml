@@ -1,7 +1,7 @@
-name: konstruksi_pos
-description: Construction Tools POS System
+name: buildera
+description: "Material and Construction POS - Bangun. Kelola. Kembangkan."
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.2.2
 
 environment:
   sdk: '>=3.1.0 <4.0.0'
@@ -10,9 +10,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  firebase_core: ^3.8.0
-  cloud_firestore: ^5.6.12
-  firebase_storage: ^12.3.2
+  firebase_core: ^4.11.0
+  firebase_auth: ^6.1.0
+  cloud_firestore: ^6.6.0
+  firebase_storage: ^13.4.3
   flutter_riverpod: ^3.3.1
   intl: ^0.20.2
   uuid: ^4.4.0
@@ -22,16 +23,46 @@ dependencies:
   file_picker: ^8.1.7
   excel: ^4.0.6
   shared_preferences: ^2.5.3
+  window_manager: ^0.4.3
   pdf: ^3.11.1
   printing: ^5.13.2
   share_plus: ^10.1.4
   path_provider: ^2.1.5
   image: ^4.3.0
+  image_cropper: ^8.1.0
+  image_picker: ^1.1.2
+  path: ^1.9.0
+  barcode: ^2.2.7
+  barcode_widget: ^2.0.4
+  qr_flutter: ^4.1.0
+  open_filex: ^4.5.0
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  connectivity_plus: ^6.1.3
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.1
+  msix: ^3.16.7
+
+msix_config:
+  display_name: BuildEra
+  publisher_display_name: Solutivo Studio
+  identity_name: com.solutivo.buildera
+  publisher: CN=Solutivo Studio
+  msix_version: 1.0.0.0
+  logo_path: assets/images/logo.png
+  capabilities: internetClient, location, privateNetworkClientServer
+  install_certificate: true
+
+flutter_launcher_icons:
+  image_path: "assets/images/logo.png"
+  windows:
+    generate: true
+    image_path: "assets/images/logo.png"
+    icon_size: 256
 
 flutter:
   uses-material-design: true

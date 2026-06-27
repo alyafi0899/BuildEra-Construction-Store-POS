@@ -1,3 +1,5 @@
+import '../../features/products/models/product_financials.dart';
+
 class ProductUnit {
   final String id;
   final String productId;
@@ -41,6 +43,17 @@ class ProductUnit {
         conversionRate: conversionRate ?? this.conversionRate,
         sellPrice:      sellPrice ?? this.sellPrice,
       );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ProductUnit &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          unitName == other.unitName;
+
+  @override
+  int get hashCode => id.hashCode ^ unitName.hashCode;
 }
 
 class Product {
@@ -48,12 +61,14 @@ class Product {
   final String name;
   final String category;
   final String? barcode;
+  final String? description; // New field
   final double costPrice;
   final double basePrice;
   final String baseUnit;
   final String? defaultUnitName;
   final double stock;
   final String? imagePath;
+  final ProductFinancials financials;
   final DateTime createdAt;
   final DateTime updatedAt;
   final List<ProductUnit> units;
@@ -63,12 +78,14 @@ class Product {
     required this.name,
     required this.category,
     this.barcode,
+    this.description,
     required this.costPrice,
     required this.basePrice,
     required this.baseUnit,
     this.defaultUnitName,
     required this.stock,
     this.imagePath,
+    this.financials = const ProductFinancials(),
     required this.createdAt,
     required this.updatedAt,
     this.units = const [],
@@ -80,12 +97,14 @@ class Product {
         name:      m['name'] as String? ?? 'Produk Tanpa Nama',
         category:  m['category'] as String? ?? 'Lainnya',
         barcode:   m['barcode'] as String?,
+        description: m['description'] as String?,
         costPrice: (m['cost_price'] as num? ?? 0).toDouble(),
         basePrice: (m['base_price'] as num? ?? 0).toDouble(),
         baseUnit:  m['base_unit'] as String? ?? 'pcs',
         defaultUnitName: m['default_unit_name'] as String?,
         stock:     (m['stock'] as num? ?? 0).toDouble(),
         imagePath: m['image_path'] as String?,
+        financials: ProductFinancials.fromMap(Map<String, dynamic>.from(m['financials'] as Map? ?? {})),
         createdAt: DateTime.tryParse(m['created_at'] as String? ?? '') ?? DateTime.now(),
         updatedAt: DateTime.tryParse(m['updated_at'] as String? ?? '') ?? DateTime.now(),
         units:     units,
@@ -96,12 +115,14 @@ class Product {
         'name':        name,
         'category':    category,
         'barcode':     barcode,
+        'description': description,
         'cost_price':  costPrice,
         'base_price':  basePrice,
         'base_unit':   baseUnit,
         'default_unit_name': defaultUnitName,
         'stock':       stock,
         'image_path':  imagePath,
+        'financials':  financials.toMap(),
         'created_at':  createdAt.toIso8601String(),
         'updated_at':  updatedAt.toIso8601String(),
       };
@@ -138,30 +159,37 @@ class Product {
   }
 
   Product copyWith({
+    String? id,
     String? name,
     String? category,
     String? barcode,
+    String? description,
     double? costPrice,
     double? basePrice,
     String? baseUnit,
     String? defaultUnitName,
     double? stock,
     String? imagePath,
+    ProductFinancials? financials,
+    DateTime? createdAt,
+    DateTime? updatedAt,
     List<ProductUnit>? units,
   }) =>
       Product(
-        id:        id,
+        id:        id ?? this.id,
         name:      name ?? this.name,
         category:  category ?? this.category,
         barcode:   barcode ?? this.barcode,
+        description: description ?? this.description,
         costPrice: costPrice ?? this.costPrice,
         basePrice: basePrice ?? this.basePrice,
         baseUnit:  baseUnit ?? this.baseUnit,
         defaultUnitName: defaultUnitName ?? this.defaultUnitName,
         stock:     stock ?? this.stock,
         imagePath: imagePath ?? this.imagePath,
-        createdAt: createdAt,
-        updatedAt: DateTime.now(),
+        financials: financials ?? this.financials,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? DateTime.now(),
         units:     units ?? this.units,
       );
 }

@@ -1,23 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/constants/app_constants.dart';
 import '../../features/settings/providers/settings_provider.dart';
+import '../../core/sync/widgets/sync_status_bar.dart';
 
 class _NavItem {
   final IconData icon;
   final String   label;
   final int      index;
-  const _NavItem(this.icon, this.label, this.index);
+  final String?  category;
+  const _NavItem(this.icon, this.label, this.index, [this.category]);
 }
 
 const _navItems = [
-  _NavItem(Icons.point_of_sale_rounded,       'Kasir',       0),
-  _NavItem(Icons.inventory_2_rounded,         'Produk',      1),
-  _NavItem(Icons.warehouse_rounded,           'Inventori',   2),
-  _NavItem(Icons.receipt_long_rounded,        'Transaksi',   3),
-  _NavItem(Icons.bar_chart_rounded,           'Analitik',    4),
-  _NavItem(Icons.settings_rounded,            'Pengaturan',  5),
+  // OPERASIONAL
+  _NavItem(Icons.point_of_sale_rounded,       'Kasir',       0, 'OPERASIONAL'),
+  _NavItem(Icons.receipt_long_rounded,        'Transaksi',   3, 'OPERASIONAL'),
+  _NavItem(Icons.account_balance_wallet_rounded, 'Piutang',   4, 'OPERASIONAL'),
+  _NavItem(Icons.people_rounded,               'Pelanggan',   5, 'OPERASIONAL'),
+
+  // INVENTORI
+  _NavItem(Icons.inventory_2_rounded,         'Produk',      1, 'INVENTORI'),
+  _NavItem(Icons.warehouse_rounded,           'Inventori',   2, 'INVENTORI'),
+  _NavItem(Icons.qr_code_2_rounded,           'Label Barcode', 7, 'INVENTORI'),
+
+  // FINANSIAL
+  _NavItem(Icons.bar_chart_rounded,           'Analitik',    6, 'FINANSIAL'),
+  _NavItem(Icons.receipt_rounded,              'Tagihan',     9, 'FINANSIAL'),
+
+  // SISTEM
+  _NavItem(Icons.settings_rounded,            'Pengaturan',  8, 'SISTEM'),
 ];
 
 class AppSidebar extends ConsumerWidget {
@@ -47,28 +59,31 @@ class AppSidebar extends ConsumerWidget {
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Container(
-                width: 36, height: 36,
-                decoration: BoxDecoration(
-                  color: AppTheme.accent,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.construction, color: Colors.white, size: 20),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.asset('assets/images/logo.png', width: 36, height: 36, fit: BoxFit.cover),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('BuildEra',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                            color:       Colors.white,
+                            fontSize:    15,
+                            fontWeight:  FontWeight.w900,
+                            letterSpacing: 1.0,
+                          )),
                   Text(businessName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      style: TextStyle(
                             color:       AppTheme.accent,
-                            fontSize:    13,
-                            fontWeight:  FontWeight.w800,
-                            letterSpacing: 1.2,
+                            fontSize:    10,
+                            fontWeight:  FontWeight.w600,
+                            letterSpacing: 0.5,
                           )),
-                  Text('v${AppConstants.appVersion}',
-                      style: Theme.of(context).textTheme.bodySmall),
                 ]),
               ),
             ]),
@@ -77,24 +92,17 @@ class AppSidebar extends ConsumerWidget {
 
         // Nav items
         Expanded(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(left: 10, bottom: 8, top: 4),
-                  child: Text('MENU',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            letterSpacing: 1.5,
-                            fontWeight: FontWeight.w700,
-                          )),
+                ..._buildCategorizedNav(context),
+                const SizedBox(height: 32),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 10),
+                  child: SyncStatusBar(),
                 ),
-                ..._navItems.map((item) => _NavTile(
-                      item:     item,
-                      selected: selectedIndex == item.index,
-                      onTap:    () => onItemSelected(item.index),
-                    )),
               ],
             ),
           ),
@@ -126,6 +134,34 @@ class AppSidebar extends ConsumerWidget {
         ),
       ]),
     );
+  }
+
+  List<Widget> _buildCategorizedNav(BuildContext context) {
+    final Map<String, List<_NavItem>> categories = {};
+    for (final item in _navItems) {
+      final cat = item.category ?? 'LAINNYA';
+      categories.putIfAbsent(cat, () => []).add(item);
+    }
+
+    final List<Widget> widgets = [];
+    categories.forEach((cat, items) {
+      widgets.add(Padding(
+        padding: const EdgeInsets.only(left: 10, bottom: 8, top: 16),
+        child: Text(cat,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  letterSpacing: 1.5,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 10,
+                  color: AppTheme.textMuted,
+                )),
+      ));
+      widgets.addAll(items.map((item) => _NavTile(
+            item:     item,
+            selected: selectedIndex == item.index,
+            onTap:    () => onItemSelected(item.index),
+          )));
+    });
+    return widgets;
   }
 }
 

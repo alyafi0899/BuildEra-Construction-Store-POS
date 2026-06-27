@@ -51,17 +51,25 @@ class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
         // Skip header row
         for (var i = 1; i < sheet.maxRows; i++) {
           final row = sheet.rows[i];
-          if (row.isEmpty || row[0] == null) continue;
+          if (row.isEmpty) continue;
 
-          final name = row[0]?.value?.toString() ?? '';
+          // Robust value extraction helper
+          String val(int idx) {
+            if (idx >= row.length || row[idx] == null) return '';
+            final cellValue = row[idx]!.value;
+            if (cellValue == null) return '';
+            return cellValue.toString().trim();
+          }
+
+          final name = val(0);
           if (name.isEmpty) continue;
 
-          final barcode  = (row.length > 1) ? row[1]?.value?.toString() : null;
-          final category = (row.length > 2) ? row[2]?.value?.toString() ?? 'Lainnya' : 'Lainnya';
-          final baseUnit = (row.length > 3) ? row[3]?.value?.toString() ?? 'pcs' : 'pcs';
-          final stock    = (row.length > 4) ? double.tryParse(row[4]?.value?.toString() ?? '0') ?? 0.0 : 0.0;
-          final costPrice = (row.length > 5) ? double.tryParse(row[5]?.value?.toString() ?? '0') ?? 0 : 0.0;
-          final basePrice = (row.length > 6) ? double.tryParse(row[6]?.value?.toString() ?? '0') ?? 0 : 0.0;
+          final barcode   = val(1).isEmpty ? null : val(1);
+          final category  = val(2).isEmpty ? 'Lainnya' : val(2);
+          final baseUnit  = val(3).isEmpty ? 'pcs' : val(3);
+          final stock     = double.tryParse(val(4)) ?? 0.0;
+          final costPrice = double.tryParse(val(5)) ?? 0.0;
+          final basePrice = double.tryParse(val(6)) ?? 0.0;
           
           final productId = _uuid.v4();
           final product = Product(
@@ -77,11 +85,7 @@ class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
             updatedAt: DateTime.now(),
           );
 
-          // Note: We only import base product info. 
-          // Additional units can be added manually via 'Edit Produk' in the UI.
-          final units = <ProductUnit>[];
-
-          productsToImport.add({product: units});
+          productsToImport.add({product: []});
         }
       }
 

@@ -4,6 +4,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:open_filex/open_filex.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../../shared/models/transaction.dart';
@@ -11,6 +12,16 @@ import '../../../features/settings/models/store_settings.dart';
 import 'formatters.dart';
 
 class InvoiceHelper {
+  static String? get _downloadsPath {
+    if (Platform.isWindows) {
+      final userProfile = Platform.environment['USERPROFILE'];
+      if (userProfile != null) {
+        return '$userProfile\\Downloads';
+      }
+    }
+    return null;
+  }
+
   static Future<Uint8List> generatePdf(Transaction tx, StoreSettings settings) async {
     final pdf = pw.Document();
 
@@ -164,6 +175,15 @@ class InvoiceHelper {
 
   static Future<void> saveInvoice(Transaction tx, StoreSettings settings) async {
     final pdfBytes = await generatePdf(tx, settings);
-    await Printing.sharePdf(bytes: pdfBytes, filename: 'Invoice-${tx.invoiceNumber}.pdf');
+    final filename = 'Invoice-${tx.invoiceNumber}.pdf';
+    
+    final dlPath = _downloadsPath;
+    if (dlPath != null) {
+      final file = File('$dlPath\\$filename');
+      await file.writeAsBytes(pdfBytes);
+      await OpenFilex.open(file.path);
+    } else {
+      await Printing.sharePdf(bytes: pdfBytes, filename: filename);
+    }
   }
 }

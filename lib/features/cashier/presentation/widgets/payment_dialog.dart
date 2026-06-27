@@ -10,6 +10,11 @@ import '../../providers/cart_provider.dart';
 import '../../../payment/providers/transaction_provider.dart';
 import '../../../../core/utils/invoice_helper.dart';
 import '../../../settings/providers/settings_provider.dart';
+import '../../../debts/providers/debt_repository.dart';
+import '../../../debts/models/customer.dart';
+import 'package:uuid/uuid.dart';
+
+final _uuid = Uuid();
 
 class PaymentDialog extends ConsumerStatefulWidget {
   const PaymentDialog({super.key});
@@ -28,9 +33,14 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   String  _method     = AppConstants.paymentCash;
   final   _amountCtrl = TextEditingController();
   final   _notesCtrl  = TextEditingController();
+  final   ScrollController _scrollController = ScrollController();
   bool    _processing = false;
   bool    _success    = false;
   Transaction? _tx;
+
+  // Piutang state
+  Customer? _selectedCustomer;
+  DateTime _dueDate = DateTime.now().add(const Duration(days: 30));
 
   double get _paid =>
       double.tryParse(_amountCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
@@ -39,20 +49,33 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   void dispose() {
     _amountCtrl.dispose();
     _notesCtrl.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
   Future<void> _confirm() async {
     final cart = ref.read(cartProvider);
+    
     if (_method == AppConstants.paymentCash && _paid < cart.total) {
       showError(context, 'Jumlah bayar kurang dari total');
       return;
     }
+
+    if (_method == AppConstants.paymentPiutang) {
+      if (_selectedCustomer == null) {
+        showError(context, 'Pilih pelanggan untuk transaksi piutang');
+        return;
+      }
+      // For Piutang, we update the cart with customer info before checkout
+      ref.read(cartProvider.notifier).setCustomer(_selectedCustomer!.id, _selectedCustomer!.name);
+    }
+
     setState(() => _processing = true);
     try {
       final txId = await ref.read(transactionsProvider.notifier).checkout(
         paymentMethod: _method,
-        amountPaid:    _method == AppConstants.paymentCash ? _paid : cart.total,
+        amountPaid:    (_method == AppConstants.paymentCash || _method == AppConstants.paymentPiutang) ? _paid : cart.total,
+        dueDate:       _method == AppConstants.paymentPiutang ? _dueDate : null,
         notes:         _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
       );
       
@@ -150,13 +173,18 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
 
       // Body — two columns
       Flexible(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Expanded(child: _orderSummary(context, cart)),
-            const SizedBox(width: 32),
-            Expanded(child: _paymentPanel(context, cart, change)),
-          ]),
+        child: Scrollbar(
+          controller: _scrollController,
+          thumbVisibility: true,
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            padding: const EdgeInsets.all(24),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: _orderSummary(context, cart)),
+              const SizedBox(width: 32),
+              Expanded(child: _paymentPanel(context, cart, change)),
+            ]),
+          ),
         ),
       ),
 
@@ -248,6 +276,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
 
   Widget _paymentPanel(BuildContext context, CartState cart, double change) {
     final settings = ref.watch(settingsProvider);
+    final customersAsync = ref.watch(customersProvider);
     
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text('Metode Pembayaran',
@@ -258,8 +287,71 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
       const SizedBox(height: 12),
       ...AppConstants.paymentMethods.map((m) => _methodTile(context, m)),
       
-      if (_method == AppConstants.paymentCash) ...[
+      if (_method == AppConstants.paymentCash || _method == AppConstants.paymentPiutang) ...[
         const SizedBox(height: 16),
+        if (_method == AppConstants.paymentPiutang) ...[
+          // Customer Selection Header with Add Button
+          Row(
+            children: [
+              const Text('Pilih Pelanggan *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: () => _showQuickAddCustomer(context),
+                icon: const Icon(Icons.person_add_alt_1_rounded, size: 16),
+                label: const Text('Pelanggan Baru', style: TextStyle(fontSize: 12)),
+                style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 48,
+            child: customersAsync.when(
+              loading: () => const AppLoading(),
+              error:   (_, __) => const Text('Gagal memuat data pelanggan'),
+              data: (customers) => DropdownButtonFormField<String>(
+                initialValue: customers.any((c) => c.id == _selectedCustomer?.id) ? _selectedCustomer?.id : null,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  prefixIcon: Icon(Icons.person_outline, size: 20),
+                ),
+                hint: const Text('Pilih dari daftar...', style: TextStyle(fontSize: 13)),
+                dropdownColor: AppTheme.surfaceAlt,
+                items: customers.map((c) => DropdownMenuItem(
+                  value: c.id,
+                  child: Text('${c.name} (${c.phone})', style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
+                )).toList(),
+                onChanged: (v) => setState(() {
+                  _selectedCustomer = customers.firstWhereOrNull((c) => c.id == v);
+                }),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Due Date Selection
+          InkWell(
+            onTap: () async {
+              final d = await showDatePicker(
+                context: context,
+                initialDate: _dueDate,
+                firstDate: DateTime.now(),
+                lastDate: DateTime.now().add(const Duration(days: 365)),
+              );
+              if (d != null) setState(() => _dueDate = d);
+            },
+            child: InputDecorator(
+              decoration: const InputDecoration(
+                labelText: 'Jatuh Tempo *',
+                prefixIcon: Icon(Icons.calendar_today_rounded, size: 18),
+              ),
+              child: Text(Formatters.date(_dueDate), style: const TextStyle(fontSize: 14)),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+        
         TextField(
           controller:   _amountCtrl,
           keyboardType: TextInputType.number,
@@ -267,13 +359,15 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
               color: AppTheme.textPrimary,
               fontSize:   18,
               fontWeight: FontWeight.w700),
-          decoration: const InputDecoration(
-            labelText:  'Jumlah Bayar',
+          decoration: InputDecoration(
+            labelText:  _method == AppConstants.paymentPiutang ? 'Jumlah Bayar (DP/Cicilan)' : 'Jumlah Bayar',
+            hintText: _method == AppConstants.paymentPiutang ? 'Isi 0 jika belum bayar sama sekali' : null,
             prefixText: 'Rp ',
           ),
           onChanged: (_) => setState(() {}),
         ),
-        if (_paid > 0) ...[
+        
+        if (_method == AppConstants.paymentCash && _paid > 0) ...[
           const SizedBox(height: 12),
           // Change display
           Container(
@@ -302,13 +396,36 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
               ),
             ]),
           ),
-          // Quick cash buttons
+        ],
+
+        if (_method == AppConstants.paymentPiutang) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.warning.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.warning.withValues(alpha: 0.4)),
+            ),
+            child: Row(children: [
+              const Text('Total Piutang', style: TextStyle(fontSize: 13)),
+              const Spacer(),
+              Text(
+                Formatters.currency(cart.total - _paid < 0 ? 0 : cart.total - _paid),
+                style: const TextStyle(color: AppTheme.warning, fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ]),
+          ),
+        ],
+
+        // Quick cash buttons
+        if (_paid == 0 || _method == AppConstants.paymentCash) ...[
           const SizedBox(height: 10),
           Wrap(
             spacing: 6,
             runSpacing: 6,
             children: [50000, 100000, 150000, 200000, 500000]
-                .where((v) => v >= cart.total)
+                .where((v) => v >= (cart.total))
                 .map((v) => OutlinedButton(
                       onPressed: () =>
                           setState(() => _amountCtrl.text = v.toString()),
@@ -488,6 +605,58 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
       case AppConstants.paymentTransfer: return Icons.account_balance_rounded;
       default:                           return Icons.payment;
     }
+  }
+
+  void _showQuickAddCustomer(BuildContext context) {
+    final nameCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Tambah Pelanggan Cepat'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Nama Lengkap *', isDense: true),
+                validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: phoneCtrl,
+                decoration: const InputDecoration(labelText: 'Nomor HP *', isDense: true),
+                validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () async {
+              if (formKey.currentState!.validate()) {
+                final newCustomer = Customer(
+                  id: _uuid.v4(),
+                  name: nameCtrl.text.trim(),
+                  phone: phoneCtrl.text.trim(),
+                  createdAt: DateTime.now(),
+                );
+                
+                await ref.read(debtRepositoryProvider).saveCustomer(newCustomer);
+                setState(() => _selectedCustomer = newCustomer);
+                if (context.mounted) Navigator.pop(context);
+              }
+            },
+            child: const Text('Tambah & Pilih'),
+          ),
+        ],
+      ),
+    );
   }
 }
 

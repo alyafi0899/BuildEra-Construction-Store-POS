@@ -1,41 +1,34 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../models/store_settings.dart';
 
 final settingsProvider = NotifierProvider<SettingsNotifier, StoreSettings>(SettingsNotifier.new);
 
 class SettingsNotifier extends Notifier<StoreSettings> {
-  final _db = FirebaseFirestore.instance;
-  static const _docPath = 'settings/store';
-
   @override
   StoreSettings build() {
-    _listenToSettings();
+    final user = ref.watch(authStateProvider).value;
+    if (user != null) {
+      _loadSettings(user.uid);
+    }
     return const StoreSettings();
   }
 
-  void _listenToSettings() {
-    _db.doc(_docPath).snapshots().listen((snapshot) {
-      if (snapshot.exists && snapshot.data() != null) {
-        state = StoreSettings.fromMap(snapshot.data()!);
-      }
-    }, onError: (e) {
-      // Handle error
-    });
-  }
+  FirebaseFirestore get _db => FirebaseFirestore.instance;
 
-  Future<void> updateSettings(StoreSettings settings) async {
-    try {
-      await _db.doc(_docPath).set(settings.toMap(), SetOptions(merge: true));
-      // State will be updated by the listener
-    } catch (e) {
-      // Handle error
-      rethrow;
+  Future<void> _loadSettings(String uid) async {
+    final doc = await _db.collection('users').doc(uid).get();
+    if (doc.exists) {
+      state = StoreSettings.fromMap(doc.data() as Map<String, dynamic>);
     }
   }
 
-  Future<void> updateLogo(String? logoUrl) async {
-    final updated = state.copyWith(logoUrl: logoUrl);
-    await updateSettings(updated);
+  Future<void> updateSettings(StoreSettings settings, {String? uid}) async {
+    final targetUid = uid ?? ref.read(authStateProvider).value?.uid;
+    if (targetUid == null) return;
+    
+    await _db.collection('users').doc(targetUid).set(settings.toMap(), SetOptions(merge: true));
+    state = settings;
   }
 }

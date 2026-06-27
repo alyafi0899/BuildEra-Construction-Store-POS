@@ -1,91 +1,213 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
-import 'package:cloud_firestore/cloud_firestore.dart' as firestore hide Transaction;
+import 'package:cloud_firestore/cloud_firestore.dart' as firestore
+    hide Transaction;
 import 'package:firebase_storage/firebase_storage.dart' as storage;
+import 'package:hive_flutter/hive_flutter.dart';
 import 'dart:typed_data';
 import '../../../core/utils/image_helper.dart';
+import '../../../core/sync/models/sync_task.dart';
+import '../../../core/sync/providers/sync_provider.dart';
+import '../../../core/sync/services/local_database.dart';
 import '../../../shared/models/product.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../models/product_financials.dart';
+
+import '../providers/barcode_history_provider.dart';
 
 final _uuid = Uuid();
 
 // ── Repository ────────────────────────────────────────────────────────────
 
 class ProductRepository {
-  final _db = firestore.FirebaseFirestore.instance;
-  final _storage = storage.FirebaseStorage.instance;
+  final String _uid;
+  final firestore.FirebaseFirestore _db = firestore.FirebaseFirestore.instance;
+  final storage.FirebaseStorage _storage = storage.FirebaseStorage.instance;
+  final BarcodeHistoryRepository _historyRepo;
+  final Ref _ref;
 
-  Stream<List<Product>> getProductsStream() {
-    return _db.collection('products').orderBy('name').snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        final unitsData = data['units'] as List? ?? [];
-        final units = unitsData
-            .whereType<Map<String, dynamic>>()
-            .map((u) => ProductUnit.fromMap(u))
-            .toList();
-        return Product.fromMap(data, units: units);
-      }).toList();
-    });
-  }
+  ProductRepository(this._uid, this._historyRepo, this._ref);
 
-  Future<List<Product>> getAllProducts() async {
-    try {
-      final snapshot = await _db.collection('products').orderBy('name').get();
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        final unitsData = data['units'] as List? ?? [];
-        final units = unitsData
-            .whereType<Map<String, dynamic>>()
-            .map((u) => ProductUnit.fromMap(u))
-            .toList();
-        return Product.fromMap(data, units: units);
-      }).toList();
-    } catch (e) {
-      return [];
+  firestore.CollectionReference get _productsCol => 
+      _db.collection('users').doc(_uid).collection('products');
+
+  Future<Box> _getBox() => LocalDatabase.openBox(_uid, 'products');
+
+  // ── Sync Logic ────────────────────────────────────────────────────────────
+
+  Future<void> bootstrap() async {
+    final box = await _getBox();
+    if (box.isNotEmpty) return; // Already cached
+
+    final snapshot = await _productsCol.get();
+    for (final doc in snapshot.docs) {
+      await box.put(doc.id, doc.data());
     }
   }
 
-  Future<String?> uploadProductImage(String productId, Uint8List bytes) async {
+  // ── Read Operations ────────────────────────────────────────────────────────
+
+  Stream<List<Product>> getProductsStream() async* {
+    final box = await _getBox();
+    
+    // 1. Emit current local data immediately
+    yield _productsFromBox(box);
+
+    // 2. Listen to local changes
+    yield* box.watch().map((_) => _productsFromBox(box));
+  }
+
+  List<Product> _productsFromBox(Box box) {
+    final list = box.values.map((data) {
+      final m = Map<String, dynamic>.from(data as Map);
+      final unitsData = m['units'] as List? ?? [];
+      final units = unitsData
+          .map((u) => ProductUnit.fromMap(Map<String, dynamic>.from(u as Map)))
+          .toList();
+      return Product.fromMap(m, units: units);
+    }).toList();
+    list.sort((a, b) => a.name.compareTo(b.name));
+    return list;
+  }
+
+  Future<List<Product>> getAllProducts() async {
+    final box = await _getBox();
+    return _productsFromBox(box);
+  }
+
+  Future<Product?> getProductByBarcode(String barcode) async {
+    final products = await getAllProducts();
+    final normalized = barcode.trim();
     try {
-      final compressedBytes = await ImageHelper.compressImage(bytes);
-      final ref = _storage.ref().child('products/$productId.jpg');
-      await ref.putData(compressedBytes, storage.SettableMetadata(contentType: 'image/jpeg'));
-      return await ref.getDownloadURL();
-    } catch (e) {
+      return products.firstWhere((p) => p.barcode?.trim() == normalized);
+    } catch (_) {
       return null;
     }
   }
 
+  // ── Write Operations ───────────────────────────────────────────────────────
+
   Future<void> saveProduct(Product p, List<ProductUnit> units) async {
-    if (p.barcode != null && p.barcode!.trim().isNotEmpty) {
-      final dupBarcode = await _db.collection('products')
-          .where('barcode', isEqualTo: p.barcode!.trim())
-          .limit(1)
-          .get();
-      if (dupBarcode.docs.isNotEmpty && dupBarcode.docs.first.id != p.id) {
-        throw 'Barcode "${p.barcode}" sudah digunakan oleh produk lain';
-      }
-    }
+    // 1. Local Validation
+    final products = await getAllProducts();
+    final nameLower = p.name.trim().toLowerCase();
     
-    final dupName = await _db.collection('products')
-        .where('name', isEqualTo: p.name.trim())
-        .limit(1)
-        .get();
-    if (dupName.docs.isNotEmpty && dupName.docs.first.id != p.id) {
-      throw 'Produk dengan nama "${p.name}" sudah ada';
+    // Check for duplicate Name
+    final dupName = products.any((item) => item.name.trim().toLowerCase() == nameLower && item.id != p.id);
+    if (dupName) throw 'Produk dengan nama "${p.name}" sudah ada.';
+
+    // Check for duplicate Barcode
+    if (p.barcode != null && p.barcode!.trim().isNotEmpty) {
+      final normalizedBarcode = p.barcode!.trim();
+      final isUsed = await _historyRepo.isBarcodeUsed(normalizedBarcode);
+      if (isUsed) {
+        final existing = products.any((item) => item.barcode?.trim() == normalizedBarcode && item.id != p.id);
+        if (existing) throw 'Barcode "${p.barcode}" sudah digunakan oleh produk lain.';
+      }
     }
 
     final data = p.toMap();
     data['units'] = units.map((u) => u.toMap()).toList();
-    await _db.collection('products').doc(p.id).set(data);
+
+    // 2. Write Local
+    final box = await _getBox();
+    await box.put(p.id, data);
+
+    // 3. Queue Sync
+    await _ref.read(syncProvider.notifier).addToQueue(
+      collection: 'products',
+      documentId: p.id,
+      action:     SyncAction.update, // set handles both create and update
+      data:       data,
+    );
+
+    // 4. Log barcode local history (simplified for now)
+    if (p.barcode != null && p.barcode!.trim().isNotEmpty) {
+      await _historyRepo.logBarcode(p.barcode!, p.name, p.id);
+    }
   }
 
-  Future<void> saveProductsBatch(List<Map<Product, List<ProductUnit>>> productsWithUnits) async {
-    final existing = await getAllProducts();
-    final existingBarcodes = existing.map((e) => e.barcode?.trim()).whereType<String>().toSet();
-    final existingNames = existing.map((e) => e.name.trim().toLowerCase()).toSet();
+  Future<void> updateStock(String productId, double delta) async {
+    final box = await _getBox();
+    final data = box.get(productId);
+    if (data == null) return;
 
-    final toImport = <Map<Product, List<ProductUnit>>>[];
+    final m = Map<String, dynamic>.from(data as Map);
+    final currentStock = (m['stock'] as num? ?? 0).toDouble();
+    m['stock'] = currentStock + delta;
+    m['updated_at'] = DateTime.now().toIso8601String();
+
+    await box.put(productId, m);
+
+    await _ref.read(syncProvider.notifier).addToQueue(
+      collection: 'products',
+      documentId: productId,
+      action:     SyncAction.update,
+      data:       {'stock': m['stock'], 'updated_at': m['updated_at']},
+    );
+  }
+
+  Future<void> deleteProduct(String id) async {
+    final box = await _getBox();
+    final data = box.get(id);
+    final barcode = data != null ? (data as Map)['barcode'] as String? : null;
+
+    await box.delete(id);
+
+    await _ref.read(syncProvider.notifier).addToQueue(
+      collection: 'products',
+      documentId: id,
+      action:     SyncAction.delete,
+      data:       {},
+    );
+
+    if (barcode != null && barcode.isNotEmpty) {
+      await _historyRepo.archiveBarcode(barcode);
+    }
+
+    try {
+      await _storage.ref().child('users/$_uid/products/$id.jpg').delete();
+    } catch (_) {}
+  }
+
+  // ── Images (Keep Online-Required for now as images are large) ────────────────
+
+  Future<void> deleteProductsBatch(List<String> ids) async {
+    final box = await _getBox();
+    final tasks = <SyncTask>[];
+    
+    for (final id in ids) {
+      await box.delete(id);
+      tasks.add(SyncTask(
+        id: _uuid.v4(),
+        collection: 'products',
+        documentId: id,
+        action: SyncAction.delete,
+        data: {},
+        createdAt: DateTime.now(),
+      ));
+    }
+
+    await _ref.read(syncProvider.notifier).addBatchToQueue(tasks);
+  }
+
+  Future<void> saveProductsBatch(
+      List<Map<Product, List<ProductUnit>>> productsWithUnits) async {
+    final box = await _getBox();
+    
+    // 1. Fetch current local data for mapping and validation
+    final existing = await getAllProducts();
+    final Map<String, Product> barcodeToProduct = {};
+    final Map<String, Product> nameToProduct = {};
+    
+    for (final p in existing) {
+      if (p.barcode != null && p.barcode!.isNotEmpty) {
+        barcodeToProduct[p.barcode!.trim()] = p;
+      }
+      nameToProduct[p.name.trim().toLowerCase()] = p;
+    }
+
+    final toProcess = <Product>[];
     final seenBarcodesInBatch = <String>{};
     final seenNamesInBatch = <String>{};
 
@@ -94,79 +216,130 @@ class ProductRepository {
       final nameLower = p.name.trim().toLowerCase();
       final barcode = p.barcode?.trim();
 
-      if (existingNames.contains(nameLower) || seenNamesInBatch.contains(nameLower)) {
-        continue;
-      }
-      
+      // Check for Barcode match first (PRIORITY: UPDATE)
       if (barcode != null && barcode.isNotEmpty) {
-        if (existingBarcodes.contains(barcode) || seenBarcodesInBatch.contains(barcode)) {
+        if (barcodeToProduct.containsKey(barcode)) {
+          // UPDATE case: Use existing ID but update everything else
+          final existingProduct = barcodeToProduct[barcode]!;
+          toProcess.add(p.copyWith(
+            id: existingProduct.id, 
+            createdAt: existingProduct.createdAt,
+            updatedAt: DateTime.now(),
+          ));
           continue;
         }
+        
+        if (seenBarcodesInBatch.contains(barcode)) continue;
         seenBarcodesInBatch.add(barcode);
       }
-      
-      seenNamesInBatch.add(nameLower);
-      toImport.add(item);
-    }
 
-    if (toImport.isEmpty) return;
-
-    const int batchSize = 500;
-    for (var i = 0; i < toImport.length; i += batchSize) {
-      final end = (i + batchSize < toImport.length) ? i + batchSize : toImport.length;
-      final chunk = toImport.sublist(i, end);
-      
-      final batch = _db.batch();
-      for (final item in chunk) {
-        final p = item.keys.first;
-        final units = item.values.first;
-        final data = p.toMap();
-        data['units'] = units.map((u) => u.toMap()).toList();
-        batch.set(_db.collection('products').doc(p.id), data);
+      // Check for Name duplicate if not a barcode match (SKIP if already exists with different barcode)
+      if (nameToProduct.containsKey(nameLower) || seenNamesInBatch.contains(nameLower)) {
+        continue;
       }
-      await batch.commit();
+
+      seenNamesInBatch.add(nameLower);
+      toProcess.add(p);
     }
+
+    if (toProcess.isEmpty) return;
+
+    // 3. Process items in Hive and Queue
+    final tasks = <SyncTask>[];
+    for (final p in toProcess) {
+      final data = p.toMap();
+      // We assume units are handled elsewhere or empty for simple import
+      data['units'] = p.units.map((u) => u.toMap()).toList();
+
+      await box.put(p.id, data);
+      
+      tasks.add(SyncTask(
+        id: _uuid.v4(),
+        collection: 'products',
+        documentId: p.id,
+        action: SyncAction.update,
+        data: data,
+        createdAt: DateTime.now(),
+      ));
+
+      if (p.barcode != null && p.barcode!.isNotEmpty) {
+        await _historyRepo.logBarcode(p.barcode!, p.name, p.id);
+      }
+    }
+
+    await _ref.read(syncProvider.notifier).addBatchToQueue(tasks);
   }
 
-  Future<void> updateStock(String productId, double delta) async {
-    await _db.collection('products').doc(productId).update({
-      'stock': firestore.FieldValue.increment(delta),
-      'updated_at': DateTime.now().toIso8601String(),
-    });
+  Future<void> updateProductsWithBarcodesBatch(List<Product> products) async {
+    final box = await _getBox();
+    final tasks = <SyncTask>[];
+
+    for (final p in products) {
+      final data = p.toMap();
+      data['units'] = p.units.map((u) => u.toMap()).toList();
+      
+      await box.put(p.id, data);
+      
+      tasks.add(SyncTask(
+        id: _uuid.v4(),
+        collection: 'products',
+        documentId: p.id,
+        action: SyncAction.update,
+        data: data,
+        createdAt: DateTime.now(),
+      ));
+    }
+
+    await _ref.read(syncProvider.notifier).addBatchToQueue(tasks);
   }
 
-  Future<void> deleteProduct(String id) async {
-    await _db.collection('products').doc(id).delete();
+  Future<String?> uploadProductImage(String productId, Uint8List bytes) async {
     try {
-      await _storage.ref().child('products/$id.jpg').delete();
-    } catch (_) {}
+      final compressedBytes = await ImageHelper.processImage(bytes);
+      final ref = _storage.ref().child('users/$_uid/products/$productId.jpg');
+      await ref.putData(
+          compressedBytes, storage.SettableMetadata(contentType: 'image/jpeg'));
+      return await ref.getDownloadURL();
+    } catch (e) {
+      return null;
+    }
   }
 
-  Future<void> deleteProductsBatch(List<String> ids) async {
-    final batch = _db.batch();
-    for (final id in ids) {
-      batch.delete(_db.collection('products').doc(id));
-    }
-    await batch.commit();
+  Future<void> updatePayment(Product p, {required bool isSupplier, required double paidAmount, required PaymentStatus status}) async {
+    final box = await _getBox();
+    final updated = p.copyWith(
+      financials: p.financials.copyWith(
+        supplierPaidAmount: isSupplier ? (p.financials.supplierPaidAmount + paidAmount) : p.financials.supplierPaidAmount,
+        shippingPaidAmount: !isSupplier ? (p.financials.shippingPaidAmount + paidAmount) : p.financials.shippingPaidAmount,
+        supplierPaymentStatus: isSupplier ? status : p.financials.supplierPaymentStatus,
+        shippingPaymentStatus: !isSupplier ? status : p.financials.shippingPaymentStatus,
+      ),
+    );
+    await box.put(p.id, updated.toMap());
 
-    // Delete images (Storage doesn't support batch delete)
-    for (final id in ids) {
-      try {
-        await _storage.ref().child('products/$id.jpg').delete();
-      } catch (_) {}
-    }
+    await _ref.read(syncProvider.notifier).addToQueue(
+      collection: 'products',
+      documentId: p.id,
+      action:     SyncAction.update,
+      data:       updated.toMap(),
+    );
   }
 }
 
 // ── Providers ─────────────────────────────────────────────────────────────
 
-final productRepositoryProvider = Provider((_) => ProductRepository());
-
-final productsProvider = StreamProvider<List<Product>>((ref) {
-  return ref.watch(productRepositoryProvider).getProductsStream();
+final productRepositoryProvider = Provider<ProductRepository>((ref) {
+  final user = ref.watch(authStateProvider).value;
+  final historyRepo = ref.read(barcodeHistoryRepositoryProvider);
+  return ProductRepository(user?.uid ?? 'unknown', historyRepo, ref);
 });
 
-// Since we switched to StreamProvider, we need a separate Notifier for actions
+final productsProvider = StreamProvider<List<Product>>((ref) {
+  final repo = ref.watch(productRepositoryProvider);
+  if (repo._uid == 'unknown') return Stream.value([]);
+  return repo.getProductsStream();
+});
+
 final productsActionProvider = Provider((ref) => ProductsActionNotifier(ref));
 
 class ProductsActionNotifier {
@@ -183,16 +356,21 @@ class ProductsActionNotifier {
     return await _repo.uploadProductImage(productId, bytes);
   }
 
-  Future<void> importProducts(List<Map<Product, List<ProductUnit>>> products) async {
-    await _repo.saveProductsBatch(products);
-  }
-
   Future<void> deleteProduct(String id) async {
     await _repo.deleteProduct(id);
   }
 
   Future<void> deleteProductsBatch(List<String> ids) async {
     await _repo.deleteProductsBatch(ids);
+  }
+
+  Future<void> updateProductsBatch(List<Product> products) async {
+    await _repo.updateProductsWithBarcodesBatch(products);
+  }
+
+  Future<void> importProducts(
+      List<Map<Product, List<ProductUnit>>> products) async {
+    await _repo.saveProductsBatch(products);
   }
 
   Future<void> adjustStock(String productId, double delta) async {
