@@ -60,21 +60,36 @@ class BillPaymentRepository {
   Future<void> _recalculateBillStatus(String billId, bool isInitial) async {
     final box = await _getBox();
     final allPayments = _paymentsFromBox(box).where((p) => p.billId == billId).toList();
-    final totalPaid = allPayments.fold<double>(0, (s, p) => s + p.amount);
+    
+    // Sum separately with a tiny epsilon for safety
+    final totalSupplierPaid = allPayments
+        .where((p) => p.isForSupplier)
+        .fold<double>(0, (s, p) => s + p.amount);
+        
+    final totalShippingPaid = allPayments
+        .where((p) => !p.isForSupplier)
+        .fold<double>(0, (s, p) => s + p.amount);
 
     if (isInitial) {
       final repo = _ref.read(productRepositoryProvider);
       final products = await repo.getAllProducts();
       final p = products.where((item) => item.id == billId).firstOrNull;
       if (p != null) {
-        final totalDue = p.financials.supplierPrice + p.financials.supplierShippingCost;
+        // Use a threshold for comparison to handle double precision issues
+        const epsilon = 0.01;
         
+        final sDue = p.financials.supplierPrice;
+        final sStatus = totalSupplierPaid >= (sDue - epsilon) ? PaymentStatus.paid : (totalSupplierPaid > epsilon ? PaymentStatus.partial : PaymentStatus.unpaid);
+        
+        final shDue = p.financials.supplierShippingCost;
+        final shStatus = totalShippingPaid >= (shDue - epsilon) ? PaymentStatus.paid : (totalShippingPaid > epsilon ? PaymentStatus.partial : PaymentStatus.unpaid);
+
         final updated = p.copyWith(
           financials: p.financials.copyWith(
-            supplierPaidAmount: totalPaid > p.financials.supplierPrice ? p.financials.supplierPrice : totalPaid,
-            shippingPaidAmount: totalPaid > p.financials.supplierPrice ? (totalPaid - p.financials.supplierPrice) : 0,
-            supplierPaymentStatus: totalPaid >= p.financials.supplierPrice ? PaymentStatus.paid : (totalPaid > 0 ? PaymentStatus.partial : PaymentStatus.unpaid),
-            shippingPaymentStatus: totalPaid >= totalDue ? PaymentStatus.paid : (totalPaid > p.financials.supplierPrice ? PaymentStatus.partial : PaymentStatus.unpaid),
+            supplierPaidAmount: totalSupplierPaid,
+            shippingPaidAmount: totalShippingPaid,
+            supplierPaymentStatus: sStatus,
+            shippingPaymentStatus: shStatus,
           ),
         );
         final boxProd = await LocalDatabase.openBox(_uid, 'products');
@@ -86,13 +101,19 @@ class BillPaymentRepository {
       final rData = boxRestock.get(billId);
       if (rData != null) {
         final r = RestockRecord.fromMap(Map<String, dynamic>.from(rData as Map));
-        final totalDue = r.supplierPrice + r.shippingCost;
+        const epsilon = 0.01;
+
+        final sDue = r.supplierPrice;
+        final sStatus = totalSupplierPaid >= (sDue - epsilon) ? PaymentStatus.paid : (totalSupplierPaid > epsilon ? PaymentStatus.partial : PaymentStatus.unpaid);
+        
+        final shDue = r.shippingCost;
+        final shStatus = totalShippingPaid >= (shDue - epsilon) ? PaymentStatus.paid : (totalShippingPaid > epsilon ? PaymentStatus.partial : PaymentStatus.unpaid);
         
         final updated = r.copyWith(
-          supplierPaidAmount: totalPaid > r.supplierPrice ? r.supplierPrice : totalPaid,
-          shippingPaidAmount: totalPaid > r.supplierPrice ? (totalPaid - r.supplierPrice) : 0,
-          supplierPaymentStatus: totalPaid >= r.supplierPrice ? PaymentStatus.paid : (totalPaid > 0 ? PaymentStatus.partial : PaymentStatus.unpaid),
-          shippingPaymentStatus: totalPaid >= totalDue ? PaymentStatus.paid : (totalPaid > r.supplierPrice ? PaymentStatus.partial : PaymentStatus.unpaid),
+          supplierPaidAmount: totalSupplierPaid,
+          shippingPaidAmount: totalShippingPaid,
+          supplierPaymentStatus: sStatus,
+          shippingPaymentStatus: shStatus,
         );
         
         await boxRestock.put(updated.id, updated.toMap());

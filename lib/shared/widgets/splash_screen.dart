@@ -164,7 +164,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
             bottom: 32,
             right: 40,
             child: Text(
-              'v1.0.0-PROD',
+              'v1.2.2-PROD',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.2),
                 fontSize: 11,

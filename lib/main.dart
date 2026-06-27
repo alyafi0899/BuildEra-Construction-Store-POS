@@ -22,6 +22,9 @@ import 'features/cashier/providers/scan_mode_provider.dart';
 import 'features/cashier/presentation/widgets/barcode_listener.dart';
 import 'features/products/providers/product_provider.dart';
 import 'features/products/presentation/pages/barcode_management_page.dart';
+import 'features/inventory/providers/restock_provider.dart';
+import 'features/payment/providers/transaction_provider.dart';
+import 'features/debts/providers/debt_repository.dart';
 import 'features/auth/presentation/widgets/auth_gate.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'core/sync/services/local_database.dart';
@@ -168,7 +171,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     const BarcodeManagementPage(),
     const SettingsPage(),
     const BillsPage(),
-    const CustomerDisplayPage(), // Move to end or hidden index
+    const CustomerDisplayPage(),
   ];
 
   @override
@@ -182,7 +185,11 @@ class _MainShellState extends ConsumerState<MainShell> {
       }
     });
 
+    // Keep essential providers warm for backup and analytics
     ref.watch(productsProvider);
+    ref.watch(restockHistoryProvider);
+    ref.watch(transactionsProvider);
+    ref.watch(customersProvider);
 
     final autoAdd = ref.watch(scanModeProvider);
     final shell = Row(children: [

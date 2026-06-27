@@ -316,22 +316,31 @@ SalesSummary buildSummary(List<Transaction> txs, List<Product> products, List<Re
   }
 
   // Bills Calculation
-  final supplierMap = <String, ({double amount, int count})>{};
-  final shippingMap = <String, ({double amount, int count})>{};
+  final supplierMap = <String, ({double amount, double paid, int count})>{};
+  final shippingMap = <String, ({double amount, double paid, int count})>{};
   
   void addBill(String? name, double total, double paid, PaymentStatus status, bool isShip) {
-    if (status == PaymentStatus.unpaid || status == PaymentStatus.partial) {
-      final n = name ?? (isShip ? 'Ekspedisi Umum' : 'Supplier Umum');
-      final remaining = total - paid;
-      if (remaining <= 0) return;
+    // Only process bills that have non-applicable payment status (initial batches or restocks)
+    if (status == PaymentStatus.notApplicable) return;
 
-      if (isShip) {
-        final prev = shippingMap[n] ?? (amount: 0.0, count: 0);
-        shippingMap[n] = (amount: prev.amount + remaining, count: prev.count + 1);
-      } else {
-        final prev = supplierMap[n] ?? (amount: 0.0, count: 0);
-        supplierMap[n] = (amount: prev.amount + remaining, count: prev.count + 1);
-      }
+    final n = name ?? (isShip ? 'Ekspedisi Umum' : 'Supplier Umum');
+    // We count it if it's unpaid, partial, or even if paid (to show history summary)
+    // But for "unpaid details" in analytics, we mostly care about remaining > 0
+
+    if (isShip) {
+      final prev = shippingMap[n] ?? (amount: 0.0, paid: 0.0, count: 0);
+      shippingMap[n] = (
+        amount: prev.amount + total, 
+        paid: prev.paid + paid, 
+        count: prev.count + 1
+      );
+    } else {
+      final prev = supplierMap[n] ?? (amount: 0.0, paid: 0.0, count: 0);
+      supplierMap[n] = (
+        amount: prev.amount + total, 
+        paid: prev.paid + paid, 
+        count: prev.count + 1
+      );
     }
   }
 
@@ -350,8 +359,21 @@ SalesSummary buildSummary(List<Transaction> txs, List<Product> products, List<Re
     addBill(r.shippingServiceName, r.shippingCost, r.shippingPaidAmount, r.shippingPaymentStatus, true);
   }
 
-  final unpaidSupList = supplierMap.entries.map((e) => UnpaidBillDetail(entityName: e.key, remainingAmount: e.value.amount, count: e.value.count)).toList();
-  final unpaidShipList = shippingMap.entries.map((e) => UnpaidBillDetail(entityName: e.key, remainingAmount: e.value.amount, count: e.value.count)).toList();
+  final unpaidSupList = supplierMap.entries
+      .where((e) => e.value.amount - e.value.paid > 0) // Only those with debt
+      .map((e) => UnpaidBillDetail(
+          entityName: e.key, 
+          remainingAmount: e.value.amount - e.value.paid, 
+          count: e.value.count))
+      .toList();
+      
+  final unpaidShipList = shippingMap.entries
+      .where((e) => e.value.amount - e.value.paid > 0)
+      .map((e) => UnpaidBillDetail(
+          entityName: e.key, 
+          remainingAmount: e.value.amount - e.value.paid, 
+          count: e.value.count))
+      .toList();
 
   final top = productAggregators.values
       .map((a) => TopProduct(

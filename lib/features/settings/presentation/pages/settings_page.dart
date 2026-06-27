@@ -8,6 +8,13 @@ import '../../models/store_settings.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 
+import '../../../inventory/providers/restock_provider.dart';
+import '../../../inventory/providers/bill_payment_provider.dart';
+import '../../../debts/providers/debt_repository.dart';
+import '../../../payment/providers/transaction_provider.dart';
+import '../../../products/providers/product_provider.dart';
+import '../../../../core/utils/backup_helper.dart';
+
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
 
@@ -77,6 +84,47 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       
       ref.read(settingsProvider.notifier).updateSettings(settings);
       showSuccess(context, 'Pengaturan berhasil disimpan');
+    }
+  }
+
+  Future<void> _handleFullBackup(WidgetRef ref) async {
+    debugPrint('DEBUG: _handleFullBackup invoked');
+    
+    // 1. Fetch data from cache first
+    final products = ref.read(productsProvider).asData?.value ?? [];
+    final restocks = ref.read(restockHistoryProvider).asData?.value ?? [];
+    final billPayments = ref.read(billPaymentsProvider).asData?.value ?? [];
+    final customers = ref.read(customersProvider).asData?.value ?? [];
+    final customerDebts = ref.read(debtsProvider(null)).asData?.value ?? [];
+    final customerPayments = ref.read(debtPaymentsProvider((customerId: null, debtId: null))).asData?.value ?? [];
+    final transactions = ref.read(transactionsProvider).asData?.value ?? [];
+    final settings = ref.read(settingsProvider);
+
+    debugPrint('DEBUG: Data counts - Products: ${products.length}, Transactions: ${transactions.length}');
+
+    // 2. Immediate Feedback
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Membuka Folder Picker...'), duration: Duration(seconds: 1)),
+    );
+
+    try {
+      await BackupHelper.performFullBackup(
+        context: context,
+        products: products,
+        restocks: restocks,
+        billPayments: billPayments,
+        customers: customers,
+        customerDebts: customerDebts,
+        customerPayments: customerPayments,
+        transactions: transactions,
+        settings: settings,
+      );
+      
+      if (mounted) showSuccess(context, 'Backup Berhasil Disimpan!');
+    } catch (e, stack) {
+      debugPrint('DEBUG: Backup FATAL ERROR: $e');
+      debugPrint('DEBUG: StackTrace: $stack');
+      if (mounted) showError(context, 'Gagal Backup: $e');
     }
   }
 
@@ -151,6 +199,23 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         const SizedBox(height: 20),
                         _buildInput('Deskripsi Toko', _descriptionCtrl, Icons.description_rounded, maxLines: 3),
                         
+                        const SizedBox(height: 40),
+                        const _SectionTitle(title: 'Data & Backup'),
+                        const SizedBox(height: 16),
+                        AppCard(
+                          child: Column(
+                            children: [
+                              ListTile(
+                                leading: const Icon(Icons.download_for_offline_rounded, color: AppTheme.accent),
+                                title: const Text('Backup Keseluruhan (Excel)', style: TextStyle(fontWeight: FontWeight.bold)),
+                                subtitle: const Text('Download 3 file Excel: Master Produk, Piutang Pelanggan, dan Analitik Penjualan'),
+                                trailing: const Icon(Icons.chevron_right_rounded),
+                                onTap: () => _handleFullBackup(ref),
+                              ),
+                            ],
+                          ),
+                        ),
+
                         const SizedBox(height: 40),
                         const _SectionTitle(title: 'Pengaturan Tampilan & Jendela'),
                         const SizedBox(height: 16),

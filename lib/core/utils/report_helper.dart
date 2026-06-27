@@ -5,6 +5,7 @@ import 'package:printing/printing.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:flutter/foundation.dart';
 import '../../../shared/models/transaction.dart';
 import '../../../shared/models/product.dart';
 import '../../features/inventory/models/restock_record.dart';
@@ -30,6 +31,7 @@ class ReportHelper {
     required String periodName,
     required StoreSettings settings,
     bool isShare = false,
+    String? customSaveDir, // New optional parameter
   }) async {
     final pdf = pw.Document();
     final summary = buildSummary(transactions, products, restocks);
@@ -174,6 +176,10 @@ class ReportHelper {
       final file = File('${tempDir.path}/$filename');
       await file.writeAsBytes(bytes);
       await Share.shareXFiles([XFile(file.path)], text: 'Laporan Penjualan $periodName');
+    } else if (customSaveDir != null) {
+      final file = File('$customSaveDir/$filename');
+      await file.writeAsBytes(bytes);
+      debugPrint('Report saved to custom dir: ${file.path}');
     } else {
       final dlPath = _downloadsPath;
       if (dlPath != null) {
