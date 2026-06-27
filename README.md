@@ -1,111 +1,97 @@
-# Konstruksi POS - Construction Store Point of Sale System Plus Products Barcode Generator
+# BuildEra - High-Performance Construction Store POS
 
-A modern Flutter-based Point of Sale (POS) system designed specifically for construction material stores. Built with Firebase backend, real-time inventory management, and comprehensive sales analytics.
+BuildEra is a professional, **Offline-First** Point of Sale (POS) system engineered specifically for construction and building material stores. It combines the speed of local database technology with the reliability of Cloud Sync, offering a robust solution for businesses requiring deep financial tracking, complex inventory management, and stable desktop performance.
 
-## 🌟 Key Features
+## 🚀 Core Philosophy: Efficiency & Accuracy
+In the construction industry, prices fluctuate and weights vary. BuildEra is built to handle:
+- **Last-In Costing**: Automatically updates product modal based on the latest restock batch.
+- **Financial Depth**: Tracks Supplier Price and Shipping Cost separately for precise net profit.
+- **Offline-First**: Every transaction and restock works instantly without internet, syncing to Firestore in the background.
 
-### 🛒 Cashier Module
-- **Advanced Barcode Scanning**: Fast global scanning with "Jual Langsung" (Auto-add) or "Cari Produk" modes.
-- **Dynamic Shopping Cart**: Multiple unit support (e.g., sell by kg, roll, or box) with interactive unit switching.
-- **Flexible Discounts**: Apply discounts per-item or per-transaction (Percentage or Fixed amount).
-- **Price Override (Harga Kurang)**: Allow authorized cashiers to manually adjust selling prices during checkout.
-- **Diverse Payment Methods**: Support for Cash, QRIS, Debit, and **Bank Transfer** (with manual confirmation).
-- **Instant Stock Sync**: Real-time availability indicators and automatic inventory deduction.
+---
 
-### 📄 Professional PDF Invoicing
-- **Auto-generated Receipts**: High-quality PDF invoices generated instantly after checkout.
-- **Store Branding**: Receipts include store name, address, phone, and **Bank Transfer details**.
-- **Unit Support**: Clearly shows quantities and units (e.g., "2 kg x Rp 20.000").
-- **Flexible Actions**: Print directly, save locally, or share via WhatsApp/Email immediately after payment.
+## 🌟 Premium Features
 
-### 📦 Inventory & Product Management
-- **Real-time Stream**: Built using `StreamProvider` for instant UI updates when data changes in Firebase.
-- **Multi-Unit Pricing**: Define base units and unlimited additional selling units with custom conversion rates.
-- **Product Photos**: Upload compressed product images to Firebase Storage with local caching for offline viewing.
-- **Excel Import**: Bulk add products using a simplified 7-column format (Nama, Barcode, Kategori, Satuan, Stok, Modal, Harga Jual).
-- **Default Unit Settings**: Set specific units (e.g., "Box") to be automatically selected when scanning.
+### 🛒 Modern Cashier (POS)
+- **Hybrid Scanning**: Seamlessly switch between "Direct Sell" (Auto-add) and "Manual Search" modes.
+- **Unit Versatility**: Sell products in any unit (e.g., Roll, Meter, Sack, Kg) with automatic stock conversion.
+- **Price Flexibility**: Support for item-level/transaction discounts and manual Price Overrides.
+- **Customer Display**: Live cart synchronization to a secondary customer-facing window (Windows Optimized).
 
-### 📊 Analytics Dashboard
-- **Profit Tracking**: Monitor both **Gross Profit** (Potential) and **Net Profit** (Actual after discounts/overrides).
-- **Daily Detail Reports**: Expandable daily reports showing every transaction, payment method, and individual profits.
-- **KPI Cards**: Instant overview of Total Revenue, Net Profit, Total SKU, and Low Stock items.
-- **Visual Trends**: Revenue bar charts and payment method distribution pie charts.
+### 📦 Advanced Inventory & Restock
+- **Batch Audit Trail**: Complete history of every stock entry with the ability to edit or delete past batches.
+- **Profit Forecasting**: Live estimates of net profit based on current stock and latest modal costs.
+- **Intelligent Restock**: Form identical to "Add Product" for a flat learning curve, including automated modal calculation and selling price suggestions.
 
-### ⚙️ Store Configuration
-- **Cloud Settings**: Store identity and bank accounts stored securely in **Firebase Firestore**.
-- **Multi-Bank Management**: Register multiple bank accounts for customer transfer options.
+### 💳 Financial & Bill Management (New!)
+- **Multi-Payment Bills**: Manage debts to Suppliers and Shippers with support for **Partial Payments (Installments)**.
+- **Payment History**: Track every cent paid toward a specific batch with dates and notes.
+- **Piutang Pelanggan**: Dedicated dashboard for customer debts with detailed transaction history and Excel exports.
+- **Automated Reminders**: Analytics dashboard instantly flags unpaid supplier invoices and shipping fees.
 
-## 🛠 Tech Stack
+### 📊 Deep Analytics & Professional Reporting
+- **Performance Summary**: Track Net Profit (Today/Month), Revenue trends, and Top Selling products.
+- **Daily Detail**: Expandable daily breakdowns showing transaction-level profitability.
+- **A4 PDF Reports**: Generate professional, high-density reports optimized for A4 printing and digital sharing.
 
-- **Frontend**: Flutter 3.13+
-- **State Management**: Flutter Riverpod 3.2+ (Using modern `Notifier` and `StreamProvider` patterns)
-- **Backend**: Firebase (Cloud Firestore & Firebase Storage)
-- **PDF & Printing**: `pdf`, `printing`
-- **Utilities**: `image` (compression), `share_plus`, `file_picker`, `excel`, `shared_preferences`
-- **UI Framework**: Material Design 3
-- **Data Visualization**: FL Chart
+---
 
-## 🚀 Installation & Setup
+## 🎨 UI/UX Excellence
+- **Adobe-Style Branding**: Premium splash screen with radial gradients and smooth scale transitions.
+- **Categorized Navigation**: Sidebar organized by **OPERASIONAL**, **INVENTORI**, **FINANSIAL**, and **SISTEM**.
+- **Windows Stability**: Rigorously debugged to prevent common Flutter-on-Windows rendering crashes (Dropdown and BoxConstraints fixes).
+- **Dark Mode Optimization**: A consistent, low-strain dark aesthetic for long-shift operations.
 
-### 1. Clone the Repository
-```bash
-git clone https://github.com/alyafi0899/Construction-Store-Pos.git
-cd "Construction Store Pos"
-```
+---
 
-### 2. Install Dependencies
-```bash
-flutter pub get
-```
+## 🛠 Technical Architecture
 
-### 3. Configure Firebase
-- Create a Firebase project at [firebase.google.com](https://firebase.google.com)
-- Enable **Firestore Database** and **Firebase Storage**.
-- Download configuration files:
-  - `google-services.json` → `android/app/`
-  - `GoogleService-Info.plist` → `ios/Runner/`
-- Update `lib/firebase_options.dart` using FlutterFire CLI.
+- **Framework**: Flutter 3.13+ (Desktop/Windows Priority)
+- **Local Storage**: Hive (NoSQL) for ultra-fast local reads/writes.
+- **Cloud Sync**: Firebase Firestore with a custom **Sync Queue Manager** for background data integrity.
+- **State Management**: Flutter Riverpod (Modern Notifier & AsyncNotifier patterns).
+- **File System**: Automated Downloads management and PDF generation via `pdf` and `path_provider`.
 
-### 4. Run the Application
-```bash
-flutter run -d chrome  # For Web
-# or
-flutter run           # For Desktop/Mobile
-```
+---
 
 ## 📁 Project Structure
 
 ```
 lib/
 ├── core/
-│   ├── theme/           # AppTheme (Dark/Light mode)
-│   ├── utils/           # Formatters, InvoiceHelper, ImageHelper
-│   └── constants/       # AppConstants & Payment Methods
+│   ├── theme/           # Premium AppTheme (Dark)
+│   ├── sync/            # Offline-to-Cloud Sync Engine
+│   └── utils/           # Formatters, PDF Helpers, Image processing
 ├── features/
-│   ├── cashier/         # Cart, BarcodeListener, PaymentDialog
-│   ├── products/        # CRUD, Excel Import, Image Upload
-│   ├── inventory/       # Stock Adjustment & Monitoring
-│   ├── payment/         # Transaction History & PDF Export
-│   ├── analytics/       # Profit Dashboard & Daily Reports
-│   └── settings/        # Store Info & Bank Accounts (Cloud Sync)
+│   ├── cashier/         # POS UI, Cart Logic, Multi-window Sync
+│   ├── products/        # CRUD, Entity Management (Suppliers/Shippers)
+│   ├── inventory/       # Stock Logic, Restock History, Bill Management
+│   ├── debts/           # Customer Piutang & Debt Detail
+│   ├── analytics/       # Net Profit Dashboard
+│   └── settings/        # Cloud-synced Store Profiles
 ├── shared/
-│   ├── models/          # Product, Transaction, StoreSettings models
-│   └── widgets/         # Sidebar, StatCards, ProductImage widget
-└── main.dart            # Application Bootstrap
+│   ├── models/          # Product, Transaction, BillPayment models
+│   └── widgets/         # Categorized Sidebar, PageHeaders, AppCards
+└── main.dart            # Multi-window & Boot Logic
 ```
 
-## 📝 Excel Import Format
-To import products, use an Excel file with these columns in order:
-- **A**: Product Name (Required)
-- **B**: Barcode
-- **C**: Category
-- **D**: Base Unit (e.g., kg, pcs)
-- **E**: Initial Stock
-- **F**: Cost Price (Harga Modal)
-- **G**: Base Selling Price (Harga Jual Dasar)
+---
+
+## 📝 Configuration Requirements
+
+### Windows Build
+BuildEra is optimized for Windows Desktop. Ensure your environment has:
+- Visual Studio 2022 with "Desktop development with C++" workload.
+- window_manager dependencies for multi-window support.
+
+### Firebase Setup
+1. Create a Firebase project.
+2. Enable Firestore and Storage.
+3. Use FlutterFire CLI to generate `firebase_options.dart`.
+4. **Important**: For Windows, Firestore persistence is disabled manually in `main.dart` to ensure compatibility with our custom Hive Sync Engine.
 
 ---
 
 **Developed by**: Al Yafi alongside with Claude AI coding Agent
-**Last Updated**: 2026-06-07
-**Repository**: https://github.com/alyafi0899/Construction-Store-Pos
+**Version**: 1.5.0 (Stable)
+**Status**: Production Ready for Windows Desktop
