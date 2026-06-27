@@ -4,6 +4,7 @@ BuildEra is a professional, **Offline-First** Point of Sale (POS) system enginee
 
 ## 🚀 Build Release! Download and try the App Here:
 https://github.com/alyafi0899/BuildEra-Construction-Store-POS-Open-Source-Yall/releases/tag/v1.0.0
+<img width="1920" height="1080" alt="Slide 16_9 - 3" src="https://github.com/user-attachments/assets/eeb826fc-2d58-4008-a8ca-57b714bf72f2" />
 
 ---
 
