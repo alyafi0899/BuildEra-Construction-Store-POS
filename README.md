@@ -98,6 +98,6 @@ BuildEra is optimized for Windows Desktop. Ensure your environment has:
 
 ---
 
-**Developed by**: Al Yafi alongside with Claude AI coding Agent
-**Version**: 1.5.0 (Stable)
-**Status**: Production Ready for Windows Desktop
+**Developed by**: by myself (**Al Yafi** *my-real-name-hehe*)
+- **Version**: 1.0.0 (Stable)
+- **Status**: Production Ready for Windows Desktop
