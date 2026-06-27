@@ -1,8 +1,10 @@
 # BuildEra - High-Performance Construction Store POS
 
 BuildEra is a professional, **Offline-First** Point of Sale (POS) system engineered specifically for construction and building material stores. It combines the speed of local database technology with the reliability of Cloud Sync, offering a robust solution for businesses requiring deep financial tracking, complex inventory management, and stable desktop performance.
-
 ## 🚀 Core Philosophy: Efficiency & Accuracy
+https://github.com/alyafi0899/BuildEra-Construction-Store-POS-Open-Source-Yall/releases/tag/v1.0.0
+
+## 📝 Core Philosophy: Efficiency & Accuracy
 In the construction industry, prices fluctuate and weights vary. BuildEra is built to handle:
 - **Last-In Costing**: Automatically updates product modal based on the latest restock batch.
 - **Financial Depth**: Tracks Supplier Price and Shipping Cost separately for precise net profit.
