@@ -22,6 +22,7 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
   Transaction? _selected;
   final ScrollController _listScrollController = ScrollController();
   final _searchCtrl = TextEditingController();
+  final _searchFocus = FocusNode(); // New
   String _search = '';
   String? _methodFilter;
   bool? _debtPaidFilter; // null = all, true = lunas, false = belum lunas
@@ -30,6 +31,7 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
   void dispose() {
     _listScrollController.dispose();
     _searchCtrl.dispose();
+    _searchFocus.dispose(); // New
     super.dispose();
   }
 
@@ -73,6 +75,7 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
                           Expanded(
                             child: AppSearchField(
                               controller: _searchCtrl,
+                              focusNode: _searchFocus, // Use FocusNode
                               hintText: 'Cari nomor invoice...',
                               onChanged: (v) => setState(() => _search = v),
                               onClear: () => setState(() { _search = ''; _searchCtrl.clear(); }),

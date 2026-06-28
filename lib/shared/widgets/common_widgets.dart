@@ -209,6 +209,7 @@ class StatusChip extends StatelessWidget {
 
 class AppSearchField extends StatelessWidget {
   final TextEditingController controller;
+  final FocusNode? focusNode; // New
   final String hintText;
   final ValueChanged<String>? onChanged;
   final VoidCallback? onClear;
@@ -216,6 +217,7 @@ class AppSearchField extends StatelessWidget {
   const AppSearchField({
     super.key,
     required this.controller,
+    this.focusNode, // New
     required this.hintText,
     this.onChanged,
     this.onClear,
@@ -225,6 +227,7 @@ class AppSearchField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
+      focusNode:  focusNode, // Use FocusNode
       onChanged:  onChanged,
       style: const TextStyle(color: AppTheme.textPrimary),
       decoration: InputDecoration(

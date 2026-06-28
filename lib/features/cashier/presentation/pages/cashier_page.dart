@@ -383,10 +383,23 @@ class _CartPanel extends ConsumerStatefulWidget {
 
 class _CartPanelState extends ConsumerState<_CartPanel> {
   final ScrollController _scrollController = ScrollController();
+  late final TextEditingController _discountCtrl;
+  late final FocusNode _discountFocus;
+
+  @override
+  void initState() {
+    super.initState();
+    final cart = ref.read(cartProvider);
+    _discountCtrl = TextEditingController(
+        text: cart.transDiscountValue == 0 ? '' : cart.transDiscountValue.toStringAsFixed(0));
+    _discountFocus = FocusNode();
+  }
 
   @override
   void dispose() {
     _scrollController.dispose();
+    _discountCtrl.dispose();
+    _discountFocus.dispose();
     super.dispose();
   }
 
@@ -453,7 +466,13 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
                   padding: const EdgeInsets.all(16),
                   itemCount: cart.items.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (_, i) => _CartItemTile(item: cart.items[i]),
+                  itemBuilder: (_, i) {
+                    final item = cart.items[i];
+                    return _CartItemTile(
+                      key: ValueKey('cart_item_${item.id}'), // Use stable key
+                      item: item,
+                    );
+                  },
                 ),
               ),
       ),
@@ -522,6 +541,8 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
             SizedBox(
               width: 80,
               child: TextField(
+                controller: _discountCtrl,
+                focusNode: _discountFocus,
                 keyboardType: TextInputType.number,
                 textAlign: TextAlign.right,
                 style: const TextStyle(
@@ -632,7 +653,7 @@ class _TotalRow extends StatelessWidget {
 
 class _CartItemTile extends ConsumerStatefulWidget {
   final CartItem item;
-  const _CartItemTile({required this.item});
+  const _CartItemTile({super.key, required this.item});
 
   @override
   ConsumerState<_CartItemTile> createState() => _CartItemTileState();
@@ -640,24 +661,30 @@ class _CartItemTile extends ConsumerStatefulWidget {
 
 class _CartItemTileState extends ConsumerState<_CartItemTile> {
   late TextEditingController _qtyCtrl;
+  late FocusNode _qtyFocus; // New
 
   @override
   void initState() {
     super.initState();
     _qtyCtrl = TextEditingController(text: widget.item.quantity.toString());
+    _qtyFocus = FocusNode(); // New
   }
 
   @override
   void didUpdateWidget(_CartItemTile old) {
     super.didUpdateWidget(old);
     if (old.item.quantity != widget.item.quantity) {
-      _qtyCtrl.text = widget.item.quantity.toString();
+      // Avoid resetting cursor if this field has focus
+      if (!_qtyFocus.hasFocus) {
+        _qtyCtrl.text = widget.item.quantity.toString();
+      }
     }
   }
 
   @override
   void dispose() {
     _qtyCtrl.dispose();
+    _qtyFocus.dispose(); // New
     super.dispose();
   }
 
@@ -748,6 +775,7 @@ class _CartItemTileState extends ConsumerState<_CartItemTile> {
             width: 50,
             child: TextField(
               controller: _qtyCtrl,
+              focusNode: _qtyFocus, // Use the FocusNode
               textAlign: TextAlign.center,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
@@ -760,6 +788,12 @@ class _CartItemTileState extends ConsumerState<_CartItemTile> {
                 contentPadding: EdgeInsets.symmetric(vertical: 6),
                 border: InputBorder.none,
               ),
+              onChanged: (v) {
+                final qty = double.tryParse(v) ?? 0;
+                if (qty > 0) {
+                  notifier.updateQuantity(item.id, qty);
+                }
+              },
               onSubmitted: (v) =>
                   notifier.updateQuantity(item.id, double.tryParse(v) ?? 1),
             ),

@@ -19,6 +19,7 @@ class InventoryPage extends ConsumerStatefulWidget {
 
 class _InventoryPageState extends ConsumerState<InventoryPage> {
   final _searchCtrl = TextEditingController();
+  final _searchFocus = FocusNode(); // New
   final ScrollController _scrollController = ScrollController();
   String _search = '';
   bool _lowOnly = false;
@@ -26,6 +27,7 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
   @override
   void dispose() { 
     _searchCtrl.dispose(); 
+    _searchFocus.dispose(); // New
     _scrollController.dispose();
     super.dispose(); 
   }
@@ -76,6 +78,7 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
               width: 280,
               child: AppSearchField(
                 controller: _searchCtrl,
+                focusNode: _searchFocus, // Use FocusNode
                 hintText: 'Cari produk...',
                 onChanged: (v) => setState(() => _search = v),
                 onClear: () => setState(() { _search = ''; _searchCtrl.clear(); }),
@@ -164,8 +167,23 @@ class _InventoryRow extends ConsumerStatefulWidget {
 }
 
 class _InventoryRowState extends ConsumerState<_InventoryRow> {
-  final _adjCtrl = TextEditingController();
+  late final TextEditingController _adjCtrl;
+  late final FocusNode _adjFocus;
   bool _expanded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _adjCtrl = TextEditingController();
+    _adjFocus = FocusNode();
+  }
+
+  @override
+  void dispose() {
+    _adjCtrl.dispose();
+    _adjFocus.dispose();
+    super.dispose();
+  }
 
   Future<void> _adjust(double delta) async {
     await ref.read(productsActionProvider).adjustStock(widget.product.id, delta);
@@ -232,6 +250,7 @@ class _InventoryRowState extends ConsumerState<_InventoryRow> {
                 width: 70,
                 child: TextField(
                   controller: _adjCtrl,
+                  focusNode: _adjFocus,
                   keyboardType: const TextInputType.numberWithOptions(signed: true, decimal: true),
                   style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
                   decoration: const InputDecoration(
