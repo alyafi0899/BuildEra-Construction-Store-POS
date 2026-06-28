@@ -499,20 +499,31 @@ class _BillTile extends ConsumerWidget {
               child: Center(child: _miniStatus(isPaid, item.paidAmount)),
             ),
 
-            // 4. Tombol Bayar
+            // 4. Tombol Bayar & Hapus
             const SizedBox(width: 8),
             if (!isPaid)
-              SizedBox(
-                height: 32,
-                child: ElevatedButton(
-                  onPressed: () => _showPaymentDialog(context, ref),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.accent,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    textStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    onPressed: () => _handleDelete(context, ref),
+                    icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.danger, size: 20),
+                    tooltip: 'Hapus Tagihan (Kesalahan Input)',
                   ),
-                  child: const Text('BAYAR'),
-                ),
+                  const SizedBox(width: 4),
+                  SizedBox(
+                    height: 32,
+                    child: ElevatedButton(
+                      onPressed: () => _showPaymentDialog(context, ref),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.accent,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        textStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                      child: const Text('BAYAR'),
+                    ),
+                  ),
+                ],
               )
             else
               const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 22),
@@ -522,6 +533,25 @@ class _BillTile extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _handleDelete(BuildContext context, WidgetRef ref) async {
+    final title = item.isInitial ? 'Hapus Tagihan Stok Awal' : 'Hapus Tagihan Restock';
+    final content = item.isInitial 
+      ? 'Hapus tagihan ini dari daftar? Data produk tetap ada, namun status pembayaran akan diubah menjadi N/A.'
+      : 'Hapus data restock ini? Stok produk akan dikurangi otomatis dan semua riwayat cicilan untuk batch ini akan ikut dihapus.';
+
+    final ok = await showConfirmDialog(context, title: title, content: content);
+    if (ok) {
+      if (item.isInitial) {
+        final p = item.original as Product;
+        await ref.read(productRepositoryProvider).dismissInitialBill(p, isSupplier: isSupplier);
+      } else {
+        final r = item.original as RestockRecord;
+        await ref.read(restockNotifierProvider.notifier).deleteRestock(r);
+      }
+      if (context.mounted) showSuccess(context, 'Tagihan berhasil dihapus dari daftar');
+    }
   }
 
   Widget _miniStatus(bool isPaid, double paid) {

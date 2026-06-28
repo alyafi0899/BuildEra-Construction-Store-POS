@@ -610,7 +610,7 @@ class _ProductRow extends ConsumerWidget {
             onPressed: () async {
               final ok = await showConfirmDialog(context,
                   title: 'Hapus Produk',
-                  content: 'Yakin hapus "${product.name}"? Data tidak dapat dipulihkan.');
+                  content: 'Yakin hapus "${product.name}"? Data Termasuk:\n-Tagihan Supplier\n-Tagihan Expedisi\ntidak dapat dipulihkan.');
               if (ok) {
                 try {
                   await ref.read(productsActionProvider).deleteProduct(product.id);

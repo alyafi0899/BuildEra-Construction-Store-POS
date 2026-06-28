@@ -12,6 +12,8 @@ import '../../../core/sync/services/local_database.dart';
 import '../../../shared/models/product.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/product_financials.dart';
+import '../../inventory/models/restock_record.dart'; // Just models
+import '../../inventory/models/bill_payment.dart';
 
 import '../providers/barcode_history_provider.dart';
 
@@ -165,6 +167,41 @@ class ProductRepository {
       await _historyRepo.archiveBarcode(barcode);
     }
 
+    // Clean up related data: Restock history and Payments
+    try {
+      final boxRestock = await LocalDatabase.openBox(_uid, 'restock_history');
+      final restockRecords = boxRestock.values
+          .map((d) => RestockRecord.fromMap(Map<String, dynamic>.from(d as Map)))
+          .where((r) => r.productId == id)
+          .toList();
+      
+      final boxPayments = await LocalDatabase.openBox(_uid, 'bill_payments');
+
+      for (final r in restockRecords) {
+        await boxRestock.delete(r.id);
+        await _ref.read(syncProvider.notifier).addToQueue(collection: 'restock_history', documentId: r.id, action: SyncAction.delete, data: {});
+        
+        final rPayments = boxPayments.values
+            .map((d) => BillPayment.fromMap(Map<String, dynamic>.from(d as Map)))
+            .where((p) => p.billId == r.id)
+            .toList();
+            
+        for (final p in rPayments) {
+          await boxPayments.delete(p.id);
+          await _ref.read(syncProvider.notifier).addToQueue(collection: 'bill_payments', documentId: p.id, action: SyncAction.delete, data: {});
+        }
+      }
+      
+      final initialPayments = boxPayments.values
+          .map((d) => BillPayment.fromMap(Map<String, dynamic>.from(d as Map)))
+          .where((p) => p.billId == id && p.isInitialBill)
+          .toList();
+      for (final p in initialPayments) {
+        await boxPayments.delete(p.id);
+        await _ref.read(syncProvider.notifier).addToQueue(collection: 'bill_payments', documentId: p.id, action: SyncAction.delete, data: {});
+      }
+    } catch (_) {}
+
     try {
       await _storage.ref().child('users/$_uid/products/$id.jpg').delete();
     } catch (_) {}
@@ -313,6 +350,24 @@ class ProductRepository {
         shippingPaidAmount: !isSupplier ? (p.financials.shippingPaidAmount + paidAmount) : p.financials.shippingPaidAmount,
         supplierPaymentStatus: isSupplier ? status : p.financials.supplierPaymentStatus,
         shippingPaymentStatus: !isSupplier ? status : p.financials.shippingPaymentStatus,
+      ),
+    );
+    await box.put(p.id, updated.toMap());
+
+    await _ref.read(syncProvider.notifier).addToQueue(
+      collection: 'products',
+      documentId: p.id,
+      action:     SyncAction.update,
+      data:       updated.toMap(),
+    );
+  }
+
+  Future<void> dismissInitialBill(Product p, {required bool isSupplier}) async {
+    final box = await _getBox();
+    final updated = p.copyWith(
+      financials: p.financials.copyWith(
+        supplierPaymentStatus: isSupplier ? PaymentStatus.notApplicable : p.financials.supplierPaymentStatus,
+        shippingPaymentStatus: !isSupplier ? PaymentStatus.notApplicable : p.financials.shippingPaymentStatus,
       ),
     );
     await box.put(p.id, updated.toMap());

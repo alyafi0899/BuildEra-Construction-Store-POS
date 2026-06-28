@@ -1,12 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/restock_record.dart';
+import '../models/bill_payment.dart'; // New
 import '../../products/providers/product_provider.dart';
 import '../../products/models/product_financials.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../core/sync/models/sync_task.dart';
 import '../../../core/sync/providers/sync_provider.dart';
 import '../../../core/sync/services/local_database.dart';
+import 'bill_payment_provider.dart'; // New
 
 class RestockRepository {
   final String _uid;
@@ -70,6 +72,20 @@ class RestockRepository {
       action:     SyncAction.delete,
       data:       {},
     );
+
+    // Clean up related bill payments
+    try {
+      final payRepo = _ref.read(billPaymentRepositoryProvider);
+      final payBox = await LocalDatabase.openBox(_uid, 'bill_payments');
+      final payments = payBox.values
+          .map((d) => BillPayment.fromMap(Map<String, dynamic>.from(d as Map)))
+          .where((p) => p.billId == record.id)
+          .toList();
+      
+      for (final p in payments) {
+        await payRepo.deletePayment(p);
+      }
+    } catch (_) {}
 
     await _refreshProductState(record.productId);
   }
