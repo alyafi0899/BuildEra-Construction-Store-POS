@@ -344,16 +344,14 @@ class _ProductCard extends ConsumerWidget {
                           .textTheme
                           .titleMedium
                           ?.copyWith(fontSize: 13)),
-                  const SizedBox(height: 4),
-                  Text(
-                    product.units.isNotEmpty
-                        ? Formatters.currency(product.units.first.sellPrice)
-                        : Formatters.currency(product.basePrice),
-                    style: const TextStyle(
-                      color: AppTheme.accent,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  const SizedBox(height: 8),
+                  // List all unit prices
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _unitPriceLine(product.baseUnit, product.basePrice),
+                      ...product.units.map((u) => _unitPriceLine(u.unitName, u.sellPrice)),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -367,6 +365,20 @@ class _ProductCard extends ConsumerWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _unitPriceLine(String unit, double price) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(unit, style: const TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
+          Text(Formatters.currency(price), 
+            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.accent)),
+        ],
       ),
     );
   }

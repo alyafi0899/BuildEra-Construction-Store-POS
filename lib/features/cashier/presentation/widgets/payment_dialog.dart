@@ -256,6 +256,19 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
           )),
       const Divider(color: AppTheme.border, height: 24),
       _row(context, 'Subtotal Item', Formatters.currency(cart.grossSubtotal)),
+      const SizedBox(height: 12),
+      TextField(
+        controller: _shippingFeeCtrl,
+        keyboardType: TextInputType.number,
+        style: const TextStyle(fontSize: 13),
+        decoration: const InputDecoration(
+          labelText: 'Biaya Ongkir (Jika ada)',
+          prefixText: 'Rp ',
+          isDense: true,
+        ),
+        onChanged: (_) => setState(() {}),
+      ),
+      const SizedBox(height: 12),
       if (cart.itemDiscountTotal > 0)
         _row(context, 'Potongan Item', '− ${Formatters.currency(cart.itemDiscountTotal)}',
             color: AppTheme.success),
@@ -264,8 +277,6 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
             color: AppTheme.success),
       if (cart.taxEnabled)
         _row(context, 'PPN (11%)', Formatters.currency(cart.taxAmount)),
-      if (_shippingFee > 0)
-        _row(context, 'Biaya Ongkir', Formatters.currency(_shippingFee), color: AppTheme.accent),
       const SizedBox(height: 8),
       Row(children: [
         Text('TOTAL',
@@ -280,6 +291,17 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
                   fontSize: 22,
                 )),
       ]),
+      const SizedBox(height: 16),
+      TextField(
+        controller: _notesCtrl,
+        maxLines: 2,
+        style: const TextStyle(fontSize: 13),
+        decoration: const InputDecoration(
+          labelText: 'Keterangan Transaksi',
+          hintText: 'Contoh: Nama proyek, nomor PO, dll',
+          isDense: true,
+        ),
+      ),
     ]);
   }
 
@@ -297,33 +319,6 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
       ...AppConstants.paymentMethods.map((m) => _methodTile(context, m)),
       
       const SizedBox(height: 16),
-      const Divider(color: AppTheme.border),
-      const SizedBox(height: 16),
-
-      // Shipping Fee Input
-      TextField(
-        controller: _shippingFeeCtrl,
-        keyboardType: TextInputType.number,
-        decoration: const InputDecoration(
-          labelText: 'Biaya Ongkir (Jika ada)',
-          prefixText: 'Rp ',
-          isDense: true,
-        ),
-        onChanged: (_) => setState(() {}),
-      ),
-      const SizedBox(height: 16),
-
-      // Transaction Notes Input
-      TextField(
-        controller: _notesCtrl,
-        maxLines: 2,
-        decoration: const InputDecoration(
-          labelText: 'Keterangan Transaksi',
-          hintText: 'Contoh: Nama proyek, nomor PO, dll',
-          isDense: true,
-        ),
-      ),
-      const SizedBox(height: 24),
       
       if (_method == AppConstants.paymentCash || _method == AppConstants.paymentPiutang) ...[
         const SizedBox(height: 16),
