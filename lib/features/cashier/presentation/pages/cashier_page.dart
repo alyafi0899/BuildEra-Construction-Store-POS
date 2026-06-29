@@ -347,10 +347,14 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
                       children: [
                         Text(
                           product.name,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14,),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
+                        if (product.barcode != null) ...[
+                          const SizedBox(width: 8),
+                          Text('• ${product.barcode}', style: TextStyle( fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white70)),
+                        ],
                         const SizedBox(height: 4),
                         Row(
                           children: [
@@ -370,10 +374,7 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
                               const Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 14),
                           ],
                         ),
-                        if (product.barcode != null) ...[
-                          const SizedBox(width: 8),
-                          Text('• ${product.barcode}', style: Theme.of(context).textTheme.displayMedium?.copyWith(fontFamily: 'monospace', fontSize: 13)),
-                        ],
+
                       ],
                     ),
                   ),
