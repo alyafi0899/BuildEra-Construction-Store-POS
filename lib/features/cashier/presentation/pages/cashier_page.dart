@@ -275,7 +275,10 @@ class _ProductGridState extends ConsumerState<_ProductGrid> {
                 padding: const EdgeInsets.all(20),
                 itemCount: filtered.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (_, i) => _ProductListTile(product: filtered[i]),
+                itemBuilder: (_, i) => _ProductListTile(
+                  key: ValueKey('prod_list_${filtered[i].id}'),
+                  product: filtered[i],
+                ),
               ),
             );
           },
@@ -283,134 +286,209 @@ class _ProductGridState extends ConsumerState<_ProductGrid> {
   }
 }
 
-class _ProductListTile extends ConsumerWidget {
+class _ProductListTile extends ConsumerStatefulWidget {
   final Product product;
-  const _ProductListTile({required this.product});
+  const _ProductListTile({super.key, required this.product});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ProductListTile> createState() => _ProductListTileState();
+}
+
+class _ProductListTileState extends ConsumerState<_ProductListTile> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final product = widget.product;
     final isLow = product.isLowStock;
     
-    return Material(
-      color: AppTheme.card,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => ref.read(cartProvider.notifier).addProduct(product),
-        onLongPress: () => ProductDetailDialog.show(context, product),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
+    return Column(
+      children: [
+        Material(
+          color: AppTheme.card,
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: isLow
-                    ? AppTheme.warning.withValues(alpha: 0.4)
-                    : AppTheme.border),
-          ),
-          child: Row(
-            children: [
-              // 1. Image
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: SizedBox(
-                  width: 50,
-                  height: 50,
-                  child: ProductImage(imagePath: product.imagePath),
-                ),
+            onTap: () => ref.read(cartProvider.notifier).addProduct(product),
+            onLongPress: () => ProductDetailDialog.show(context, product),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: isLow
+                        ? AppTheme.warning.withValues(alpha: 0.4)
+                        : AppTheme.border),
               ),
-              const SizedBox(width: 16),
-
-              // 2. Product Name & Info
-              Expanded(
-                flex: 4,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      product.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppTheme.bg,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            product.category,
-                            style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
-                          ),
+              child: Row(
+                children: [
+                  // 1. Image (Click to Show Dialog)
+                  GestureDetector(
+                    onTap: () => ProductDetailDialog.show(context, product),
+                    child: Hero(
+                      tag: 'product_img_${product.id}',
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: SizedBox(
+                          width: 64, // Standard larger size
+                          height: 64,
+                          child: ProductImage(imagePath: product.imagePath),
                         ),
-                        const SizedBox(width: 8),
-                        if (isLow)
-                          const Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 14),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              // 3. Stock Info
-              Expanded(
-                flex: 2,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('STOK', style: TextStyle(fontSize: 9, color: AppTheme.textMuted, fontWeight: FontWeight.bold)),
-                    Text(
-                      '${Formatters.decimal(product.stock)} ${product.baseUnit}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: isLow ? AppTheme.warning : AppTheme.textPrimary,
                       ),
                     ),
-                  ],
-                ),
-              ),
+                  ),
+                  const SizedBox(width: 16),
 
-              // 4. Price Info (Base)
-              Expanded(
-                flex: 3,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    const Text('HARGA MODAL', style: TextStyle(fontSize: 9, color: AppTheme.textMuted, fontWeight: FontWeight.bold)),
-                    Text(
-                      Formatters.currency(product.costPrice),
-                      style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                  // 2. Product Name & Info
+                  Expanded(
+                    flex: 4,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          product.name,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppTheme.bg,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                product.category,
+                                style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            if (isLow)
+                              const Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 14),
+                          ],
+                        ),
+                        if (product.barcode != null) ...[
+                          const SizedBox(width: 8),
+                          Text('• ${product.barcode}', style: Theme.of(context).textTheme.displayMedium?.copyWith(fontFamily: 'monospace', fontSize: 13)),
+                        ],
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+
+                  // 3. Stock Info
+                  Expanded(
+                    flex: 2,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('STOK', style: TextStyle(fontSize: 9, color: AppTheme.textMuted, fontWeight: FontWeight.bold)),
+                        Text(
+                          '${Formatters.decimal(product.stock)} ${product.baseUnit}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: isLow ? AppTheme.warning : AppTheme.textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // 4. Price Info (Base)
+                  Expanded(
+                    flex: 3,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        const Text('HARGA MODAL', style: TextStyle(fontSize: 9, color: AppTheme.textMuted, fontWeight: FontWeight.bold)),
+                        Text(
+                          Formatters.currency(product.costPrice),
+                          style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(width: 16),
+
+                  // 5. Sell Prices
+                  Expanded(
+                    flex: 4,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        const Text('HARGA JUAL', style: TextStyle(fontSize: 9, color: AppTheme.textMuted, fontWeight: FontWeight.bold)),
+                        _unitPriceItem(product.baseUnit, product.basePrice, isMain: true),
+                        ...product.units.take(1).map((u) => _unitPriceItem(u.unitName, u.sellPrice)),
+                        if (product.units.length > 1)
+                          Text('+${product.units.length - 1} Satuan Lain', style: const TextStyle(fontSize: 9, color: AppTheme.accent)),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(width: 16),
+                  const Icon(Icons.add_circle_outline_rounded, color: AppTheme.accent, size: 24),
+                ],
               ),
-
-              const SizedBox(width: 16),
-
-              // 5. Sell Prices (Scrollable or condensed)
-              Expanded(
-                flex: 4,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    const Text('HARGA JUAL', style: TextStyle(fontSize: 9, color: AppTheme.textMuted, fontWeight: FontWeight.bold)),
-                    _unitPriceItem(product.baseUnit, product.basePrice, isMain: true),
-                    ...product.units.take(1).map((u) => _unitPriceItem(u.unitName, u.sellPrice)),
-                    if (product.units.length > 1)
-                      Text('+${product.units.length - 1} Satuan Lain', style: const TextStyle(fontSize: 9, color: AppTheme.accent)),
-                  ],
-                ),
-              ),
-
-              const SizedBox(width: 16),
-              const Icon(Icons.add_circle_outline_rounded, color: AppTheme.accent, size: 24),
-            ],
+            ),
           ),
         ),
+        
+        // ── Expanded Detail Area ──────────────────────────────────────────
+        if (_isExpanded)
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeInOut,
+            margin: const EdgeInsets.only(top: 4, left: 16, right: 16, bottom: 12),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceAlt,
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
+              border: Border.all(color: AppTheme.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('DAFTAR HARGA LENGKAP:', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textMuted, letterSpacing: 1)),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    _expandedPriceChip(product.baseUnit, product.basePrice, isBase: true),
+                    ...product.units.map((u) => _expandedPriceChip(u.unitName, u.sellPrice)),
+                  ],
+                ),
+                if (product.description?.isNotEmpty ?? false) ...[
+                  const Divider(height: 24, color: AppTheme.border),
+                  const Text('DESKRIPSI:', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textMuted, letterSpacing: 1)),
+                  const SizedBox(height: 4),
+                  Text(product.description!, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _expandedPriceChip(String unit, double price, {bool isBase = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: isBase ? AppTheme.accent.withValues(alpha: 0.1) : AppTheme.bg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: isBase ? AppTheme.accent : AppTheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(unit, style: TextStyle(fontSize: 10, color: isBase ? AppTheme.accent : AppTheme.textSecondary, fontWeight: FontWeight.bold)),
+          Text(Formatters.currency(price), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900)),
+        ],
       ),
     );
   }
