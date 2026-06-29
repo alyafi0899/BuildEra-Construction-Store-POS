@@ -270,17 +270,12 @@ class _ProductGridState extends ConsumerState<_ProductGrid> {
             return Scrollbar(
               controller: _scrollController,
               thumbVisibility: true,
-              child: GridView.builder(
+              child: ListView.separated(
                 controller: _scrollController,
                 padding: const EdgeInsets.all(20),
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 180,
-                  mainAxisExtent: 180,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                ),
                 itemCount: filtered.length,
-                itemBuilder: (_, i) => _ProductCard(product: filtered[i]),
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (_, i) => _ProductListTile(product: filtered[i]),
               ),
             );
           },
@@ -288,98 +283,148 @@ class _ProductGridState extends ConsumerState<_ProductGrid> {
   }
 }
 
-class _ProductCard extends ConsumerWidget {
+class _ProductListTile extends ConsumerWidget {
   final Product product;
-  const _ProductCard({required this.product});
+  const _ProductListTile({required this.product});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isLow = product.isLowStock;
-    return GestureDetector(
-      onTap: () => ref.read(cartProvider.notifier).addProduct(product),
-      onLongPress: () => ProductDetailDialog.show(context, product),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 100),
-        decoration: BoxDecoration(
-          color: AppTheme.card,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-              color: isLow
-                  ? AppTheme.warning.withValues(alpha: 0.4)
-                  : AppTheme.border),
-        ),
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          child: InkWell(
+    
+    return Material(
+      color: AppTheme.card,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => ref.read(cartProvider.notifier).addProduct(product),
+        onLongPress: () => ProductDetailDialog.show(context, product),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            onTap: () => ref.read(cartProvider.notifier).addProduct(product),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    GestureDetector(
-                      onTap: () => ProductDetailDialog.show(context, product),
-                      child: ProductImage(imagePath: product.imagePath),
-                    ),
-                    const Spacer(),
-                    if (isLow)
-                      Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: AppTheme.warning.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Icon(Icons.warning_amber_rounded,
-                            color: AppTheme.warning, size: 12),
-                      ),
-                  ]),
-                  const Spacer(),
-                  Text(product.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontSize: 13)),
-                  const SizedBox(height: 8),
-                  // List all unit prices
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _unitPriceLine(product.baseUnit, product.basePrice),
-                      ...product.units.map((u) => _unitPriceLine(u.unitName, u.sellPrice)),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Stok: ${Formatters.decimal(product.stock)} ${product.baseUnit}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: isLow ? AppTheme.warning : null,
-                        ),
-                  ),
-                ],
+            border: Border.all(
+                color: isLow
+                    ? AppTheme.warning.withValues(alpha: 0.4)
+                    : AppTheme.border),
+          ),
+          child: Row(
+            children: [
+              // 1. Image
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                  width: 50,
+                  height: 50,
+                  child: ProductImage(imagePath: product.imagePath),
+                ),
               ),
-            ),
+              const SizedBox(width: 16),
+
+              // 2. Product Name & Info
+              Expanded(
+                flex: 4,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product.name,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.bg,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            product.category,
+                            style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        if (isLow)
+                          const Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 14),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              // 3. Stock Info
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('STOK', style: TextStyle(fontSize: 9, color: AppTheme.textMuted, fontWeight: FontWeight.bold)),
+                    Text(
+                      '${Formatters.decimal(product.stock)} ${product.baseUnit}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: isLow ? AppTheme.warning : AppTheme.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // 4. Price Info (Base)
+              Expanded(
+                flex: 3,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const Text('HARGA MODAL', style: TextStyle(fontSize: 9, color: AppTheme.textMuted, fontWeight: FontWeight.bold)),
+                    Text(
+                      Formatters.currency(product.costPrice),
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 16),
+
+              // 5. Sell Prices (Scrollable or condensed)
+              Expanded(
+                flex: 4,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const Text('HARGA JUAL', style: TextStyle(fontSize: 9, color: AppTheme.textMuted, fontWeight: FontWeight.bold)),
+                    _unitPriceItem(product.baseUnit, product.basePrice, isMain: true),
+                    ...product.units.take(1).map((u) => _unitPriceItem(u.unitName, u.sellPrice)),
+                    if (product.units.length > 1)
+                      Text('+${product.units.length - 1} Satuan Lain', style: const TextStyle(fontSize: 9, color: AppTheme.accent)),
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 16),
+              const Icon(Icons.add_circle_outline_rounded, color: AppTheme.accent, size: 24),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _unitPriceLine(String unit, double price) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(unit, style: const TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
-          Text(Formatters.currency(price), 
-            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.accent)),
-        ],
+  Widget _unitPriceItem(String unit, double price, {bool isMain = false}) {
+    return Text(
+      '${isMain ? '' : '$unit: '}${Formatters.currency(price)}',
+      style: TextStyle(
+        fontSize: isMain ? 14 : 11,
+        fontWeight: isMain ? FontWeight.w900 : FontWeight.w600,
+        color: AppTheme.accent,
       ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
     );
   }
 }
