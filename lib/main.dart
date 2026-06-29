@@ -28,6 +28,7 @@ import 'features/debts/providers/debt_repository.dart';
 import 'features/auth/presentation/widgets/auth_gate.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'core/sync/services/local_database.dart';
+import 'core/providers/navigation_provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:io';
@@ -159,7 +160,6 @@ class MainShell extends ConsumerStatefulWidget {
 }
 
 class _MainShellState extends ConsumerState<MainShell> {
-  int _idx = 0;
   final _pages = [
     const CashierPage(),
     const ProductsPage(),
@@ -176,6 +176,8 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    final idx = ref.watch(navigationIndexProvider);
+    
     // Listen to cart changes for Customer Display Sync
     ref.listen(cartProvider, (prev, next) {
       final user = ref.read(authStateProvider).value;
@@ -194,11 +196,11 @@ class _MainShellState extends ConsumerState<MainShell> {
     final autoAdd = ref.watch(scanModeProvider);
     final shell = Row(children: [
       AppSidebar(
-        selectedIndex: _idx,
-        onItemSelected: (i) => setState(() => _idx = i),
+        selectedIndex: idx,
+        onItemSelected: (i) => ref.read(navigationIndexProvider.notifier).setIndex(i),
       ),
       Expanded(
-        child: IndexedStack(index: _idx, children: _pages),
+        child: IndexedStack(index: idx, children: _pages),
       ),
     ]);
 

@@ -432,6 +432,7 @@ class _TxDetailState extends State<_TxDetail> {
                       if (tx.itemDiscountTotal > 0) _row(context, 'Total Pot. Item', '- ${Formatters.currency(tx.itemDiscountTotal)}', AppTheme.success),
                       if (tx.transDiscountAmount > 0) _row(context, 'Diskon Transaksi', '- ${Formatters.currency(tx.transDiscountAmount)}', AppTheme.success),
                       if (tx.taxAmount > 0) _row(context, 'PPN (11%)', Formatters.currency(tx.taxAmount)),
+                      if (tx.shippingFee > 0) _row(context, 'Ongkos Kirim', Formatters.currency(tx.shippingFee)),
                       const SizedBox(height: 8),
                       _row(context, 'TOTAL', Formatters.currency(tx.total), AppTheme.accent, true),
                       const Divider(color: AppTheme.border, height: 32),

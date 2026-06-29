@@ -100,6 +100,8 @@ class InvoiceHelper {
                 _buildTotalRow('Disc Trans', '-${Formatters.currency(tx.transDiscountAmount)}'),
               if (tx.taxAmount > 0)
                 _buildTotalRow('PPN (11%)', Formatters.currency(tx.taxAmount)),
+              if (tx.shippingFee > 0)
+                _buildTotalRow('Ongkos Kirim', Formatters.currency(tx.shippingFee)),
               
               pw.SizedBox(height: 4),
               pw.Row(
@@ -113,6 +115,13 @@ class InvoiceHelper {
 
               _buildTotalRow('Bayar (${tx.paymentMethod})', Formatters.currency(tx.amountPaid)),
               _buildTotalRow('Kembali', Formatters.currency(tx.changeAmount)),
+
+              if (tx.notes != null && tx.notes!.isNotEmpty) ...[
+                pw.SizedBox(height: 6),
+                pw.Text('Catatan: ${tx.notes}', 
+                  style: pw.TextStyle(fontSize: 7, fontStyle: pw.FontStyle.italic),
+                  maxLines: 2),
+              ],
 
               pw.SizedBox(height: 10),
               pw.Center(

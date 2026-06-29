@@ -4,11 +4,12 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../pages/customer_debt_detail_page.dart';
-import '../pages/customer_list_page.dart';
 import '../../providers/debt_repository.dart';
 import '../../utils/debt_report_helper.dart';
 import '../../models/customer.dart';
 import '../../models/debt.dart';
+
+import '../../../../core/providers/navigation_provider.dart';
 
 class PiutangDashboard extends ConsumerWidget {
   const PiutangDashboard({super.key});
@@ -28,15 +29,16 @@ class PiutangDashboard extends ConsumerWidget {
             subtitle: 'Kelola dan pantau saldo piutang pelanggan',
             icon: Icons.account_balance_wallet_rounded,
             actions: [
+              // IconButton(
+              //   onPressed: () => ref.read(navigationIndexProvider.notifier).setIndex(0),
+              //   icon: const Icon(Icons.arrow_back_rounded, color: AppTheme.textMuted),
+              //   tooltip: 'Kembali ke Kasir',
+              // ),
+              const SizedBox(width: 8),
               OutlinedButton.icon(
                 onPressed: () => _exportAllOutstanding(ref),
                 icon: const Icon(Icons.file_download_outlined, size: 18),
                 label: const Text('Export Excel'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => _navigateToCustomerManagement(context),
-                icon: const Icon(Icons.people_rounded, size: 18),
-                label: const Text('Kelola Pelanggan'),
               ),
             ],
           ),
@@ -253,10 +255,6 @@ class PiutangDashboard extends ConsumerWidget {
     );
   }
 
-  void _navigateToCustomerManagement(BuildContext context) {
-    // Navigate to the full customer management page
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerListPage()));
-  }
 
   void _navigateToCustomerDetail(BuildContext context, Customer customer) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => CustomerDebtDetailPage(customer: customer)));

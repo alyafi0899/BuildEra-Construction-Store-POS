@@ -33,6 +33,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   String  _method     = AppConstants.paymentCash;
   final   _amountCtrl = TextEditingController();
   final   _notesCtrl  = TextEditingController();
+  final   _shippingFeeCtrl = TextEditingController(text: '0'); // New
   final   ScrollController _scrollController = ScrollController();
   bool    _processing = false;
   bool    _success    = false;
@@ -49,14 +50,18 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   void dispose() {
     _amountCtrl.dispose();
     _notesCtrl.dispose();
+    _shippingFeeCtrl.dispose(); // New
     _scrollController.dispose();
     super.dispose();
   }
 
+  double get _shippingFee => double.tryParse(_shippingFeeCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+
   Future<void> _confirm() async {
     final cart = ref.read(cartProvider);
+    final finalTotal = cart.total + _shippingFee;
     
-    if (_method == AppConstants.paymentCash && _paid < cart.total) {
+    if (_method == AppConstants.paymentCash && _paid < finalTotal) {
       showError(context, 'Jumlah bayar kurang dari total');
       return;
     }
@@ -74,7 +79,8 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
     try {
       final txId = await ref.read(transactionsProvider.notifier).checkout(
         paymentMethod: _method,
-        amountPaid:    (_method == AppConstants.paymentCash || _method == AppConstants.paymentPiutang) ? _paid : cart.total,
+        amountPaid:    (_method == AppConstants.paymentCash || _method == AppConstants.paymentPiutang) ? _paid : finalTotal,
+        shippingFee:   _shippingFee, // New
         dueDate:       _method == AppConstants.paymentPiutang ? _dueDate : null,
         notes:         _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
       );
@@ -166,7 +172,8 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   // ── Form ──────────────────────────────────────────────────────────────────
 
   Widget _formPanel(BuildContext context, CartState cart) {
-    final change = _paid - cart.total;
+    final finalTotal = cart.total + _shippingFee;
+    final change = _paid - finalTotal;
     return Column(mainAxisSize: MainAxisSize.min, children: [
       // Header
       _header(context),
@@ -257,6 +264,8 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
             color: AppTheme.success),
       if (cart.taxEnabled)
         _row(context, 'PPN (11%)', Formatters.currency(cart.taxAmount)),
+      if (_shippingFee > 0)
+        _row(context, 'Biaya Ongkir', Formatters.currency(_shippingFee), color: AppTheme.accent),
       const SizedBox(height: 8),
       Row(children: [
         Text('TOTAL',
@@ -265,7 +274,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
                 .titleLarge
                 ?.copyWith(fontSize: 18)),
         const Spacer(),
-        Text(Formatters.currency(cart.total),
+        Text(Formatters.currency(cart.total + _shippingFee),
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   color: AppTheme.accent,
                   fontSize: 22,
@@ -286,6 +295,35 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
               ?.copyWith(color: AppTheme.accent)),
       const SizedBox(height: 12),
       ...AppConstants.paymentMethods.map((m) => _methodTile(context, m)),
+      
+      const SizedBox(height: 16),
+      const Divider(color: AppTheme.border),
+      const SizedBox(height: 16),
+
+      // Shipping Fee Input
+      TextField(
+        controller: _shippingFeeCtrl,
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(
+          labelText: 'Biaya Ongkir (Jika ada)',
+          prefixText: 'Rp ',
+          isDense: true,
+        ),
+        onChanged: (_) => setState(() {}),
+      ),
+      const SizedBox(height: 16),
+
+      // Transaction Notes Input
+      TextField(
+        controller: _notesCtrl,
+        maxLines: 2,
+        decoration: const InputDecoration(
+          labelText: 'Keterangan Transaksi',
+          hintText: 'Contoh: Nama proyek, nomor PO, dll',
+          isDense: true,
+        ),
+      ),
+      const SizedBox(height: 24),
       
       if (_method == AppConstants.paymentCash || _method == AppConstants.paymentPiutang) ...[
         const SizedBox(height: 16),
@@ -411,7 +449,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
               const Text('Total Piutang', style: TextStyle(fontSize: 13)),
               const Spacer(),
               Text(
-                Formatters.currency(cart.total - _paid < 0 ? 0 : cart.total - _paid),
+                Formatters.currency((cart.total + _shippingFee) - _paid < 0 ? 0 : (cart.total + _shippingFee) - _paid),
                 style: const TextStyle(color: AppTheme.warning, fontWeight: FontWeight.bold, fontSize: 16),
               ),
             ]),
@@ -425,7 +463,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
             spacing: 6,
             runSpacing: 6,
             children: [50000, 100000, 150000, 200000, 500000]
-                .where((v) => v >= (cart.total))
+                .where((v) => v >= (cart.total + _shippingFee))
                 .map((v) => OutlinedButton(
                       onPressed: () =>
                           setState(() => _amountCtrl.text = v.toString()),
@@ -507,7 +545,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
                   ? 'Scan QR untuk membayar'
                   : 'Tap / Insert kartu debit'),
               const SizedBox(height: 4),
-              Text(Formatters.currency(cart.total),
+              Text(Formatters.currency(cart.total + _shippingFee),
                   style: Theme.of(context)
                       .textTheme
                       .headlineMedium

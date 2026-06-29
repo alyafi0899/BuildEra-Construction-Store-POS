@@ -39,6 +39,12 @@ class _CustomerListPageState extends ConsumerState<CustomerListPage> {
             subtitle: 'Kelola profil pelanggan untuk transaksi piutang',
             icon: Icons.people_rounded,
             actions: [
+              if (Navigator.canPop(context))
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.arrow_back_rounded, color: AppTheme.textMuted),
+                  tooltip: 'Kembali',
+                ),
               ElevatedButton.icon(
                 onPressed: () => _showCustomerForm(context),
                 icon: const Icon(Icons.person_add_rounded, size: 18),

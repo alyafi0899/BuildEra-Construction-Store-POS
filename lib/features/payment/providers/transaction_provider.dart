@@ -55,12 +55,14 @@ class TransactionRepository {
     required CartState cart,
     required String    paymentMethod,
     required double    amountPaid,
+    double             shippingFee = 0, // New
     String?            cashierName,
     String?            notes,
   }) async {
     final id      = _uuid.v4();
     final invoice = _invoice();
-    final change  = amountPaid - cart.total;
+    final finalTotal = cart.total + shippingFee; // Calculate final total with shipping
+    final change  = amountPaid - finalTotal;
 
     final t = Transaction(
       id:                 id,
@@ -75,7 +77,8 @@ class TransactionRepository {
       transDiscountAmount:cart.transDiscountAmount,
       taxRate:            cart.taxEnabled ? cart.taxRate : 0,
       taxAmount:          cart.taxAmount,
-      total:              cart.total,
+      shippingFee:        shippingFee, // New
+      total:              finalTotal, // New
       paymentMethod:      paymentMethod,
       amountPaid:         amountPaid,
       changeAmount:       change < 0 ? 0 : change,
@@ -463,6 +466,7 @@ class TransactionsNotifier extends AsyncNotifier<List<Transaction>> {
   Future<String> checkout({
     required String paymentMethod,
     required double amountPaid,
+    double          shippingFee = 0, // New
     DateTime?       dueDate,
     String?         notes,
   }) async {
@@ -480,12 +484,13 @@ class TransactionsNotifier extends AsyncNotifier<List<Transaction>> {
       cart:          cart,
       paymentMethod: paymentMethod,
       amountPaid:    amountPaid,
+      shippingFee:   shippingFee, // New
       cashierName:   settings.ownerName.isEmpty ? 'Admin' : settings.ownerName,
       notes:         notes,
     );
 
     if (paymentMethod == AppConstants.paymentPiutang && cart.customerId != null) {
-      final remaining = cart.total - amountPaid;
+      final remaining = tx.total - amountPaid; // Use tx.total which includes shipping
       if (remaining > 0) {
         final debtId = _uuid.v4();
         final debt = Debt(

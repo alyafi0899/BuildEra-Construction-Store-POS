@@ -74,16 +74,17 @@ class TransactionItem {
 class Transaction {
   final String id;
   final String invoiceNumber;
-  final String? customerId; // Linked registered customer
+  final String? customerId; 
   final String? customerName;
   final String? cashierName;
-  final double subtotal; // Sum of items subtotal
-  final double itemDiscountTotal; // Total of all item-level discounts
+  final double subtotal; 
+  final double itemDiscountTotal; 
   final double transDiscountValue;
   final DiscountType transDiscountType;
   final double transDiscountAmount;
   final double taxRate;
   final double taxAmount;
+  final double shippingFee; // New
   final double total;
   final String paymentMethod;
   final double amountPaid;
@@ -105,6 +106,7 @@ class Transaction {
     required this.transDiscountAmount,
     required this.taxRate,
     required this.taxAmount,
+    this.shippingFee = 0, // New
     required this.total,
     required this.paymentMethod,
     required this.amountPaid,
@@ -128,6 +130,7 @@ class Transaction {
         transDiscountAmount:(m['trans_discount_amount'] as num? ?? m['discount'] ?? 0).toDouble(),
         taxRate:            (m['tax_rate'] as num).toDouble(),
         taxAmount:          (m['tax_amount'] as num).toDouble(),
+        shippingFee:        (m['shipping_fee'] as num? ?? 0).toDouble(), // New
         total:              (m['total'] as num).toDouble(),
         paymentMethod:      m['payment_method'] as String,
         amountPaid:         (m['amount_paid'] as num).toDouble(),
@@ -150,6 +153,7 @@ class Transaction {
         'trans_discount_amount': transDiscountAmount,
         'tax_rate':              taxRate,
         'tax_amount':            taxAmount,
+        'shipping_fee':          shippingFee, // New
         'total':                 total,
         'payment_method':        paymentMethod,
         'amount_paid':           amountPaid,
