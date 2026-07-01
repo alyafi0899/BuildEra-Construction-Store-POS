@@ -61,28 +61,33 @@ class BillPaymentRepository {
     final box = await _getBox();
     final allPayments = _paymentsFromBox(box).where((p) => p.billId == billId).toList();
     
-    // Sum separately with a tiny epsilon for safety
-    final totalSupplierPaid = allPayments
-        .where((p) => p.isForSupplier)
-        .fold<double>(0, (s, p) => s + p.amount);
-        
-    final totalShippingPaid = allPayments
-        .where((p) => !p.isForSupplier)
-        .fold<double>(0, (s, p) => s + p.amount);
+    final totalSupplierPaid = allPayments.where((p) => p.isForSupplier).fold<double>(0, (s, p) => s + p.amount);
+    final totalShippingPaid = allPayments.where((p) => !p.isForSupplier).fold<double>(0, (s, p) => s + p.amount);
+
+    const epsilon = 0.5;
 
     if (isInitial) {
       final repo = _ref.read(productRepositoryProvider);
       final products = await repo.getAllProducts();
       final p = products.where((item) => item.id == billId).firstOrNull;
       if (p != null) {
-        // Use a threshold for comparison to handle double precision issues
-        const epsilon = 0.01;
-        
+        // --- 1. Supplier Status Calculation ---
         final sDue = p.financials.supplierPrice;
-        final sStatus = totalSupplierPaid >= (sDue - epsilon) ? PaymentStatus.paid : (totalSupplierPaid > epsilon ? PaymentStatus.partial : PaymentStatus.unpaid);
+        PaymentStatus sStatus;
+        if (sDue <= 0) {
+          sStatus = PaymentStatus.notApplicable;
+        } else {
+          sStatus = totalSupplierPaid >= (sDue - epsilon) ? PaymentStatus.paid : (totalSupplierPaid > epsilon ? PaymentStatus.partial : PaymentStatus.unpaid);
+        }
         
+        // --- 2. Shipping Status Calculation ---
         final shDue = p.financials.supplierShippingCost;
-        final shStatus = totalShippingPaid >= (shDue - epsilon) ? PaymentStatus.paid : (totalShippingPaid > epsilon ? PaymentStatus.partial : PaymentStatus.unpaid);
+        PaymentStatus shStatus;
+        if (shDue <= 0) {
+          shStatus = PaymentStatus.notApplicable;
+        } else {
+          shStatus = totalShippingPaid >= (shDue - epsilon) ? PaymentStatus.paid : (totalShippingPaid > epsilon ? PaymentStatus.partial : PaymentStatus.unpaid);
+        }
 
         final updated = p.copyWith(
           financials: p.financials.copyWith(
@@ -92,6 +97,7 @@ class BillPaymentRepository {
             shippingPaymentStatus: shStatus,
           ),
         );
+        
         final boxProd = await LocalDatabase.openBox(_uid, 'products');
         await boxProd.put(updated.id, updated.toMap());
         await _ref.read(syncProvider.notifier).addToQueue(collection: 'products', documentId: updated.id, action: SyncAction.update, data: updated.toMap());
@@ -101,13 +107,24 @@ class BillPaymentRepository {
       final rData = boxRestock.get(billId);
       if (rData != null) {
         final r = RestockRecord.fromMap(Map<String, dynamic>.from(rData as Map));
-        const epsilon = 0.01;
-
-        final sDue = r.supplierPrice;
-        final sStatus = totalSupplierPaid >= (sDue - epsilon) ? PaymentStatus.paid : (totalSupplierPaid > epsilon ? PaymentStatus.partial : PaymentStatus.unpaid);
         
+        // --- 1. Supplier Status Calculation ---
+        final sDue = r.supplierPrice;
+        PaymentStatus sStatus;
+        if (sDue <= 0) {
+          sStatus = PaymentStatus.notApplicable;
+        } else {
+          sStatus = totalSupplierPaid >= (sDue - epsilon) ? PaymentStatus.paid : (totalSupplierPaid > epsilon ? PaymentStatus.partial : PaymentStatus.unpaid);
+        }
+        
+        // --- 2. Shipping Status Calculation ---
         final shDue = r.shippingCost;
-        final shStatus = totalShippingPaid >= (shDue - epsilon) ? PaymentStatus.paid : (totalShippingPaid > epsilon ? PaymentStatus.partial : PaymentStatus.unpaid);
+        PaymentStatus shStatus;
+        if (shDue <= 0) {
+          shStatus = PaymentStatus.notApplicable;
+        } else {
+          shStatus = totalShippingPaid >= (shDue - epsilon) ? PaymentStatus.paid : (totalShippingPaid > epsilon ? PaymentStatus.partial : PaymentStatus.unpaid);
+        }
         
         final updated = r.copyWith(
           supplierPaidAmount: totalSupplierPaid,

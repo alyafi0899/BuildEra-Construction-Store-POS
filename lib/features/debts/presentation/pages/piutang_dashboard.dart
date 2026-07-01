@@ -8,6 +8,7 @@ import '../../providers/debt_repository.dart';
 import '../../utils/debt_report_helper.dart';
 import '../../models/customer.dart';
 import '../../models/debt.dart';
+import '../../../../core/providers/navigation_provider.dart';
 
 class PiutangDashboard extends ConsumerWidget {
   const PiutangDashboard({super.key});
@@ -27,11 +28,11 @@ class PiutangDashboard extends ConsumerWidget {
             subtitle: 'Kelola dan pantau saldo piutang pelanggan',
             icon: Icons.account_balance_wallet_rounded,
             actions: [
-              // IconButton(
-              //   onPressed: () => ref.read(navigationIndexProvider.notifier).setIndex(0),
-              //   icon: const Icon(Icons.arrow_back_rounded, color: AppTheme.textMuted),
-              //   tooltip: 'Kembali ke Kasir',
-              // ),
+              IconButton(
+                onPressed: () => ref.read(navigationIndexProvider.notifier).setIndex(0),
+                icon: const Icon(Icons.arrow_back_rounded, color: AppTheme.textMuted),
+                tooltip: 'Kembali ke Kasir',
+              ),
               const SizedBox(width: 8),
               OutlinedButton.icon(
                 onPressed: () => _exportAllOutstanding(ref),
@@ -136,54 +137,59 @@ class PiutangDashboard extends ConsumerWidget {
               separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemBuilder: (context, i) {
                 final c = withDebt[i];
-                return InkWell(
-                  onTap: () => _navigateToCustomerDetail(context, c),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppTheme.surfaceAlt,
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: Material(
+                    color: AppTheme.surfaceAlt,
+                    clipBehavior: Clip.antiAlias,
+                    shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppTheme.border),
+                      side: const BorderSide(color: AppTheme.border),
                     ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 40, height: 40,
-                          decoration: const BoxDecoration(color: AppTheme.bg, shape: BoxShape.circle),
-                          child: const Icon(Icons.person_rounded, size: 20, color: AppTheme.textSecondary),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(c.name, style: Theme.of(context).textTheme.titleMedium),
-                              Text(c.phone, style: Theme.of(context).textTheme.bodySmall),
-                            ],
-                          ),
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                    child: InkWell(
+                      onTap: () => _navigateToCustomerDetail(context, c),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
                           children: [
-                            Text('Sisa Saldo', style: Theme.of(context).textTheme.bodySmall),
-                            Text(
-                              Formatters.currency(c.totalOutstanding),
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.warning, fontSize: 16),
+                            Container(
+                              width: 40, height: 40,
+                              decoration: const BoxDecoration(color: AppTheme.bg, shape: BoxShape.circle),
+                              child: const Icon(Icons.person_rounded, size: 20, color: AppTheme.textSecondary),
                             ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(c.name, style: Theme.of(context).textTheme.titleMedium),
+                                  Text(c.phone, style: Theme.of(context).textTheme.bodySmall),
+                                ],
+                              ),
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text('Sisa Saldo', style: Theme.of(context).textTheme.bodySmall),
+                                Text(
+                                  Formatters.currency(c.totalOutstanding),
+                                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.warning, fontSize: 16),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(width: 16),
+                            IconButton(
+                              icon: const Icon(Icons.edit_rounded, size: 20, color: AppTheme.accent),
+                              onPressed: () {
+                                _showEditCustomerDialog(context, ref, c);
+                              },
+                              tooltip: 'Edit Data Pelanggan',
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
                           ],
                         ),
-                        const SizedBox(width: 16),
-                        IconButton(
-                          icon: const Icon(Icons.edit_rounded, size: 20, color: AppTheme.accent),
-                          onPressed: () {
-                            _showEditCustomerDialog(context, ref, c);
-                          },
-                          tooltip: 'Edit Data Pelanggan',
-                        ),
-                        const SizedBox(width: 8),
-                        const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
-                      ],
+                      ),
                     ),
                   ),
                 );

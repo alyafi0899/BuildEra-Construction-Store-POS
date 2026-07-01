@@ -41,9 +41,8 @@ class ProductFormDialog extends ConsumerStatefulWidget {
 
 class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _name, _barcode, _description, _costPrice, _basePrice, _stock;
+  late final TextEditingController _name, _barcode, _description, _costPrice, _basePrice, _stock, _categoryCtrl, _baseUnitCtrl;
   late final TextEditingController _supplierPrice, _supplierShippingCost, _supplierName, _shippingServiceName;
-  late String _category, _baseUnit;
   String? _defaultUnitName;
   late List<_UnitEntry> _units;
   Uint8List? _imageBytes;
@@ -71,6 +70,8 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
     _costPrice = TextEditingController(text: p != null ? p.costPrice.toStringAsFixed(0) : '');
     _basePrice = TextEditingController(text: p != null ? p.basePrice.toStringAsFixed(0) : '');
     _stock     = TextEditingController(text: p != null ? p.stock.toStringAsFixed(0) : '0');
+    _categoryCtrl = TextEditingController(text: p?.category ?? '');
+    _baseUnitCtrl = TextEditingController(text: p?.baseUnit ?? 'pcs');
     
     _supplierPrice = TextEditingController(text: f.supplierPrice > 0 ? f.supplierPrice.toStringAsFixed(0) : '');
     _supplierShippingCost = TextEditingController(text: f.supplierShippingCost > 0 ? f.supplierShippingCost.toStringAsFixed(0) : '');
@@ -81,9 +82,6 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
     _supplierPaymentStatus = f.supplierPaymentStatus;
     _shippingPaymentStatus = f.shippingPaymentStatus;
 
-    // We'll resolve supplier/shipping IDs after builders in build method or just keep them null if not found
-    _category  = p?.category.isNotEmpty == true ? p!.category : AppConstants.categories.first;
-    _baseUnit  = p?.baseUnit ?? 'pcs';
     _defaultUnitName = p?.defaultUnitName;
     _existingImagePath = p?.imagePath;
     _units     = p?.units.map((u) => _UnitEntry.fromUnit(u)).toList() ?? [];
@@ -97,6 +95,8 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
     _costPrice.dispose();
     _basePrice.dispose();
     _stock.dispose();
+    _categoryCtrl.dispose();
+    _baseUnitCtrl.dispose();
     _supplierPrice.dispose();
     _supplierShippingCost.dispose();
     _supplierName.dispose();
@@ -204,22 +204,19 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
     try {
       String? imagePath = _existingImagePath;
       if (_imageBytes != null) {
-        // 1. Process (resize & compress)
         final processed = await ImageHelper.processImage(_imageBytes!);
-        
-        // 2. Save locally in User Documents
         imagePath = await ImageHelper.saveLocally(user.uid, productId, processed);
       }
 
       final product = Product(
         id:        productId,
         name:      _name.text.trim(),
-        category:  _category,
+        category:  _categoryCtrl.text.trim().isEmpty ? 'Umum' : _categoryCtrl.text.trim(),
         barcode:   _barcode.text.trim().isEmpty ? null : _barcode.text.trim(),
         description: _description.text.trim().isEmpty ? null : _description.text.trim(),
         costPrice: double.tryParse(_costPrice.text) ?? 0,
         basePrice: double.tryParse(_basePrice.text) ?? 0,
-        baseUnit:  _baseUnit,
+        baseUnit:  _baseUnitCtrl.text.trim().isEmpty ? 'pcs' : _baseUnitCtrl.text.trim(),
         defaultUnitName: _defaultUnitName,
         stock:     double.tryParse(_stock.text) ?? 0,
         imagePath: imagePath,
@@ -302,125 +299,133 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Image Picker
-                      Center(
-                        child: Column(
-                          children: [
-                            GestureDetector(
-                              onTap: _pickImage,
-                              child: Container(
-                                width: 120,
-                                height: 120,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.surfaceAlt,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: AppTheme.border),
-                                  image: _imageBytes != null 
-                                    ? DecorationImage(image: MemoryImage(_imageBytes!), fit: BoxFit.cover)
-                                    : (_existingImagePath != null 
-                                        ? (_existingImagePath!.startsWith('http') 
-                                            ? DecorationImage(image: NetworkImage(_existingImagePath!), fit: BoxFit.cover)
-                                            : DecorationImage(image: FileImage(File(_existingImagePath!)), fit: BoxFit.cover))
-                                        : null),
-                                ),
-                                child: (_imageBytes == null && _existingImagePath == null)
-                                    ? const Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Icon(Icons.add_a_photo_rounded, color: AppTheme.textSecondary, size: 32),
-                                          SizedBox(height: 8),
-                                          Text('Tambah Foto', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
-                                        ],
-                                      )
-                                    : null,
-                              ),
-                            ),
-                            if (_imageBytes != null || _existingImagePath != null)
-                              TextButton(
-                                onPressed: () => setState(() { _imageBytes = null; _existingImagePath = null; }),
-                                child: const Text('Hapus Foto', style: TextStyle(color: AppTheme.danger, fontSize: 11)),
-                              ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Section label
-                      _sectionLabel(context, 'Informasi Produk'),
-                      const SizedBox(height: 16),
-
-                      // Row 1: name + barcode
-                      Row(children: [
-                        Expanded(
-                          flex: 3,
-                          child: TextFormField(
-                            controller: _name,
-                            decoration: const InputDecoration(labelText: 'Nama Produk *'),
-                            validator:  (v) => v!.trim().isEmpty ? 'Nama wajib diisi' : null,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          flex: 2,
-                          child: TextFormField(
-                            controller: _barcode,
-                            decoration: InputDecoration(
-                              labelText:  'Barcode',
-                              hintText:   'Scan atau ketik barcode',
-                              prefixIcon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
-                              suffixIcon: _generatingBarcode 
-                                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                                : IconButton(
-                                    icon: const Icon(Icons.auto_fix_high_rounded, size: 18, color: AppTheme.accent),
-                                    tooltip: 'Generate Barcode',
-                                    onPressed: _generateBarcode,
+                      // Image & Basic Info
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildImagePicker(),
+                          const SizedBox(width: 24),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                // Row 1: name + barcode
+                                Row(children: [
+                                  Expanded(
+                                    flex: 3,
+                                    child: TextFormField(
+                                      controller: _name,
+                                      decoration: const InputDecoration(labelText: 'Nama Produk *'),
+                                      validator:  (v) => v!.trim().isEmpty ? 'Nama wajib diisi' : null,
+                                    ),
                                   ),
-                            ),
-                          ),
-                        ),
-                      ]),
-                      const SizedBox(height: 16),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    flex: 2,
+                                    child: TextFormField(
+                                      controller: _barcode,
+                                      decoration: InputDecoration(
+                                        labelText:  'Barcode',
+                                        hintText:   'Scan atau ketik barcode',
+                                        prefixIcon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
+                                        suffixIcon: _generatingBarcode 
+                                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                                          : IconButton(
+                                              icon: const Icon(Icons.auto_fix_high_rounded, size: 18, color: AppTheme.accent),
+                                              tooltip: 'Generate Barcode',
+                                              onPressed: _generateBarcode,
+                                            ),
+                                      ),
+                                    ),
+                                  ),
+                                ]),
+                                const SizedBox(height: 16),
 
-                      TextFormField(
-                        controller: _description,
-                        maxLines: 2,
-                        decoration: const InputDecoration(
-                          labelText: 'Deskripsi Produk',
-                          hintText: 'Tambahkan keterangan detail mengenai produk ini...',
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+                                TextFormField(
+                                  controller: _description,
+                                  maxLines: 2,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Deskripsi Produk',
+                                    hintText: 'Tambahkan keterangan detail mengenai produk ini...',
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
 
-                      Row(children: [
-                        Expanded(
-                          child: SizedBox(
-                            height: 48,
-                            child: DropdownButtonFormField<String>(
-                              initialValue:  _category,
-                              decoration:    const InputDecoration(labelText: 'Kategori *', isDense: true),
-                              dropdownColor: AppTheme.surfaceAlt,
-                              isExpanded:    true,
-                              items: AppConstants.categories
-                                  .map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis)))
-                                  .toList(),
-                              onChanged: (v) => setState(() => _category = v!),
-                            ),
+                                Row(children: [
+                                  Expanded(
+                                    flex: 2,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text('Kategori Produk *', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                                        const SizedBox(height: 8),
+                                        Autocomplete<String>(
+                                          optionsBuilder: (TextEditingValue textEditingValue) {
+                                            final list = ref.read(productsProvider).asData?.value.map((p) => p.category).toSet().toList() ?? [];
+                                            final combined = {...AppConstants.categories, ...list}.toList();
+                                            if (textEditingValue.text.isEmpty) {
+                                              return combined;
+                                            }
+                                            return combined.where((String option) {
+                                              return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                                            });
+                                          },
+                                          onSelected: (String selection) {
+                                            _categoryCtrl.text = selection;
+                                          },
+                                          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                                            if (controller.text.isEmpty && _categoryCtrl.text.isNotEmpty) {
+                                              controller.text = _categoryCtrl.text;
+                                            }
+                                            return TextFormField(
+                                    controller: controller,
+                                    focusNode: focusNode,
+                                    onChanged: (v) => _categoryCtrl.text = v,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Kategori Produk *',
+                                      hintText: 'Pilih atau ketik baru...',
+                                      suffixIcon: Icon(Icons.arrow_drop_down, size: 20),
+                                    ),
+                                    validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+                                  );
+                                },
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(width: 16),
                         Expanded(
-                          child: SizedBox(
-                            height: 48,
-                            child: DropdownButtonFormField<String>(
-                              initialValue:  _baseUnit,
-                              decoration:    const InputDecoration(labelText: 'Satuan Dasar *', isDense: true),
-                              dropdownColor: AppTheme.surfaceAlt,
-                              isExpanded:    true,
-                              items: AppConstants.baseUnits
-                                  .map((u) => DropdownMenuItem(value: u, child: Text(u)))
-                                  .toList(),
-                              onChanged: (v) => setState(() => _baseUnit = v!),
-                            ),
+                          child: Autocomplete<String>(
+                            optionsBuilder: (TextEditingValue textEditingValue) {
+                              final list = ref.read(productsProvider).asData?.value.map((p) => p.baseUnit).toSet().toList() ?? [];
+                              final combined = {...AppConstants.baseUnits, ...list}.toList();
+                              if (textEditingValue.text.isEmpty) {
+                                return combined;
+                              }
+                              return combined.where((String option) {
+                                return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                              });
+                            },
+                            onSelected: (String selection) {
+                              setState(() {
+                                _baseUnitCtrl.text = selection;
+                              });
+                            },
+                            fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                              if (controller.text.isEmpty && _baseUnitCtrl.text.isNotEmpty) {
+                                controller.text = _baseUnitCtrl.text;
+                              }
+                              return TextFormField(
+                                controller: controller,
+                                focusNode: focusNode,
+                                onChanged: (v) => setState(() => _baseUnitCtrl.text = v),
+                                decoration: const InputDecoration(
+                                  labelText: 'Satuan Dasar *',
+                                  hintText: 'e.g. pcs, kg, m',
+                                  suffixIcon: Icon(Icons.arrow_drop_down, size: 20),
+                                ),
+                                validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+                              );
+                            },
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -434,6 +439,11 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                           ),
                         ),
                       ]),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 24),
 
                       // ── Section: Biaya & Supplier ──────────────────
@@ -793,7 +803,6 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Column(children: [
-                            // Table header
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                               decoration: const BoxDecoration(
@@ -801,59 +810,31 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                 borderRadius: BorderRadius.vertical(top: Radius.circular(9)),
                               ),
                               child: Row(children: [
-                                Expanded(flex: 2, child: _th('Nama Satuan')),
-                                Expanded(flex: 3, child: _th('Konversi (1 satuan = ? satuan dasar)')),
-                                Expanded(flex: 2, child: _th('Harga Jual (Rp)')),
-                                const SizedBox(width: 36),
+                                Expanded(flex: 2, child: _th('Satuan Jual')),
+                                const SizedBox(width: 12),
+                                Expanded(flex: 3, child: _th('Konversi (ke Dasar)')),
+                                const SizedBox(width: 12),
+                                Expanded(flex: 2, child: _th('Harga Jual')),
+                                const SizedBox(width: 44),
                               ]),
                             ),
-                            ..._units.asMap().entries.map((e) => _UnitRowWidget(
-                                  key:      ValueKey(e.value.id),
-                                  entry:    e.value,
-                                  baseUnit: _baseUnit,
-                                  isLast:   e.key == _units.length - 1,
-                                  canDelete: true,
-                                  onChanged: (updated) => _updateUnit(e.key, updated),
-                                  onDelete:  () => _removeUnit(e.key),
-                                )),
+                            ListView.builder(
+                              shrinkWrap: true,
+                              physics:    const NeverScrollableScrollPhysics(),
+                              itemCount:  _units.length,
+                              itemBuilder: (context, i) => _UnitRowWidget(
+                                key:       ValueKey(_units[i].id),
+                                entry:     _units[i],
+                                baseUnit:  _baseUnitCtrl.text,
+                                isLast:    i == _units.length - 1,
+                                canDelete: _units.length > 0,
+                                onChanged: (u) => _updateUnit(i, u),
+                                onDelete:  () => _removeUnit(i),
+                              ),
+                            ),
                           ]),
                         ),
-
-                      if (_units.isNotEmpty) ...[
-                        const SizedBox(height: 16),
-                        _sectionLabel(context, 'Pengaturan Default'),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          height: 60, // A bit higher for helper text
-                          child: DropdownButtonFormField<String?>(
-                            initialValue: _defaultUnitName,
-                            isExpanded: true,
-                            decoration: const InputDecoration(
-                              labelText: 'Satuan Default di Kasir',
-                              helperText: 'Satuan ini akan otomatis terpilih saat produk discan/diklik',
-                              isDense: true,
-                            ),
-                            dropdownColor: AppTheme.surfaceAlt,
-                            items: [
-                              DropdownMenuItem(value: null, child: Text('Default (Satuan Pertama)')),
-                              DropdownMenuItem(value: _baseUnit, child: Text('Satuan Dasar ($_baseUnit)')),
-                              ..._units.where((u) => u.unitName.isNotEmpty).map((u) => DropdownMenuItem(
-                                value: u.unitName,
-                                child: Text(u.unitName),
-                              )),
-                            ],
-                            onChanged: (v) => setState(() => _defaultUnitName = v),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Contoh: 1 roll = 50 meter · 1 sack = 40 kg · 1 box = 6 pcs',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppTheme.textMuted,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ],
+                      const SizedBox(height: 32),
                     ],
                   ),
                 ),
@@ -869,18 +850,17 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
               child: Row(children: [
                 OutlinedButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Batal'),
+                  child:     const Text('Batal'),
                 ),
                 const Spacer(),
-                ElevatedButton.icon(
-                  onPressed: _saving ? null : _save,
-                  icon: _saving
-                      ? const SizedBox(
-                          width: 16, height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Icon(Icons.save_rounded, size: 18),
-                  label: Text(_saving ? 'Menyimpan...' : 'Simpan Produk'),
+                SizedBox(
+                  width:  200,
+                  height: 46,
+                  child: ElevatedButton.icon(
+                    onPressed: _saving ? null : _save,
+                    icon:  _saving ? const AppLoading() : const Icon(Icons.check_rounded),
+                    label: Text(_saving ? 'Menyimpan...' : 'Simpan Produk'),
+                  ),
                 ),
               ]),
             ),
@@ -890,30 +870,72 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
     );
   }
 
+  Widget _buildImagePicker() {
+    return InkWell(
+      onTap: _pickImage,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width:  160,
+        height: 160,
+        decoration: BoxDecoration(
+          color:        AppTheme.surfaceAlt,
+          borderRadius: BorderRadius.circular(12),
+          border:       Border.all(color: AppTheme.border),
+        ),
+        child: _imageBytes != null
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.memory(_imageBytes!, fit: BoxFit.cover),
+              )
+            : widget.product?.imagePath != null
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.file(File(widget.product!.imagePath!), fit: BoxFit.cover),
+                  )
+                : const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.add_a_photo_rounded, color: AppTheme.textMuted, size: 32),
+                      SizedBox(height: 8),
+                      Text('Foto Produk', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                    ],
+                  ),
+      ),
+    );
+  }
+
   Widget _paymentStatusDropdown({
     required String label,
     required PaymentStatus value,
     required ValueChanged<PaymentStatus?> onChanged,
   }) {
-    return DropdownButtonFormField<PaymentStatus>(
-      initialValue: value,
-      isExpanded: true,
-      decoration: InputDecoration(labelText: label, isDense: true),
-      dropdownColor: AppTheme.surfaceAlt,
-      items: PaymentStatus.values.map((s) => DropdownMenuItem(
-        value: s,
-        child: Row(
-          children: [
-            Container(
-              width: 8, height: 8,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: _statusColor(s)),
-            ),
-            const SizedBox(width: 8),
-            Text(s.label, style: const TextStyle(fontSize: 12)),
-          ],
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+              const SizedBox(height: 4),
+              SizedBox(
+                height: 42,
+                child: DropdownButtonFormField<PaymentStatus>(
+                  value: value,
+                  isExpanded: true,
+                  decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                  dropdownColor: AppTheme.surfaceAlt,
+                  style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                  items: PaymentStatus.values.map((s) => DropdownMenuItem(
+                    value: s,
+                    child: Text(s.name.toUpperCase(), style: TextStyle(color: _statusColor(s), fontWeight: FontWeight.bold, fontSize: 11)),
+                  )).toList(),
+                  onChanged: onChanged,
+                ),
+              ),
+            ],
+          ),
         ),
-      )).toList(),
-      onChanged: onChanged,
+      ],
     );
   }
 
@@ -1211,24 +1233,19 @@ class _UnitRowWidgetState extends State<_UnitRowWidget> {
             onChanged:    (_) => _notify(),
             keyboardType: TextInputType.number,
             decoration:   const InputDecoration(
-              isDense:    true,
-              prefixText: 'Rp ',
+              isDense:     true,
+              prefixText:  'Rp ',
             ),
           ),
         ),
-        const SizedBox(width: 8),
-        // Delete button
-        SizedBox(
-          width: 28,
-          child: widget.canDelete
-              ? IconButton(
-                  padding:   EdgeInsets.zero,
-                  onPressed: widget.onDelete,
-                  icon: const Icon(Icons.remove_circle_outline_rounded,
-                      color: AppTheme.danger, size: 20),
-                )
-              : const SizedBox(),
-        ),
+        const SizedBox(width: 12),
+        if (widget.canDelete)
+          IconButton(
+            onPressed: widget.onDelete,
+            icon:      const Icon(Icons.delete_outline_rounded, color: AppTheme.danger, size: 20),
+            padding:   EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
       ]),
     );
   }

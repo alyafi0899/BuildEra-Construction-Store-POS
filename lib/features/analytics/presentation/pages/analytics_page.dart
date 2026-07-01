@@ -3,24 +3,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
-import '../../../../shared/widgets/common_widgets.dart';
-import '../../../payment/providers/transaction_provider.dart';
-import '../../../../shared/models/transaction.dart';
-import '../../../settings/providers/settings_provider.dart';
 import '../../../../core/utils/report_helper.dart';
-import '../../../inventory/models/restock_record.dart';
-import '../../../inventory/providers/restock_provider.dart';
+import '../../../../shared/widgets/common_widgets.dart';
 import '../../../products/providers/product_provider.dart';
+import '../../../inventory/providers/restock_provider.dart';
+import '../../../payment/providers/transaction_provider.dart';
+import '../../../settings/providers/settings_provider.dart';
+import '../../../../shared/models/transaction.dart';
 import '../../../../shared/models/product.dart';
+import '../../../inventory/models/restock_record.dart';
 
-class AnalyticsPage extends StatefulWidget {
+class AnalyticsPage extends ConsumerStatefulWidget {
   const AnalyticsPage({super.key});
 
   @override
-  State<AnalyticsPage> createState() => _AnalyticsPageState();
+  ConsumerState<AnalyticsPage> createState() => _AnalyticsPageState();
 }
 
-class _AnalyticsPageState extends State<AnalyticsPage> {
+class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   final ScrollController _scrollController = ScrollController();
 
   @override
@@ -29,797 +29,745 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     super.dispose();
   }
 
-  void _downloadReport(WidgetRef ref, List<Transaction> allTxs, List<Product> allProducts, List<RestockRecord> allRestocks, String type) async {
-    final now = DateTime.now();
-    List<Transaction> filtered = [];
-    String periodName = '';
+  void _downloadReport(
+    WidgetRef ref, 
+    List<Transaction> txs, 
+    List<Product> products, 
+    List<RestockRecord> restocks,
+    String period
+  ) async {
+    final settings = ref.read(settingsProvider);
+    
+    DateTime now = DateTime.now();
+    List<Transaction> filtered;
+    String periodName;
 
-    switch (type) {
-      case 'daily':
-        filtered = allTxs.where((t) => 
-          t.createdAt.year == now.year && 
-          t.createdAt.month == now.month && 
-          t.createdAt.day == now.day).toList();
-        periodName = 'Hari Ini (${Formatters.date(now)})';
-        break;
+    switch (period) {
       case 'weekly':
-        final weekStart = now.subtract(Duration(days: now.weekday - 1));
-        final start = DateTime(weekStart.year, weekStart.month, weekStart.day);
-        filtered = allTxs.where((t) => t.createdAt.isAfter(start) || t.createdAt.isAtSameMomentAs(start)).toList();
-        periodName = 'Minggu Ini';
+        final lastWeek = now.subtract(const Duration(days: 7));
+        filtered = txs.where((t) => t.createdAt.isAfter(lastWeek)).toList();
+        periodName = 'Minggu_Ini';
         break;
       case 'monthly':
-        filtered = allTxs.where((t) => 
-          t.createdAt.year == now.year && 
-          t.createdAt.month == now.month).toList();
-        periodName = 'Bulan Ini (${Formatters.month(now.month)} ${now.year})';
+        filtered = txs.where((t) => t.createdAt.month == now.month && t.createdAt.year == now.year).toList();
+        periodName = 'Bulan_Ini';
         break;
       case 'yearly':
-        filtered = allTxs.where((t) => t.createdAt.year == now.year).toList();
-        periodName = 'Tahun Ini (${now.year})';
+        filtered = txs.where((t) => t.createdAt.year == now.year).toList();
+        periodName = 'Tahun_Ini';
         break;
-      case 'all':
-        filtered = allTxs;
-        periodName = 'Semua Data';
-        break;
+      default:
+        filtered = txs;
+        periodName = 'Semua_Data';
     }
 
-    if (filtered.isEmpty) {
-      if (mounted) showError(context, 'Tidak ada data transaksi untuk periode ini');
-      return;
-    }
-
-    final settings = ref.read(settingsProvider);
     await ReportHelper.generateAndDownloadReport(
-      transactions: filtered, 
-      products: allProducts,
-      restocks: allRestocks,
-      periodName: periodName, 
-      settings: settings
+      transactions: filtered,
+      products: products,
+      restocks: restocks,
+      periodName: periodName,
+      settings: settings,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer(
-      builder: (context, ref, child) {
-        final summaryAsync = ref.watch(salesSummaryProvider);
-        final transactionsAsync = ref.watch(transactionsProvider);
-        final productsAsync = ref.watch(productsProvider);
-        final restocksAsync = ref.watch(restockHistoryProvider);
+    final summaryAsync = ref.watch(salesSummaryProvider);
+    final transactionsAsync = ref.watch(transactionsProvider);
+    final productsAsync = ref.watch(productsProvider);
+    final restocksAsync = ref.watch(restockHistoryProvider);
+    final currentPeriod = ref.watch(analyticsPeriodProvider);
 
-        return Scaffold(
-          backgroundColor: AppTheme.bg,
-          body: Column(
-            children: [
-              // Header
-              PageHeader(
-              title: 'Analitik Penjualan',
-              subtitle: 'Ringkasan performa toko secara keseluruhan',
-              icon: Icons.bar_chart_rounded,
-              actions: [
-                if (transactionsAsync.hasValue && productsAsync.hasValue && restocksAsync.hasValue)
-                  PopupMenuButton<String>(
-                    onSelected: (val) => _downloadReport(
-                      ref, 
-                      transactionsAsync.value!, 
-                      productsAsync.value!, 
-                      restocksAsync.value!,
-                      val
-                    ),
-                    child: OutlinedButton.icon(
-                      onPressed: null, // Let popup handle it
-                      icon: const Icon(Icons.download_rounded, size: 16),
-                      label: const Text('Download Laporan'),
-                      style: OutlinedButton.styleFrom(
-                        disabledForegroundColor: AppTheme.accent,
-                        side: const BorderSide(color: AppTheme.accent),
-                      ),
-                    ),
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(value: 'weekly', child: Text('Minggu Ini')),
-                      const PopupMenuItem(value: 'monthly', child: Text('Bulan Ini')),
-                      const PopupMenuItem(value: 'yearly', child: Text('Tahun Ini')),
-                      const PopupMenuDivider(),
-                      const PopupMenuItem(value: 'all', child: Text('Semua Data')),
-                    ],
-                  ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: () => ref.refresh(salesSummaryProvider),
-                  icon: const Icon(Icons.refresh_rounded, size: 16),
-                  label: const Text('Refresh'),
-                ),
-              ],
-            ),
-
-            Expanded(
-              child: summaryAsync.when(
-                loading: () => const AppLoading(),
-                error:   (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: AppTheme.danger))),
-                data: (summary) => Scrollbar(
-                  controller: _scrollController,
-                  thumbVisibility: true,
-                  trackVisibility: true,
-                  child: SingleChildScrollView(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // ── Profit & Performance Cards ───────────────────────
-                        Row(children: [
-                          Expanded(child: StatCard(
-                            label:   'Net Profit Hari Ini',
-                            value:   Formatters.currency(summary.todayNetProfit),
-                            icon:    Icons.today_rounded,
-                            accentColor: AppTheme.success,
-                            subtitle: 'Dari ${Formatters.currency(summary.todayRevenue)} omzet',
-                          )),
-                          const SizedBox(width: 16),
-                          Expanded(child: StatCard(
-                            label:   'Net Profit Bulan Ini',
-                            value:   Formatters.currency(summary.monthlyNetProfit),
-                            icon:    Icons.calendar_month_rounded,
-                            accentColor: AppTheme.success,
-                            subtitle: 'Dari ${Formatters.currency(summary.monthlyRevenue)} omzet',
-                          )),
-                          const SizedBox(width: 16),
-                          Expanded(child: StatCard(
-                            label:   'Potensi Profit Stok',
-                            value:   Formatters.currency(summary.potentialInventoryProfit),
-                            icon:    Icons.inventory_2_rounded,
-                            accentColor: AppTheme.info,
-                            subtitle: 'Jika stok sisa terjual',
-                          )),
-                          const SizedBox(width: 16),
-                          Expanded(child: StatCard(
-                            label:       'Maksimum Profit',
-                            value:       Formatters.currency(summary.maxInventoryProfit),
-                            icon:        Icons.auto_graph_rounded,
-                            accentColor: AppTheme.warning,
-                            subtitle:    'Total Estimasi Profit',
-                          )),
-                        ]),
-                        const SizedBox(height: 24),
-
-                        // ── Payment Reminders ─────────────────────────────────
-                        if (summary.unpaidSupplierProducts > 0 || summary.unpaidShippingProducts > 0) ...[
-                          _PaymentReminders(
-                            unpaidSupplier: summary.unpaidSupplierDetails,
-                            unpaidShipping: summary.unpaidShippingDetails,
-                          ),
-                          const SizedBox(height: 24),
-                        ],
-
-                        // ── KPI Row (Total) ───────────────────────────────────
-                        Row(children: [
-                          Expanded(child: StatCard(
-                            label:   'Total Pendapatan',
-                            value:   Formatters.currency(summary.totalRevenue),
-                            icon:    Icons.attach_money_rounded,
-                            subtitle: 'Seluruh Transaksi',
-                          )),
-                          const SizedBox(width: 16),
-                          Expanded(child: StatCard(
-                            label:   'Total Laba Bersih',
-                            value:   Formatters.currency(summary.totalNetProfit),
-                            icon:    Icons.trending_up_rounded,
-                            accentColor: AppTheme.success,
-                            subtitle: 'Seluruh Transaksi',
-                          )),
-                          const SizedBox(width: 16),
-                          Expanded(child: StatCard(
-                            label:   'Rata-rata Order',
-                            value:   Formatters.currency(summary.avgOrderValue),
-                            icon:    Icons.shopping_bag_rounded,
-                            accentColor: AppTheme.accentLight,
-                            subtitle: 'Per Transaksi',
-                          )),
-                          const SizedBox(width: 16),
-                          Expanded(child: StatCard(
-                            label:       'Produk Terdaftar',
-                            value:       summary.topProducts.length.toString(),
-                            icon:        Icons.inventory_2_rounded,
-                            accentColor: AppTheme.warning,
-                            subtitle:    'Total SKU',
-                          )),
-                        ]),
-                        const SizedBox(height: 24),
-
-                        // ── Charts Row ─────────────────────────────────────────
-                        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Expanded(
-                            flex: 3,
-                            child: AppCard(
-                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                const SectionHeader(
-                                  title: 'Pendapatan Harian',
-                                  icon:  Icons.bar_chart_rounded,
-                                ),
-                                const SizedBox(height: 24),
-                                SizedBox(
-                                  height: 260,
-                                  child: summary.revenueByDay.isEmpty
-                                      ? const Center(child: Text('Belum ada data transaksi', style: TextStyle(color: AppTheme.textMuted)))
-                                      : _RevenueBarChart(data: summary.revenueByDay),
-                                ),
-                              ]),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            flex: 2,
-                            child: AppCard(
-                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                const SectionHeader(
-                                  title: 'Metode Pembayaran',
-                                  icon:  Icons.pie_chart_rounded,
-                                ),
-                                const SizedBox(height: 24),
-                                SizedBox(
-                                  height: 260,
-                                  child: summary.revenueByPayment.isEmpty
-                                      ? const Center(child: Text('Belum ada data transaksi', style: TextStyle(color: AppTheme.textMuted)))
-                                      : _PaymentPieChart(data: summary.revenueByPayment),
-                                ),
-                              ]),
-                            ),
-                          ),
-                        ]),
-                        const SizedBox(height: 24),
-
-                        // ── Top Products ───────────────────────────────────────
-                        AppCard(
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            const SectionHeader(
-                              title: 'Top 10 Produk Terlaris',
-                              icon:  Icons.star_rounded,
-                            ),
-                            const SizedBox(height: 20),
-                            if (summary.topProducts.isEmpty)
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 32),
-                                child: Center(
-                                  child: Text(
-                                    'Lakukan transaksi pertama untuk melihat analitik produk',
-                                    style: TextStyle(color: AppTheme.textMuted),
-                                  ),
-                                ),
-                              )
-                            else
-                              ...summary.topProducts.take(10).toList().asMap().entries.map((entry) {
-                                final rank = entry.key + 1;
-                                final prod = entry.value;
-                                final maxRev = summary.topProducts.first.revenue;
-                                final ratio = maxRev > 0 ? prod.revenue / maxRev : 0.0;
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 14),
-                                  child: Row(children: [
-                                    SizedBox(
-                                      width: 32,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: rank <= 3
-                                              ? AppTheme.accent.withValues(alpha: 0.2)
-                                              : AppTheme.surfaceAlt,
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          '#$rank',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            color:      rank <= 3 ? AppTheme.accent : AppTheme.textMuted,
-                                            fontWeight: FontWeight.w700,
-                                            fontSize:   11,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                      Text(
-                                        prod.name,
-                                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      const SizedBox(height: 5),
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(3),
-                                        child: LinearProgressIndicator(
-                                          value:           ratio,
-                                          backgroundColor: AppTheme.border,
-                                          valueColor: AlwaysStoppedAnimation(
-                                            rank == 1 ? AppTheme.accent
-                                                : rank == 2 ? AppTheme.accentLight
-                                                : rank == 3 ? AppTheme.warning
-                                                : AppTheme.textMuted,
-                                          ),
-                                          minHeight: 5,
-                                        ),
-                                      ),
-                                    ])),
-                                    const SizedBox(width: 16),
-                                    Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                                      Text(
-                                        Formatters.currency(prod.revenue),
-                                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13),
-                                      ),
-                                      Text(
-                                        '${Formatters.decimal(prod.qty)} terjual',
-                                        style: Theme.of(context).textTheme.bodySmall,
-                                      ),
-                                    ]),
-                                  ]),
-                                );
-                              }),
-                          ]),
-                        ),
-                        const SizedBox(height: 24),
-
-                        // ── Daily breakdown table ──────────────────────────────
-                        AppCard(
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            const SectionHeader(
-                              title: 'Laporan Detail Harian',
-                              icon:  Icons.calendar_today_rounded,
-                            ),
-                            const SizedBox(height: 16),
-                            if (summary.dailyDetails.isEmpty)
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 24),
-                                child: Center(child: Text('Belum ada data harian', style: TextStyle(color: AppTheme.textMuted))),
-                              )
-                            else ...[
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                decoration: BoxDecoration(
-                                  color:        AppTheme.surfaceAlt,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Row(children: [
-                                  Expanded(flex: 2, child: Text('Tanggal', style: _tableHeaderStyle)),
-                                  Expanded(child: Text('Transaksi', textAlign: TextAlign.center, style: _tableHeaderStyle)),
-                                  Expanded(flex: 2, child: Text('Pendapatan', textAlign: TextAlign.right, style: _tableHeaderStyle)),
-                                  Expanded(flex: 2, child: Text('Laba Bersih', textAlign: TextAlign.right, style: _tableHeaderStyle)),
-                                  const SizedBox(width: 40),
-                                ]),
-                              ),
-                              const SizedBox(height: 8),
-                              ListView.separated(
-                                shrinkWrap:  true,
-                                physics:     const NeverScrollableScrollPhysics(),
-                                itemCount:   summary.dailyDetails.length,
-                                separatorBuilder: (_, __) => const SizedBox(height: 4),
-                                itemBuilder: (_, i) => _DailyExpandableRow(summary: summary.dailyDetails[i]),
-                              ),
-                            ],
-                          ]),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ]),
-        );
-      },
-    );
-  }
-
-  static const _tableHeaderStyle = TextStyle(
-    color:      AppTheme.textSecondary,
-    fontSize:   11,
-    fontWeight: FontWeight.w700,
-    letterSpacing: 0.5,
-  );
-}
-
-class _DailyExpandableRow extends StatefulWidget {
-  final DailySummary summary;
-  const _DailyExpandableRow({required this.summary});
-
-  @override
-  State<_DailyExpandableRow> createState() => _DailyExpandableRowState();
-}
-
-class _DailyExpandableRowState extends State<_DailyExpandableRow> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = widget.summary;
-    return Consumer(builder: (context, ref, _) {
-      return Column(children: [
-        InkWell(
-          onTap: () => setState(() => _expanded = !_expanded),
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color:        _expanded ? AppTheme.accent.withValues(alpha: 0.05) : Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
-              border:       Border.all(color: _expanded ? AppTheme.accent.withValues(alpha: 0.2) : Colors.transparent),
-            ),
-            child: Row(children: [
-              Expanded(flex: 2, child: Text(s.date, style: const TextStyle(fontWeight: FontWeight.w600))),
-              Expanded(child: Text('${s.transactionCount}', textAlign: TextAlign.center)),
-              Expanded(flex: 2, child: Text(Formatters.currency(s.revenue), textAlign: TextAlign.right, style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold))),
-              Expanded(flex: 2, child: Text(Formatters.currency(s.netProfit), textAlign: TextAlign.right, style: const TextStyle(color: AppTheme.success, fontWeight: FontWeight.bold))),
-              const SizedBox(width: 12),
-              IconButton(
-                onPressed: () {
-                  final settings = ref.read(settingsProvider);
-                  final products = ref.read(productsProvider).asData?.value ?? [];
-                  final restocks = ref.read(restockHistoryProvider).asData?.value ?? [];
-                  ReportHelper.generateAndDownloadReport(
-                    transactions: s.transactions, 
-                    products: products,
-                    restocks: restocks,
-                    periodName: 'Hari Ini (${s.date})', 
-                    settings: settings
-                  );
-                },
-                icon: const Icon(Icons.download_rounded, size: 18, color: AppTheme.accent),
-                tooltip: 'Download Laporan Hari Ini',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-              const SizedBox(width: 8),
-              Icon(_expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, size: 20, color: AppTheme.textMuted),
-            ]),
-          ),
-        ),
-        if (_expanded)
-          Container(
-            margin: const EdgeInsets.only(top: 4, bottom: 12),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color:        AppTheme.surfaceAlt.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(12),
-              border:       Border.all(color: AppTheme.border),
-            ),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                const Icon(Icons.receipt_long_rounded, size: 14, color: AppTheme.accent),
-                const SizedBox(width: 8),
-                Text('RINCIAN TRANSAKSI & PRODUK', 
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.bold, 
-                    letterSpacing: 1.1,
-                    color: AppTheme.accent,
-                  )),
-              ]),
-              const SizedBox(height: 16),
-              ...s.transactions.map((t) => Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: AppTheme.surface,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Row(children: [
-                      Text(t.invoiceNumber, style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, fontSize: 13)),
-                      const SizedBox(width: 12),
-                      StatusChip(label: t.paymentMethod, color: AppTheme.textMuted),
-                      const Spacer(),
-                      Text('Total: ${Formatters.currency(t.total)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    ]),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 10, top: 8, bottom: 20),
-                    child: Column(children: [
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6, right: 10),
-                        child: Row(children: [
-                          Expanded(flex: 3, child: _smallTh('Produk')),
-                          Expanded(child: _smallTh('Qty', TextAlign.center)),
-                          Expanded(flex: 2, child: _smallTh('Modal', TextAlign.right)),
-                          Expanded(flex: 2, child: _smallTh('Jual', TextAlign.right)),
-                          Expanded(flex: 2, child: _smallTh('Profit', TextAlign.right)),
-                        ]),
-                      ),
-                      const Divider(height: 1, color: AppTheme.border),
-                      ...t.items.map((item) {
-                        final itemProfit = item.subtotal - (item.costPrice * item.quantity);
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          child: Row(children: [
-                            Expanded(flex: 3, child: Text(item.productName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
-                            Expanded(child: Text('${Formatters.decimal(item.quantity)} ${item.unitName}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 11))),
-                            Expanded(flex: 2, child: Text(Formatters.currency(item.costPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary))),
-                            Expanded(flex: 2, child: Text(Formatters.currency(item.soldPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11))),
-                            Expanded(flex: 2, child: Text(Formatters.currency(itemProfit), textAlign: TextAlign.right, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: itemProfit >= 0 ? AppTheme.success : AppTheme.danger))),
-                          ]),
-                        );
-                      }),
-                    ]),
-                  ),
-                ],
-              )),
-            ]),
-          ),
-      ]);
-    });
-  }
-
-  Widget _smallTh(String label, [TextAlign align = TextAlign.left]) {
-    return Text(label, textAlign: align, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textMuted));
-  }
-}
-
-class _PaymentReminders extends StatelessWidget {
-  final List<UnpaidBillDetail> unpaidSupplier;
-  final List<UnpaidBillDetail> unpaidShipping;
-  const _PaymentReminders({required this.unpaidSupplier, required this.unpaidShipping});
-
-  @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return Scaffold(
+      backgroundColor: AppTheme.bg,
+      body: Column(
         children: [
-          const SectionHeader(
-            title: 'Tagihan Belum Dibayar',
-            icon: Icons.notification_important_rounded,
-            color: AppTheme.warning,
-          ),
-          const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _BillList(
-                  title: 'Supplier',
-                  icon: Icons.business_rounded,
-                  bills: unpaidSupplier,
+          // Header
+          PageHeader(
+            title: 'Analitik & Wawasan Bisnis',
+            subtitle: 'Pemantauan performa finansial dan operasional toko',
+            icon: Icons.analytics_rounded,
+            actions: [
+              if (transactionsAsync.hasValue && productsAsync.hasValue && restocksAsync.hasValue)
+                PopupMenuButton<String>(
+                  onSelected: (val) => _downloadReport(
+                    ref, 
+                    transactionsAsync.value!, 
+                    productsAsync.value!, 
+                    restocksAsync.value!,
+                    val
+                  ),
+                  child: OutlinedButton.icon(
+                    onPressed: null,
+                    icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
+                    label: const Text('Ekspor Laporan'),
+                    style: OutlinedButton.styleFrom(
+                      disabledForegroundColor: AppTheme.accent,
+                      side: const BorderSide(color: AppTheme.accent),
+                    ),
+                  ),
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(value: 'weekly', child: Text('Minggu Ini')),
+                    const PopupMenuItem(value: 'monthly', child: Text('Bulan Ini')),
+                    const PopupMenuItem(value: 'yearly', child: Text('Tahun Ini')),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(value: 'all', child: Text('Semua Data')),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 24),
-              Expanded(
-                child: _BillList(
-                  title: 'Ekspedisi',
-                  icon: Icons.local_shipping_rounded,
-                  bills: unpaidShipping,
-                ),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: () => ref.refresh(salesSummaryProvider),
+                icon: const Icon(Icons.refresh_rounded, color: AppTheme.textSecondary),
+                tooltip: 'Refresh Data',
               ),
             ],
+          ),
+
+          // Period Filter Bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            decoration: const BoxDecoration(
+              color: AppTheme.surface,
+              border: Border(bottom: BorderSide(color: AppTheme.border)),
+            ),
+            child: Row(
+              children: [
+                const Text('Rentang Waktu:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textSecondary)),
+                const SizedBox(width: 16),
+                _periodChip('Hari Ini', AnalyticsPeriod.daily, currentPeriod, ref),
+                const SizedBox(width: 8),
+                _periodChip('Minggu Ini', AnalyticsPeriod.weekly, currentPeriod, ref),
+                const SizedBox(width: 8),
+                _periodChip('Bulan Ini', AnalyticsPeriod.monthly, currentPeriod, ref),
+                const SizedBox(width: 8),
+                _periodChip('Tahun Ini', AnalyticsPeriod.yearly, currentPeriod, ref),
+                const SizedBox(width: 8),
+                _periodChip('Semua', AnalyticsPeriod.all, currentPeriod, ref),
+              ],
+            ),
+          ),
+
+          Expanded(
+            child: summaryAsync.when(
+              loading: () => const AppLoading(),
+              error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: AppTheme.danger))),
+              data: (summary) => Scrollbar(
+                controller: _scrollController,
+                thumbVisibility: true,
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ── SECTION 1: CORE KPIs ──────────────────────────────
+                      const SectionHeader(title: 'Performa Finansial', icon: Icons.speed_rounded),
+                      const SizedBox(height: 16),
+                      Row(children: [
+                        Expanded(child: _gradientStatCard(
+                          label: 'Laba Bersih',
+                          value: summary.totalNetProfit,
+                          subtitle: 'Dari ${Formatters.currency(summary.totalRevenue)} omzet',
+                          colors: [const Color(0xFF00B09B), const Color(0xFF96C93D)],
+                          icon: Icons.auto_graph_rounded,
+                        )),
+                        const SizedBox(width: 16),
+                        Expanded(child: _gradientStatCard(
+                          label: 'Transaksi',
+                          value: summary.totalTransactions.toDouble(),
+                          subtitle: 'Total Nota Diterbitkan',
+                          colors: [const Color(0xFF3494E6), const Color(0xFFEC6EAD)],
+                          icon: Icons.calendar_today_rounded,
+                          isCurrency: false,
+                        )),
+                        const SizedBox(width: 16),
+                        Expanded(child: _gradientStatCard(
+                          label: 'Estimasi Laba Stok',
+                          value: summary.potentialInventoryProfit,
+                          subtitle: 'Potensi profit gudang',
+                          colors: [const Color(0xFFF2994A), const Color(0xFFF2C94C)],
+                          icon: Icons.inventory_2_rounded,
+                        )),
+                      ]),
+                      const SizedBox(height: 32),
+
+                      // ── SECTION 2: SMART CASHFLOW (The restored section) ──
+                      _buildFinancialInsights(summary),
+                      const SizedBox(height: 32),
+
+                      // ── SECTION 3: TRENDS & DISTRIBUTION ──────────────────
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(flex: 3, child: _buildRevenueChart(summary)),
+                          const SizedBox(width: 24),
+                          Expanded(flex: 2, child: _buildPaymentMethodsChart(summary)),
+                        ],
+                      ),
+                      const SizedBox(height: 32),
+
+                      // ── SECTION 4: TOP PRODUCTS ───────────────────────────
+                      _buildTopProducts(summary),
+                      const SizedBox(height: 32),
+
+                      // ── SECTION 5: DAILY LOG ──────────────────────────────
+                      const SectionHeader(title: 'Log Transaksi Harian', icon: Icons.history_edu_rounded),
+                      const SizedBox(height: 16),
+                      const _DailyDetailList(),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
       ),
     );
   }
-}
 
-class _BillList extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final List<UnpaidBillDetail> bills;
-
-  const _BillList({required this.title, required this.icon, required this.bills});
-
-  @override
-  Widget build(BuildContext context) {
-    if (bills.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(16),
+  Widget _periodChip(String label, AnalyticsPeriod period, AnalyticsPeriod current, WidgetRef ref) {
+    final active = period == current;
+    return InkWell(
+      onTap: () => ref.read(analyticsPeriodProvider.notifier).setPeriod(period),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         decoration: BoxDecoration(
-          color: AppTheme.success.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(8),
+          color: active ? AppTheme.accent.withValues(alpha: 0.15) : AppTheme.surfaceAlt,
+          border: Border.all(color: active ? AppTheme.accent : AppTheme.border),
+          borderRadius: BorderRadius.circular(20),
         ),
-        child: Row(children: [
-          const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 16),
-          const SizedBox(width: 8),
-          Text('Semua tagihan $title lunas', style: const TextStyle(color: AppTheme.success, fontSize: 12)),
-        ]),
-      );
-    }
+        child: Text(label, style: TextStyle(
+          fontSize: 12, 
+          fontWeight: active ? FontWeight.bold : FontWeight.normal,
+          color: active ? AppTheme.accent : AppTheme.textSecondary,
+        )),
+      ),
+    );
+  }
+
+  Widget _gradientStatCard({
+    required String label,
+    required double value,
+    required String subtitle,
+    required List<Color> colors,
+    required IconData icon,
+    bool isCurrency = true,
+  }) {
+    return Container(
+      height: 140, // Uniform height for KPI cards
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: colors, begin: Alignment.topLeft, end: Alignment.bottomRight),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(color: colors.first.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+              Icon(icon, color: Colors.white.withValues(alpha: 0.7), size: 18),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(isCurrency ? Formatters.currency(value) : value.toInt().toString(), 
+            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 4),
+          Text(subtitle, style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 10)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFinancialInsights(SalesSummary summary) {
+    // Advanced Allocation Logic
+    final recommendedRestock = summary.totalRevenue * 0.65;
+    final recommendedOther = summary.totalNetProfit * 0.15;
+    final maxWithdrawal = summary.totalNetProfit * 0.85;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(children: [
-          Icon(icon, size: 14, color: AppTheme.textSecondary),
-          const SizedBox(width: 8),
-          Text(title.toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: AppTheme.textSecondary, letterSpacing: 0.5)),
-        ]),
-        const SizedBox(height: 12),
-        ...bills.map((b) => Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceAlt,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.warning.withValues(alpha: 0.2)),
+        const SectionHeader(title: 'Manajemen Arus Kas Cerdas', icon: Icons.account_balance_rounded),
+        const SizedBox(height: 16),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Left Column: Insight Cards
+            Expanded(
+              flex: 3,
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: _insightCard(
+                        title: 'Total Omzet',
+                        subtitle: 'Pendapatan kotor periode ini',
+                        value: summary.totalRevenue,
+                        color: AppTheme.info,
+                        icon: Icons.payments_rounded,
+                      )),
+                      const SizedBox(width: 16),
+                      Expanded(child: _insightCard(
+                        title: 'Rekomendasi Re-stock',
+                        subtitle: 'Alokasi ideal belanja (65% Omzet)',
+                        value: recommendedRestock,
+                        color: AppTheme.accent,
+                        icon: Icons.shopping_cart_checkout_rounded,
+                      )),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(child: _insightCard(
+                        title: 'Dana Cadangan',
+                        subtitle: 'Simpanan tak terduga (15% Net)',
+                        value: recommendedOther,
+                        color: AppTheme.warning,
+                        icon: Icons.savings_rounded,
+                      )),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: SizedBox(
+                          height: 120, // Match _insightCard height
+                          child: AppCard(
+                            color: AppTheme.success.withValues(alpha: 0.05),
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Text('TAKE HOME PROFIT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: AppTheme.success)),
+                                const SizedBox(height: 8),
+                                Text(Formatters.currency(maxWithdrawal), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppTheme.success)),
+                                const Text('Rekomendasi: 85% Laba Bersih', style: TextStyle(fontSize: 9, color: AppTheme.textMuted)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-            child: Row(children: [
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(b.entityName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                Text('${b.count} Batch Aktif', style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
-              ])),
-              Text(Formatters.currency(b.remainingAmount), style: const TextStyle(color: AppTheme.warning, fontWeight: FontWeight.w900, fontSize: 13)),
-            ]),
-          ),
-        )),
+            const SizedBox(width: 24),
+            // Right Column: Consolidated Alerts
+            Expanded(
+              flex: 1,
+              child: _buildConsolidatedAlerts(summary),
+            ),
+          ],
+        ),
       ],
+    );
+  }
+
+  Widget _buildConsolidatedAlerts(SalesSummary summary) {
+    final hasAlerts = summary.unpaidSupplierDetails.isNotEmpty || summary.unpaidShippingDetails.isNotEmpty;
+    return Container(
+      height: 256, // Synced height: (120 * 2) + 16 (spacing)
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: hasAlerts ? AppTheme.danger.withValues(alpha: 0.05) : AppTheme.success.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: hasAlerts ? AppTheme.danger.withValues(alpha: 0.2) : AppTheme.success.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(hasAlerts ? Icons.warning_amber_rounded : Icons.check_circle_rounded, color: hasAlerts ? AppTheme.danger : AppTheme.success, size: 20),
+            const SizedBox(width: 8),
+            Text('STATUS TAGIHAN', style: TextStyle(color: hasAlerts ? AppTheme.danger : AppTheme.success, fontWeight: FontWeight.bold, fontSize: 12)),
+          ]),
+          const SizedBox(height: 16),
+          if (!hasAlerts)
+            const Text('Semua tagihan lunas! Arus kas belanja aman.', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary))
+          else ...[
+            const Text('PENDING:', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textMuted)),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView(
+                children: [
+                  ...summary.unpaidSupplierDetails.take(3).map((e) => _miniAlertRow(e.entityName, e.remainingAmount)),
+                  ...summary.unpaidShippingDetails.take(2).map((e) => _miniAlertRow(e.entityName, e.remainingAmount)),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _miniAlertRow(String name, double amt) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Expanded(child: Text(name, style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis)),
+          Text(Formatters.currency(amt), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.danger)),
+        ],
+      ),
+    );
+  }
+
+  Widget _insightCard({required String title, required String subtitle, required double value, required Color color, required IconData icon}) {
+    return Container(
+      height: 120, // Uniform height for insight cards
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceAlt,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 8),
+            Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          ]),
+          const SizedBox(height: 16),
+          Text(Formatters.currency(value), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 4),
+          Text(subtitle, style: const TextStyle(fontSize: 9, color: AppTheme.textMuted)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRevenueChart(SalesSummary summary) {
+    bool isDaily = summary.period == AnalyticsPeriod.daily;
+    
+    List<MapEntry<dynamic, double>> entries;
+    if (isDaily) {
+      // Focus on active hours: 06:00 to 18:00
+      entries = List.generate(13, (i) {
+        final hour = i + 6;
+        return MapEntry(hour, summary.netProfitByHour[hour] ?? 0.0);
+      });
+    } else {
+      entries = summary.netProfitByDay.entries.toList()
+        ..sort((a, b) => a.key.compareTo(b.key));
+    }
+
+    if (entries.isEmpty) return const SizedBox();
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionHeader(
+            title: isDaily ? 'Tren Keuntungan Bersih (Per Jam)' : 'Tren Keuntungan Bersih', 
+            icon: Icons.insights_rounded
+          ),
+          const SizedBox(height: 32),
+          SizedBox(
+            height: 250,
+            child: BarChart(BarChartData(
+              alignment: BarChartAlignment.spaceAround,
+              maxY: entries.every((e) => e.value == 0) ? 100 : entries.map((e) => e.value).reduce((a, b) => a > b ? a : b) * 1.3,
+              barTouchData: BarTouchData(
+                touchTooltipData: BarTouchTooltipData(
+                  getTooltipColor: (_) => AppTheme.surfaceAlt,
+                  getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                    String label;
+                    if (isDaily) {
+                      label = '${group.x.toInt().toString().padLeft(2, '0')}:00';
+                    } else {
+                      label = entries[groupIndex].key.toString();
+                    }
+                    return BarTooltipItem(
+                      '$label\n',
+                      const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      children: [
+                        TextSpan(
+                          text: Formatters.currency(rod.toY),
+                          style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.w900, fontSize: 12),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              titlesData: FlTitlesData(
+                show: true,
+                bottomTitles: AxisTitles(sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 30,
+                  interval: 1, // Show every hour label since range is smaller
+                  getTitlesWidget: (val, _) {
+                    // For daily, val is the actual hour (6-18)
+                    // For non-daily, val is the index (0-length)
+                    if (isDaily) {
+                      if (val < 6 || val > 18) return const SizedBox();
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8), 
+                        child: Text('${val.toInt().toString().padLeft(2, '0')}:00', style: const TextStyle(fontSize: 8, color: AppTheme.textSecondary))
+                      );
+                    }
+
+                    if (val.toInt() < 0 || val.toInt() >= entries.length) return const SizedBox();
+                    final label = entries[val.toInt()].key.toString().split('-').last;
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 8), 
+                      child: Text(label, style: const TextStyle(fontSize: 9, color: AppTheme.textSecondary))
+                    );
+                  },
+                )),
+                leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              ),
+              gridData: const FlGridData(show: false),
+              borderData: FlBorderData(show: false),
+              barGroups: entries.asMap().entries.map((e) => BarChartGroupData(
+                x: isDaily ? (e.value.key as int) : e.key,
+                barRods: [
+                  BarChartRodData(
+                    toY: e.value.value, 
+                    color: AppTheme.accent, 
+                    width: isDaily ? 12 : 20, 
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(4))
+                  )
+                ],
+              )).toList(),
+            )),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaymentMethodsChart(SalesSummary summary) {
+    final cash = summary.revenueByPayment['Tunai'] ?? 0;
+    final qris = summary.revenueByPayment['QRIS'] ?? 0;
+    final debt = summary.revenueByPayment['Piutang'] ?? 0;
+    final total = cash + qris + debt;
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionHeader(title: 'Metode Pembayaran', icon: Icons.pie_chart_rounded),
+          const SizedBox(height: 24),
+          if (total == 0) const Center(child: Padding(padding: EdgeInsets.all(40), child: Text('Belum ada data')))
+          else Column(children: [
+            SizedBox(height: 180, child: PieChart(PieChartData(sectionsSpace: 4, centerSpaceRadius: 40, sections: [
+              PieChartSectionData(value: cash, title: '${(cash/total*100).toStringAsFixed(0)}%', color: AppTheme.success, radius: 50, titleStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+              PieChartSectionData(value: qris, title: '${(qris/total*100).toStringAsFixed(0)}%', color: AppTheme.info, radius: 50, titleStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+              PieChartSectionData(value: debt, title: '${(debt/total*100).toStringAsFixed(0)}%', color: AppTheme.warning, radius: 50, titleStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+            ]))),
+            const SizedBox(height: 24),
+            _legendItem('Tunai', cash, AppTheme.success),
+            _legendItem('QRIS', qris, AppTheme.info),
+            _legendItem('Piutang', debt, AppTheme.warning),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  Widget _legendItem(String label, double val, Color color) {
+    return Padding(padding: const EdgeInsets.only(bottom: 8), child: Row(children: [
+      Container(width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+      const SizedBox(width: 12),
+      Text(label, style: const TextStyle(fontSize: 13)),
+      const Spacer(),
+      Text(Formatters.currency(val), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+    ]));
+  }
+
+  Widget _buildTopProducts(SalesSummary summary) {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionHeader(title: 'Top 5 Produk Terlaris', icon: Icons.star_rounded),
+          const SizedBox(height: 16),
+          if (summary.topProducts.isEmpty)
+            const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('Belum ada data penjualan')))
+          else
+            ...summary.topProducts.take(5).map((p) {
+              final idx = summary.topProducts.indexOf(p) + 1;
+              return Padding(padding: const EdgeInsets.only(bottom: 12), child: Row(children: [
+                Container(width: 24, height: 24, decoration: BoxDecoration(color: idx <= 3 ? AppTheme.accent : AppTheme.surfaceAlt, shape: BoxShape.circle),
+                  child: Center(child: Text('$idx', style: TextStyle(color: idx <= 3 ? Colors.white : AppTheme.textMuted, fontSize: 10, fontWeight: FontWeight.bold)))),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text('${Formatters.decimal(p.qty)} ${p.unit} terjual', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                ])),
+                Text(Formatters.currency(p.revenue), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.accent)),
+              ]));
+            }),
+        ],
+      ),
     );
   }
 }
 
-class _RevenueBarChart extends StatelessWidget {
-  final Map<String, double> data;
-  const _RevenueBarChart({required this.data});
-
+class _DailyDetailList extends ConsumerWidget {
+  const _DailyDetailList();
   @override
-  Widget build(BuildContext context) {
-    final sorted = data.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
-    final recent = sorted.length > 14 ? sorted.sublist(sorted.length - 14) : sorted;
-    final maxY   = recent.fold<double>(0, (m, e) => e.value > m ? e.value : m);
-
-    return BarChart(BarChartData(
-      alignment:    BarChartAlignment.spaceAround,
-      maxY:         maxY * 1.25,
-      barTouchData: BarTouchData(
-        touchTooltipData: BarTouchTooltipData(
-          getTooltipColor: (_) => AppTheme.surfaceAlt,
-          getTooltipItem:  (group, _, rod, __) => BarTooltipItem(
-            Formatters.currency(rod.toY),
-            const TextStyle(color: AppTheme.textPrimary, fontSize: 11),
-          ),
-        ),
-      ),
-      titlesData: FlTitlesData(
-        show:        true,
-        topTitles:   const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        leftTitles: AxisTitles(sideTitles: SideTitles(
-          showTitles:  true,
-          reservedSize: 64,
-          getTitlesWidget: (v, _) {
-            String label;
-            if (v >= 1000000) {
-              label = '${(v / 1000000).toStringAsFixed(1)}M';
-            } else if (v >= 1000) {
-              label = '${(v / 1000).toStringAsFixed(0)}K';
-            } else {
-              label = v.toStringAsFixed(0);
-            }
-            return Text(label, style: const TextStyle(color: AppTheme.textMuted, fontSize: 10));
-          },
-        )),
-        bottomTitles: AxisTitles(sideTitles: SideTitles(
-          showTitles:   true,
-          reservedSize: 28,
-          getTitlesWidget: (v, _) {
-            final idx = v.toInt();
-            if (idx < 0 || idx >= recent.length) return const SizedBox();
-            final parts = recent[idx].key.split('-');
-            final label = parts.length == 3 ? '${parts[2]}/${parts[1]}' : recent[idx].key;
-            return Transform.rotate(
-              angle: -0.4,
-              child: Text(label, style: const TextStyle(color: AppTheme.textMuted, fontSize: 9)),
-            );
-          },
-        )),
-      ),
-      gridData: FlGridData(
-        show:             true,
-        drawVerticalLine: false,
-        getDrawingHorizontalLine: (_) => const FlLine(color: AppTheme.border, strokeWidth: 0.8),
-      ),
-      borderData: FlBorderData(show: false),
-      barGroups: recent.asMap().entries.map((e) => BarChartGroupData(
-        x: e.key,
-        barRods: [
-          BarChartRodData(
-            toY:          e.value.value,
-            gradient:     const LinearGradient(
-              colors: [AppTheme.accent, AppTheme.accentLight],
-              begin:  Alignment.bottomCenter,
-              end:    Alignment.topCenter,
-            ),
-            width:        18,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-          ),
-        ],
-      )).toList(),
-    ));
+  Widget build(BuildContext context, WidgetRef ref) {
+    final summaryAsync = ref.watch(salesSummaryProvider);
+    return summaryAsync.when(
+      data: (summary) => Column(children: summary.dailyDetails.map((d) => _DailyRow(detail: d)).toList()),
+      loading: () => const SizedBox(),
+      error: (_, __) => const SizedBox(),
+    );
   }
 }
 
-class _PaymentPieChart extends StatefulWidget {
-  final Map<String, double> data;
-  const _PaymentPieChart({required this.data});
+class _DailyRow extends StatelessWidget {
+  final DailySummary detail;
+  const _DailyRow({required this.detail});
 
-  @override
-  State<_PaymentPieChart> createState() => _PaymentPieChartState();
-}
-
-class _PaymentPieChartState extends State<_PaymentPieChart> {
-  int? _touchedIndex;
-
-  static const _colors = [AppTheme.accent, AppTheme.info, AppTheme.success, AppTheme.warning];
+  void _downloadDailyReport(WidgetRef ref) async {
+    final settings = ref.read(settingsProvider);
+    final products = ref.read(productsProvider).asData?.value ?? [];
+    final restocks = ref.read(restockHistoryProvider).asData?.value ?? [];
+    await ReportHelper.generateAndDownloadReport(
+      transactions: detail.transactions,
+      products: products,
+      restocks: restocks,
+      periodName: 'Harian_${detail.date.replaceAll('-', '')}',
+      settings: settings,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final entries = widget.data.entries.toList();
-    final total   = entries.fold<double>(0, (s, e) => s + e.value);
-
-    return Row(children: [
-      Expanded(
-        child: PieChart(PieChartData(
-          pieTouchData: PieTouchData(
-            touchCallback: (event, resp) {
-              setState(() {
-                if (event is FlTapUpEvent) {
-                  _touchedIndex = resp?.touchedSection?.touchedSectionIndex;
-                }
-              });
-            },
-          ),
-          sections: entries.asMap().entries.map((e) {
-            final isTouched = _touchedIndex == e.key;
-            return PieChartSectionData(
-              value:     e.value.value,
-              color:     _colors[e.key % _colors.length],
-              radius:    isTouched ? 85 : 72,
-              showTitle: isTouched,
-              title:     isTouched
-                  ? '${total > 0 ? ((e.value.value / total) * 100).toStringAsFixed(1) : 0}%'
-                  : '',
-              titleStyle: const TextStyle(
-                color:      Colors.white,
-                fontSize:   13,
-                fontWeight: FontWeight.w700,
-              ),
-            );
-          }).toList(),
-          centerSpaceRadius: 45,
-          sectionsSpace:     3,
-        )),
-      ),
-      const SizedBox(width: 20),
-      Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: entries.asMap().entries.map((e) => GestureDetector(
-          onTap: () => setState(() => _touchedIndex = _touchedIndex == e.key ? null : e.key),
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(children: [
-              Container(
-                width: 12, height: 12,
-                decoration: BoxDecoration(
-                  color:        _colors[e.key % _colors.length],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(
-                  e.value.key,
-                  style: TextStyle(
-                    color:      _touchedIndex == e.key ? AppTheme.textPrimary : AppTheme.textSecondary,
-                    fontSize:   12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  total > 0
-                      ? '${((e.value.value / total) * 100).toStringAsFixed(1)}% · ${Formatters.currency(e.value.value)}'
-                      : '0%',
-                  style: const TextStyle(color: AppTheme.textMuted, fontSize: 11),
-                ),
-              ]),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: AppTheme.surfaceAlt,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppTheme.border),
+        ),
+        child: Consumer(builder: (context, ref, child) {
+          return ExpansionTile(
+            tilePadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            title: Row(children: [
+              SizedBox(width: 120, child: Text(detail.date, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16))),
+              const Spacer(),
+              _miniTitleStat('Omzet', detail.revenue, AppTheme.textPrimary),
+              const SizedBox(width: 24),
+              _miniTitleStat('Profit', detail.netProfit, AppTheme.success),
+              const SizedBox(width: 24),
+              _miniTitleStat('Nota', detail.transactionCount.toDouble(), AppTheme.info, isCurrency: false),
             ]),
-          ),
-        )).toList(),
+            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+              IconButton(onPressed: () => _downloadDailyReport(ref), icon: const Icon(Icons.picture_as_pdf_rounded, size: 20, color: AppTheme.accent), tooltip: 'Ekspor PDF Harian'),
+              const Icon(Icons.keyboard_arrow_down_rounded),
+            ]),
+            children: [
+              Container(padding: const EdgeInsets.all(24), color: AppTheme.bg.withValues(alpha: 0.4), child: Column(children: [
+                Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+                  _breakdownBox('TUNAI', detail.cashTotal, AppTheme.success, Icons.payments_rounded),
+                  _breakdownBox('QRIS', detail.qrisTotal, AppTheme.info, Icons.qr_code_scanner_rounded),
+                  _breakdownBox('PIUTANG', detail.debtTotal, AppTheme.warning, Icons.account_balance_wallet_rounded),
+                ]),
+                const SizedBox(height: 32),
+                const Align(alignment: Alignment.centerLeft, child: Text('LOG AUDIT TRANSAKSI:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: AppTheme.textMuted, letterSpacing: 1.2))),
+                const SizedBox(height: 16),
+                ...detail.transactions.map((tx) => _DetailedTxAuditTile(tx: tx)),
+              ])),
+            ],
+          );
+        }),
       ),
+    );
+  }
+
+  Widget _miniTitleStat(String l, double v, Color c, {bool isCurrency = true}) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+      Text(l, style: const TextStyle(fontSize: 9, color: AppTheme.textMuted, fontWeight: FontWeight.bold)),
+      Text(isCurrency ? Formatters.currency(v) : v.toInt().toString(), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: c)),
     ]);
+  }
+
+  Widget _breakdownBox(String label, double val, Color color, IconData icon) {
+    return Expanded(child: Container(margin: const EdgeInsets.symmetric(horizontal: 6), padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withValues(alpha: 0.15))),
+        child: Column(children: [Icon(icon, color: color, size: 20), const SizedBox(height: 8), Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textSecondary)),
+          const SizedBox(height: 4), Text(Formatters.currency(val), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900))])));
+  }
+}
+
+class _DetailedTxAuditTile extends StatelessWidget {
+  final Transaction tx;
+  const _DetailedTxAuditTile({required this.tx});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: AppTheme.surface.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceAlt.withValues(alpha: 0.3),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+            ),
+            child: Row(
+              children: [
+                Text(tx.invoiceNumber, style: const TextStyle(fontFamily: 'monospace', fontSize: 13, fontWeight: FontWeight.w900, color: Colors.white)),
+                const SizedBox(width: 12),
+                StatusChip(label: tx.paymentMethod.toUpperCase(), color: AppTheme.textMuted),
+                if (tx.customerName != null) ...[const SizedBox(width: 8), Text('• ${tx.customerName}', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary))],
+                const Spacer(),
+                Text('Total: ${Formatters.currency(tx.total)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.white)),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Row(children: [_th('Produk', 5), _th('Qty', 2, align: TextAlign.center), _th('Modal', 3, align: TextAlign.right), _th('Jual', 3, align: TextAlign.right), _th('Profit', 3, align: TextAlign.right)]),
+          ),
+          ...tx.items.map((item) {
+            final profit = item.subtotal - (item.costPrice * item.quantity);
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(children: [
+                Expanded(flex: 5, child: Text(item.productName, style: const TextStyle(fontSize: 12, color: Colors.white70))),
+                Expanded(flex: 2, child: Text('${Formatters.decimal(item.quantity)} ${item.unitName}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary))),
+                Expanded(flex: 3, child: Text(Formatters.currency(item.costPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, color: AppTheme.textMuted))),
+                Expanded(flex: 3, child: Text(Formatters.currency(item.soldPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, color: Colors.white))),
+                Expanded(flex: 3, child: Text(Formatters.currency(profit), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.success))),
+              ]),
+            );
+          }),
+          if (tx.notes != null && tx.notes!.isNotEmpty) ...[
+            const Padding(padding: EdgeInsets.all(16), child: Divider(height: 1, color: AppTheme.border)),
+            Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 16), child: Text('Catatan: ${tx.notes}', style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: AppTheme.textMuted))),
+          ] else const SizedBox(height: 12),
+        ],
+      ),
+    );
+  }
+
+  Widget _th(String label, int flex, {TextAlign align = TextAlign.left}) {
+    return Expanded(flex: flex, child: Text(label, textAlign: align, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textMuted, letterSpacing: 0.5)));
   }
 }

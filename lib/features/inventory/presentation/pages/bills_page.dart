@@ -350,53 +350,55 @@ class _EntityExpandableGroupState extends State<_EntityExpandableGroup> {
 
     return Column(
       children: [
-        InkWell(
-          onTap: () => setState(() => _isExpanded = !_isExpanded),
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceAlt,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _isExpanded ? AppTheme.accent.withValues(alpha: 0.3) : AppTheme.border),
+        Material(
+          color: AppTheme.surfaceAlt,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: _isExpanded ? AppTheme.accent.withValues(alpha: 0.3) : AppTheme.border),
+          ),
+          child: InkWell(
+            onTap: () => setState(() => _isExpanded = !_isExpanded),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              child: Row(children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: widget.isSupplier ? AppTheme.accent : AppTheme.info, 
+                    borderRadius: BorderRadius.circular(8)
+                  ),
+                  child: Icon(
+                    widget.isSupplier ? Icons.business_rounded : Icons.local_shipping_rounded, 
+                    size: 20, color: Colors.white
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(widget.entityName.toUpperCase(), 
+                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 0.5)),
+                      if (contact != null)
+                        Text('Hubungi: $contact', style: const TextStyle(fontSize: 10, color: AppTheme.accent, fontWeight: FontWeight.bold))
+                      else
+                        Text('${widget.items.length} Batch Nota', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                    ],
+                  ),
+                ),
+                _summarySmallItem('Total Biaya', widget.totalBill, AppTheme.textPrimary),
+                const SizedBox(width: 20),
+                _summarySmallItem('Terbayar', widget.totalPaid, AppTheme.success),
+                const SizedBox(width: 20),
+                _summarySmallItem('Sisa Hutang', widget.totalRemaining, AppTheme.warning),
+                const SizedBox(width: 12),
+                Icon(
+                  _isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, 
+                  color: AppTheme.textMuted
+                ),
+              ]),
             ),
-            child: Row(children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: widget.isSupplier ? AppTheme.accent : AppTheme.info, 
-                  borderRadius: BorderRadius.circular(8)
-                ),
-                child: Icon(
-                  widget.isSupplier ? Icons.business_rounded : Icons.local_shipping_rounded, 
-                  size: 20, color: Colors.white
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(widget.entityName.toUpperCase(), 
-                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 0.5)),
-                    if (contact != null)
-                      Text('Hubungi: $contact', style: const TextStyle(fontSize: 10, color: AppTheme.accent, fontWeight: FontWeight.bold))
-                    else
-                      Text('${widget.items.length} Batch Nota', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
-                  ],
-                ),
-              ),
-              _summarySmallItem('Total Biaya', widget.totalBill, AppTheme.textPrimary),
-              const SizedBox(width: 20),
-              _summarySmallItem('Terbayar', widget.totalPaid, AppTheme.success),
-              const SizedBox(width: 20),
-              _summarySmallItem('Sisa Hutang', widget.totalRemaining, AppTheme.warning),
-              const SizedBox(width: 12),
-              Icon(
-                _isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, 
-                color: AppTheme.textMuted
-              ),
-            ]),
           ),
         ),
         if (_isExpanded)
@@ -457,7 +459,7 @@ class _BillTile extends ConsumerWidget {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12), // More compact padding
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.surface,
         borderRadius: BorderRadius.circular(12),
@@ -466,67 +468,49 @@ class _BillTile extends ConsumerWidget {
       child: Column(
         children: [
           Row(children: [
-            // 1. Info Produk
             Expanded(
-              flex: 5,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.name, 
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                    maxLines: 1, overflow: TextOverflow.ellipsis
-                  ),
                   Row(children: [
-                    Text(Formatters.date(item.date), style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                    Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                     if (item.isInitial) ...[
-                      const SizedBox(width: 6),
-                      const Text('(Stok Awal)', style: TextStyle(fontSize: 9, color: AppTheme.accent, fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: AppTheme.accent.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+                        child: const Text('Stok Awal', style: TextStyle(fontSize: 9, color: AppTheme.accent, fontWeight: FontWeight.bold)),
+                      ),
                     ],
                   ]),
+                  Text('Batch: ${Formatters.dateTime(item.date)}', style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
                 ],
               ),
             ),
-            
-            // 2. Data Financials (More responsive flex values)
-            Expanded(flex: 3, child: _col('Total', item.amount, AppTheme.textPrimary)),
-            Expanded(flex: 3, child: _col('Terbayar', item.paidAmount, AppTheme.success)),
-            Expanded(flex: 3, child: _col('Sisa', remaining, AppTheme.warning)),
-
-            // 3. Status Badge (Narrower)
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 80,
-              child: Center(child: _miniStatus(isPaid, item.paidAmount)),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(Formatters.currency(item.amount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                Text(isPaid ? 'LUNAS' : 'Sisa: ${Formatters.currency(remaining)}', 
+                  style: TextStyle(
+                    fontSize: 11, 
+                    fontWeight: FontWeight.w900, 
+                    color: isPaid ? AppTheme.success : AppTheme.warning,
+                  )),
+              ],
             ),
-
-            // 4. Tombol Bayar & Hapus
-            const SizedBox(width: 8),
+            const SizedBox(width: 16),
             if (!isPaid)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    onPressed: () => _handleDelete(context, ref),
-                    icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.danger, size: 20),
-                    tooltip: 'Hapus Tagihan (Kesalahan Input)',
-                  ),
-                  const SizedBox(width: 4),
-                  SizedBox(
-                    height: 32,
-                    child: ElevatedButton(
-                      onPressed: () => _showPaymentDialog(context, ref),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.accent,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        textStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
-                      ),
-                      child: const Text('BAYAR'),
-                    ),
-                  ),
-                ],
+              ElevatedButton(
+                onPressed: () => _showPaymentDialog(context, ref),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.accent,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                ),
+                child: const Text('BAYAR', style: TextStyle(fontSize: 11)),
               )
             else
-              const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 22),
+              const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 20),
           ]),
           
           _buildPaymentHistory(context, ref),
@@ -535,54 +519,12 @@ class _BillTile extends ConsumerWidget {
     );
   }
 
-  Future<void> _handleDelete(BuildContext context, WidgetRef ref) async {
-    final title = item.isInitial ? 'Hapus Tagihan Stok Awal' : 'Hapus Tagihan Restock';
-    final content = item.isInitial 
-      ? 'Hapus tagihan ini dari daftar? Data produk tetap ada, namun status pembayaran akan diubah menjadi N/A.'
-      : 'Hapus data restock ini? Stok produk akan dikurangi otomatis dan semua riwayat cicilan untuk batch ini akan ikut dihapus.';
-
-    final ok = await showConfirmDialog(context, title: title, content: content);
-    if (ok) {
-      if (item.isInitial) {
-        final p = item.original as Product;
-        await ref.read(productRepositoryProvider).dismissInitialBill(p, isSupplier: isSupplier);
-      } else {
-        final r = item.original as RestockRecord;
-        await ref.read(restockNotifierProvider.notifier).deleteRestock(r);
-      }
-      if (context.mounted) showSuccess(context, 'Tagihan berhasil dihapus dari daftar');
-    }
-  }
-
-  Widget _miniStatus(bool isPaid, double paid) {
-    String label = isPaid ? 'LUNAS' : (paid > 0 ? 'PARTIAL' : 'BELUM');
-    Color color = isPaid ? AppTheme.success : (paid > 0 ? AppTheme.info : AppTheme.danger);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4), border: Border.all(color: color.withValues(alpha: 0.3))),
-      child: Text(label, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold)),
-    );
-  }
-
-  Widget _col(String label, double value, Color color) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Text(label, style: const TextStyle(fontSize: 9, color: AppTheme.textMuted)),
-        Text(Formatters.currency(value), 
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: color),
-          maxLines: 1, overflow: TextOverflow.ellipsis
-        ),
-      ],
-    );
-  }
-
   Widget _buildPaymentHistory(BuildContext context, WidgetRef ref) {
     final paymentsAsync = ref.watch(billPaymentsProvider);
     
     return paymentsAsync.when(
       data: (allPayments) {
-        final itemPayments = allPayments.where((p) => p.billId == item.id && p.isForSupplier == isSupplier).toList();
+        final itemPayments = allPayments.where((p) => p.billId == item.id).toList();
         if (itemPayments.isEmpty && item.paidAmount == 0) return const SizedBox();
 
         return Column(
@@ -591,38 +533,24 @@ class _BillTile extends ConsumerWidget {
             Row(children: [
               const Icon(Icons.history_rounded, size: 12, color: AppTheme.textMuted),
               const SizedBox(width: 6),
-              const Flexible(
-                child: Text('Riwayat Pembayaran:', 
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textMuted),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
+              Text('Riwayat Pembayaran:', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textMuted)),
               const Spacer(),
               LinearProgressIndicator(
                 value: item.amount > 0 ? (item.paidAmount / item.amount) : 0,
                 backgroundColor: AppTheme.bg,
                 valueColor: const AlwaysStoppedAnimation(AppTheme.success),
                 minHeight: 4,
-              ).constrained(width: 50),
+              ).constrained(width: 80),
             ]),
             const SizedBox(height: 12),
             ...itemPayments.map((p) => Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Row(children: [
-                SizedBox(
-                  width: 75,
-                  child: Text(Formatters.date(p.createdAt), style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(p.notes ?? 'Cicilan Pembayaran', 
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
-                    maxLines: 1, overflow: TextOverflow.ellipsis
-                  ),
-                ),
-                const SizedBox(width: 8),
+                Text(Formatters.dateTime(p.createdAt), style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                const SizedBox(width: 12),
+                Expanded(child: Text(p.notes ?? 'Cicilan Pembayaran', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500))),
                 Text(Formatters.currency(p.amount), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.success)),
-                const SizedBox(width: 4),
+                const SizedBox(width: 8),
                 IconButton(
                   onPressed: () async {
                     final ok = await showConfirmDialog(context, title: 'Hapus Pembayaran', content: 'Hapus catatan pembayaran ini? Sisa hutang akan bertambah kembali.');
@@ -639,8 +567,7 @@ class _BillTile extends ConsumerWidget {
             if (itemPayments.isEmpty && item.paidAmount > 0)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 4),
-                child: Text('Data pembayaran lama (sebelum update riwayat)', 
-                  style: TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: AppTheme.textMuted)),
+                child: Text('Data pembayaran lama (sebelum update riwayat)', style: TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: AppTheme.textMuted)),
               ),
           ],
         );
@@ -658,13 +585,13 @@ class _BillTile extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Input Bayar ${isSupplier ? 'Supplier' : 'Ongkir'}'),
+        title: const Text('Input Pembayaran Tagihan'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Produk: ${item.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
-            Text('Sisa Tagihan: ${Formatters.currency(remaining)}', style: const TextStyle(fontSize: 12, color: AppTheme.warning)),
+            Text('Tagihan: ${item.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text('Sisa Hutang: ${Formatters.currency(remaining)}', style: const TextStyle(fontSize: 12, color: AppTheme.warning)),
             const SizedBox(height: 20),
             TextFormField(
               controller: amountCtrl,
@@ -680,7 +607,7 @@ class _BillTile extends ConsumerWidget {
               controller: notesCtrl,
               decoration: const InputDecoration(
                 labelText: 'Keterangan / Catatan',
-                hintText: 'Contoh: Titip ke Supir, Transfer, dll',
+                hintText: 'Contoh: Titip ke Supir, Transfer Bank, dll',
               ),
             ),
           ],
@@ -699,7 +626,7 @@ class _BillTile extends ConsumerWidget {
                 notes: notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim(),
                 createdAt: DateTime.now(),
                 isInitialBill: item.isInitial,
-                isForSupplier: isSupplier, // Correctly pass the context
+                isForSupplier: isSupplier,
               );
 
               await ref.read(billPaymentRepositoryProvider).savePayment(payment);
