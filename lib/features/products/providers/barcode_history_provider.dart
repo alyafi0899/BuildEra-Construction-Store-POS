@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:uuid/uuid.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../core/sync/services/local_database.dart';
 import '../../../core/sync/models/sync_task.dart';
@@ -66,6 +67,45 @@ class BarcodeHistoryRepository {
       action:     SyncAction.update,
       data:       data,
     );
+  }
+
+  /// Logs multiple barcodes into the permanent history in a single batch
+  Future<void> logBarcodesBatch(List<({String barcode, String name, String id})> items) async {
+    if (items.isEmpty) return;
+    
+    final box = await _getBox();
+    final tasks = <SyncTask>[];
+    final now = DateTime.now().toIso8601String();
+    final Map<String, dynamic> localEntries = {};
+
+    for (final item in items) {
+      final normalized = item.barcode.trim();
+      if (normalized.isEmpty) continue;
+
+      final data = {
+        'barcode': normalized,
+        'productName': item.name,
+        'productId': item.id,
+        'usedAt': now,
+        'status': 'active',
+      };
+
+      localEntries[normalized] = data;
+      
+      tasks.add(SyncTask(
+        id: const Uuid().v4(),
+        collection: 'barcode_history',
+        documentId: normalized,
+        action:     SyncAction.update,
+        data:       data,
+        createdAt: DateTime.now(),
+      ));
+    }
+
+    if (localEntries.isNotEmpty) {
+      await box.putAll(localEntries);
+      await _ref.read(syncProvider.notifier).addBatchToQueue(tasks);
+    }
   }
 
   /// Archives a barcode when a product is deleted

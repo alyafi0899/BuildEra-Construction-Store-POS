@@ -1,20 +1,17 @@
+import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' as firestore
     hide Transaction;
 import 'package:firebase_storage/firebase_storage.dart' as storage;
 import 'package:hive_flutter/hive_flutter.dart';
-import 'dart:typed_data';
-import '../../../core/utils/image_helper.dart';
 import '../../../core/sync/models/sync_task.dart';
 import '../../../core/sync/providers/sync_provider.dart';
 import '../../../core/sync/services/local_database.dart';
 import '../../../shared/models/product.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/product_financials.dart';
-import '../../inventory/models/restock_record.dart'; // Just models
-import '../../inventory/models/bill_payment.dart';
-
 import '../providers/barcode_history_provider.dart';
 
 final _uuid = Uuid();
@@ -52,24 +49,11 @@ class ProductRepository {
   Stream<List<Product>> getProductsStream() async* {
     final box = await _getBox();
     
-    // 1. Emit current local data immediately
+    // Initial fetch from Hive
     yield _productsFromBox(box);
 
-    // 2. Listen to local changes
+    // Watch for Hive changes
     yield* box.watch().map((_) => _productsFromBox(box));
-  }
-
-  List<Product> _productsFromBox(Box box) {
-    final list = box.values.map((data) {
-      final m = Map<String, dynamic>.from(data as Map);
-      final unitsData = m['units'] as List? ?? [];
-      final units = unitsData
-          .map((u) => ProductUnit.fromMap(Map<String, dynamic>.from(u as Map)))
-          .toList();
-      return Product.fromMap(m, units: units);
-    }).toList();
-    list.sort((a, b) => a.name.compareTo(b.name));
-    return list;
   }
 
   Future<List<Product>> getAllProducts() async {
@@ -77,155 +61,34 @@ class ProductRepository {
     return _productsFromBox(box);
   }
 
-  Future<Product?> getProductByBarcode(String barcode) async {
-    final products = await getAllProducts();
-    final normalized = barcode.trim();
-    try {
-      return products.firstWhere((p) => p.barcode?.trim() == normalized);
-    } catch (_) {
-      return null;
-    }
+  List<Product> _productsFromBox(Box box) {
+    final list = box.values.map((data) {
+      return Product.fromMap(Map<String, dynamic>.from(data as Map));
+    }).toList();
+    list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return list;
   }
 
   // ── Write Operations ───────────────────────────────────────────────────────
 
-  Future<void> saveProduct(Product p, List<ProductUnit> units) async {
-    // 1. Local Validation
-    final products = await getAllProducts();
-    final nameLower = p.name.trim().toLowerCase();
+  Future<void> saveProduct(Product product, List<ProductUnit> units) async {
+    final box = await _getBox();
     
-    // Check for duplicate Name
-    final dupName = products.any((item) => item.name.trim().toLowerCase() == nameLower && item.id != p.id);
-    if (dupName) throw 'Produk dengan nama "${p.name}" sudah ada.';
-
-    // Check for duplicate Barcode
-    if (p.barcode != null && p.barcode!.trim().isNotEmpty) {
-      final normalizedBarcode = p.barcode!.trim();
-      final isUsed = await _historyRepo.isBarcodeUsed(normalizedBarcode);
-      if (isUsed) {
-        final existing = products.any((item) => item.barcode?.trim() == normalizedBarcode && item.id != p.id);
-        if (existing) throw 'Barcode "${p.barcode}" sudah digunakan oleh produk lain.';
-      }
-    }
-
-    final data = p.toMap();
+    final data = product.toMap();
     data['units'] = units.map((u) => u.toMap()).toList();
 
-    // 2. Write Local
-    final box = await _getBox();
-    await box.put(p.id, data);
-
-    // 3. Queue Sync
-    await _ref.read(syncProvider.notifier).addToQueue(
-      collection: 'products',
-      documentId: p.id,
-      action:     SyncAction.update, // set handles both create and update
-      data:       data,
-    );
-
-    // 4. Log barcode local history (simplified for now)
-    if (p.barcode != null && p.barcode!.trim().isNotEmpty) {
-      await _historyRepo.logBarcode(p.barcode!, p.name, p.id);
-    }
-  }
-
-  Future<void> updateStock(String productId, double delta) async {
-    final box = await _getBox();
-    final data = box.get(productId);
-    if (data == null) return;
-
-    final m = Map<String, dynamic>.from(data as Map);
-    final currentStock = (m['stock'] as num? ?? 0).toDouble();
-    m['stock'] = currentStock + delta;
-    m['updated_at'] = DateTime.now().toIso8601String();
-
-    await box.put(productId, m);
+    await box.put(product.id, data);
 
     await _ref.read(syncProvider.notifier).addToQueue(
       collection: 'products',
-      documentId: productId,
-      action:     SyncAction.update,
-      data:       {'stock': m['stock'], 'updated_at': m['updated_at']},
-    );
-  }
-
-  Future<void> deleteProduct(String id) async {
-    final box = await _getBox();
-    final data = box.get(id);
-    final barcode = data != null ? (data as Map)['barcode'] as String? : null;
-
-    await box.delete(id);
-
-    await _ref.read(syncProvider.notifier).addToQueue(
-      collection: 'products',
-      documentId: id,
-      action:     SyncAction.delete,
-      data:       {},
+      documentId: product.id,
+      action: SyncAction.update,
+      data: data,
     );
 
-    if (barcode != null && barcode.isNotEmpty) {
-      await _historyRepo.archiveBarcode(barcode);
+    if (product.barcode != null && product.barcode!.isNotEmpty) {
+      await _historyRepo.logBarcode(product.barcode!, product.name, product.id);
     }
-
-    // Clean up related data: Restock history and Payments
-    try {
-      final boxRestock = await LocalDatabase.openBox(_uid, 'restock_history');
-      final restockRecords = boxRestock.values
-          .map((d) => RestockRecord.fromMap(Map<String, dynamic>.from(d as Map)))
-          .where((r) => r.productId == id)
-          .toList();
-      
-      final boxPayments = await LocalDatabase.openBox(_uid, 'bill_payments');
-
-      for (final r in restockRecords) {
-        await boxRestock.delete(r.id);
-        await _ref.read(syncProvider.notifier).addToQueue(collection: 'restock_history', documentId: r.id, action: SyncAction.delete, data: {});
-        
-        final rPayments = boxPayments.values
-            .map((d) => BillPayment.fromMap(Map<String, dynamic>.from(d as Map)))
-            .where((p) => p.billId == r.id)
-            .toList();
-            
-        for (final p in rPayments) {
-          await boxPayments.delete(p.id);
-          await _ref.read(syncProvider.notifier).addToQueue(collection: 'bill_payments', documentId: p.id, action: SyncAction.delete, data: {});
-        }
-      }
-      
-      final initialPayments = boxPayments.values
-          .map((d) => BillPayment.fromMap(Map<String, dynamic>.from(d as Map)))
-          .where((p) => p.billId == id && p.isInitialBill)
-          .toList();
-      for (final p in initialPayments) {
-        await boxPayments.delete(p.id);
-        await _ref.read(syncProvider.notifier).addToQueue(collection: 'bill_payments', documentId: p.id, action: SyncAction.delete, data: {});
-      }
-    } catch (_) {}
-
-    try {
-      await _storage.ref().child('users/$_uid/products/$id.jpg').delete();
-    } catch (_) {}
-  }
-
-  // ── Images (Keep Online-Required for now as images are large) ────────────────
-
-  Future<void> deleteProductsBatch(List<String> ids) async {
-    final box = await _getBox();
-    final tasks = <SyncTask>[];
-    
-    for (final id in ids) {
-      await box.delete(id);
-      tasks.add(SyncTask(
-        id: _uuid.v4(),
-        collection: 'products',
-        documentId: id,
-        action: SyncAction.delete,
-        data: {},
-        createdAt: DateTime.now(),
-      ));
-    }
-
-    await _ref.read(syncProvider.notifier).addBatchToQueue(tasks);
   }
 
   Future<void> saveProductsBatch(
@@ -283,6 +146,8 @@ class ProductRepository {
 
     // 3. Process items in Hive and Queue
     final tasks = <SyncTask>[];
+    final barcodeLogItems = <({String barcode, String name, String id})>[];
+
     for (final p in toProcess) {
       final data = p.toMap();
       // We assume units are handled elsewhere or empty for simple import
@@ -300,11 +165,17 @@ class ProductRepository {
       ));
 
       if (p.barcode != null && p.barcode!.isNotEmpty) {
-        await _historyRepo.logBarcode(p.barcode!, p.name, p.id);
+        barcodeLogItems.add((barcode: p.barcode!, name: p.name, id: p.id));
       }
     }
 
-    await _ref.read(syncProvider.notifier).addBatchToQueue(tasks);
+    if (tasks.isNotEmpty) {
+      await _ref.read(syncProvider.notifier).addBatchToQueue(tasks);
+    }
+
+    if (barcodeLogItems.isNotEmpty) {
+      await _historyRepo.logBarcodesBatch(barcodeLogItems);
+    }
   }
 
   Future<void> updateProductsWithBarcodesBatch(List<Product> products) async {
@@ -332,33 +203,83 @@ class ProductRepository {
 
   Future<String?> uploadProductImage(String productId, Uint8List bytes) async {
     try {
-      final compressedBytes = await ImageHelper.processImage(bytes);
       final ref = _storage.ref().child('users/$_uid/products/$productId.jpg');
-      await ref.putData(
-          compressedBytes, storage.SettableMetadata(contentType: 'image/jpeg'));
+      final metadata = storage.SettableMetadata(contentType: 'image/jpeg');
+      await ref.putData(bytes, metadata);
       return await ref.getDownloadURL();
     } catch (e) {
+      debugPrint('Error uploading image: $e');
       return null;
     }
   }
 
-  Future<void> updatePayment(Product p, {required bool isSupplier, required double paidAmount, required PaymentStatus status}) async {
+  Future<void> deleteProduct(String id) async {
     final box = await _getBox();
-    final updated = p.copyWith(
-      financials: p.financials.copyWith(
-        supplierPaidAmount: isSupplier ? (p.financials.supplierPaidAmount + paidAmount) : p.financials.supplierPaidAmount,
-        shippingPaidAmount: !isSupplier ? (p.financials.shippingPaidAmount + paidAmount) : p.financials.shippingPaidAmount,
-        supplierPaymentStatus: isSupplier ? status : p.financials.supplierPaymentStatus,
-        shippingPaymentStatus: !isSupplier ? status : p.financials.shippingPaymentStatus,
-      ),
+    final productData = box.get(id);
+    if (productData == null) return;
+    
+    final p = Product.fromMap(Map<String, dynamic>.from(productData as Map));
+
+    // Archive barcode in history if exists
+    if (p.barcode != null) {
+      await _historyRepo.archiveBarcode(p.barcode!);
+    }
+
+    // 1. Local delete
+    await box.delete(id);
+
+    // 2. Queue Sync delete
+    await _ref.read(syncProvider.notifier).addToQueue(
+      collection: 'products',
+      documentId: id,
+      action: SyncAction.delete,
+      data: {},
     );
-    await box.put(p.id, updated.toMap());
+
+    // 3. Delete linked image from Storage if online? 
+    // We typically don't delete images instantly for sync safety, or handle it via Cloud Functions
+  }
+
+  Future<void> deleteProductsBatch(List<String> ids) async {
+    final box = await _getBox();
+    final tasks = <SyncTask>[];
+
+    for (final id in ids) {
+      final data = box.get(id);
+      if (data != null) {
+        final p = Product.fromMap(Map<String, dynamic>.from(data as Map));
+        if (p.barcode != null) await _historyRepo.archiveBarcode(p.barcode!);
+      }
+      
+      await box.delete(id);
+      tasks.add(SyncTask(
+        id: _uuid.v4(),
+        collection: 'products',
+        documentId: id,
+        action: SyncAction.delete,
+        data: {},
+        createdAt: DateTime.now(),
+      ));
+    }
+
+    await _ref.read(syncProvider.notifier).addBatchToQueue(tasks);
+  }
+
+  Future<void> updateStock(String productId, double delta) async {
+    final box = await _getBox();
+    final data = box.get(productId);
+    if (data == null) return;
+
+    final p = Product.fromMap(Map<String, dynamic>.from(data as Map));
+    final updated = p.copyWith(stock: p.stock + delta);
+
+    await box.put(productId, updated.toMap());
 
     await _ref.read(syncProvider.notifier).addToQueue(
       collection: 'products',
-      documentId: p.id,
-      action:     SyncAction.update,
-      data:       updated.toMap(),
+      documentId: productId,
+      action: SyncAction.update,
+      data: updated.toMap(),
     );
   }
 
@@ -379,9 +300,142 @@ class ProductRepository {
       data:       updated.toMap(),
     );
   }
+
+  Future<Product?> getProductByBarcode(String barcode) async {
+    final box = await _getBox();
+    final normalized = barcode.trim();
+    final data = box.values.firstWhereOrNull((d) {
+      final m = Map<String, dynamic>.from(d as Map);
+      return m['barcode'] == normalized;
+    });
+    if (data == null) return null;
+    return Product.fromMap(Map<String, dynamic>.from(data as Map));
+  }
 }
 
 // ── Providers ─────────────────────────────────────────────────────────────
+
+class ProductSearchQuery extends Notifier<String> {
+  @override
+  String build() => '';
+  void set(String query) => state = query;
+}
+
+final productSearchQueryProvider = NotifierProvider<ProductSearchQuery, String>(ProductSearchQuery.new);
+
+class ProductCategoryFilter extends Notifier<String?> {
+  @override
+  String? build() => null;
+  void set(String? category) => state = category;
+}
+
+final productCategoryFilterProvider = NotifierProvider<ProductCategoryFilter, String?>(ProductCategoryFilter.new);
+
+enum ProductSortField { name, category, stock, cost, price, profit, created, updated }
+
+class ProductSort {
+  final ProductSortField field;
+  final bool ascending;
+  const ProductSort({this.field = ProductSortField.name, this.ascending = true});
+
+  ProductSort copyWith({ProductSortField? field, bool? ascending}) =>
+      ProductSort(field: field ?? this.field, ascending: ascending ?? this.ascending);
+}
+
+class ProductSortNotifier extends Notifier<ProductSort> {
+  @override
+  ProductSort build() => const ProductSort();
+  void setField(ProductSortField field) => state = state.copyWith(field: field);
+  void toggleOrder() => state = state.copyWith(ascending: !state.ascending);
+}
+
+final productSortProvider = NotifierProvider<ProductSortNotifier, ProductSort>(ProductSortNotifier.new);
+
+// Filters for Product Management
+class ProductFilters {
+  final String stock; // all, in, low, out
+  final String supplier; // all, paid, unpaid
+  final String shipping; // all, paid, unpaid
+  const ProductFilters({this.stock = 'all', this.supplier = 'all', this.shipping = 'all'});
+
+  ProductFilters copyWith({String? stock, String? supplier, String? shipping}) =>
+      ProductFilters(stock: stock ?? this.stock, supplier: supplier ?? this.supplier, shipping: shipping ?? this.shipping);
+}
+
+class ProductFiltersNotifier extends Notifier<ProductFilters> {
+  @override
+  ProductFilters build() => const ProductFilters();
+  void setStock(String v) => state = state.copyWith(stock: v);
+  void setSupplier(String v) => state = state.copyWith(supplier: v);
+  void setShipping(String v) => state = state.copyWith(shipping: v);
+}
+
+final productFiltersProvider = NotifierProvider<ProductFiltersNotifier, ProductFilters>(ProductFiltersNotifier.new);
+
+final filteredProductsProvider = Provider<List<Product>>((ref) {
+  final productsAsync = ref.watch(productsProvider);
+  final query = ref.watch(productSearchQueryProvider).toLowerCase().trim();
+  final category = ref.watch(productCategoryFilterProvider);
+  final filters = ref.watch(productFiltersProvider);
+
+  return productsAsync.when(
+    data: (products) {
+      return products.where((p) {
+        // 1. Search Match
+        bool matchSearch = true;
+        if (query.isNotEmpty) {
+          final nameMatch = p.name.toLowerCase().contains(query);
+          final barcodeMatch = p.barcode?.toLowerCase().contains(query) ?? false;
+          final catMatch = p.category.toLowerCase().contains(query);
+          matchSearch = nameMatch || barcodeMatch || catMatch;
+        }
+        if (!matchSearch) return false;
+
+        // 2. Category Match
+        if (category != null && p.category != category) return false;
+
+        // 3. Stock Match
+        if (filters.stock == 'in' && p.stock <= 10) return false;
+        if (filters.stock == 'low' && (!p.isLowStock || p.stock <= 0)) return false;
+        if (filters.stock == 'out' && p.stock > 0) return false;
+
+        // 4. Supplier Match
+        if (filters.supplier == 'paid' && p.financials.supplierPaymentStatus != PaymentStatus.paid) return false;
+        if (filters.supplier == 'unpaid' && p.financials.supplierPaymentStatus != PaymentStatus.unpaid) return false;
+
+        // 5. Shipping Match
+        if (filters.shipping == 'paid' && p.financials.shippingPaymentStatus != PaymentStatus.paid) return false;
+        if (filters.shipping == 'unpaid' && p.financials.shippingPaymentStatus != PaymentStatus.unpaid) return false;
+
+        return true;
+      }).toList();
+    },
+    loading: () => [],
+    error: (_, __) => [],
+  );
+});
+
+final sortedProductsProvider = Provider<List<Product>>((ref) {
+  final products = ref.watch(filteredProductsProvider);
+  final sort = ref.watch(productSortProvider);
+
+  final list = [...products];
+  list.sort((a, b) {
+    int cmp;
+    switch (sort.field) {
+      case ProductSortField.category: cmp = a.category.compareTo(b.category); break;
+      case ProductSortField.stock:    cmp = a.stock.compareTo(b.stock); break;
+      case ProductSortField.cost:     cmp = a.costPrice.compareTo(b.costPrice); break;
+      case ProductSortField.price:    cmp = a.basePrice.compareTo(b.basePrice); break;
+      case ProductSortField.profit:   cmp = (a.basePrice - a.costPrice).compareTo(b.basePrice - b.costPrice); break;
+      case ProductSortField.created:  cmp = a.createdAt.compareTo(b.createdAt); break;
+      case ProductSortField.updated:  cmp = a.updatedAt.compareTo(b.updatedAt); break;
+      default:                        cmp = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    }
+    return sort.ascending ? cmp : -cmp;
+  });
+  return list;
+});
 
 final productRepositoryProvider = Provider<ProductRepository>((ref) {
   final user = ref.watch(authStateProvider).value;

@@ -827,7 +827,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                 entry:     _units[i],
                                 baseUnit:  _baseUnitCtrl.text,
                                 isLast:    i == _units.length - 1,
-                                canDelete: _units.length > 0,
+                                canDelete: _units.isNotEmpty,
                                 onChanged: (u) => _updateUnit(i, u),
                                 onDelete:  () => _removeUnit(i),
                               ),
@@ -920,7 +920,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
               SizedBox(
                 height: 42,
                 child: DropdownButtonFormField<PaymentStatus>(
-                  value: value,
+                  initialValue: value,
                   isExpanded: true,
                   decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
                   dropdownColor: AppTheme.surfaceAlt,
