@@ -61,7 +61,7 @@ class Product {
   final String name;
   final String category;
   final String? barcode;
-  final String? description; // New field
+  final String? description;
   final double costPrice;
   final double basePrice;
   final String baseUnit;
@@ -91,24 +91,28 @@ class Product {
     this.units = const [],
   });
 
-  factory Product.fromMap(Map<String, dynamic> m, {List<ProductUnit> units = const []}) =>
-      Product(
-        id:        m['id'] as String? ?? '',
-        name:      m['name'] as String? ?? 'Produk Tanpa Nama',
-        category:  m['category'] as String? ?? 'Lainnya',
-        barcode:   m['barcode'] as String?,
-        description: m['description'] as String?,
-        costPrice: (m['cost_price'] as num? ?? 0).toDouble(),
-        basePrice: (m['base_price'] as num? ?? 0).toDouble(),
-        baseUnit:  m['base_unit'] as String? ?? 'pcs',
-        defaultUnitName: m['default_unit_name'] as String?,
-        stock:     (m['stock'] as num? ?? 0).toDouble(),
-        imagePath: m['image_path'] as String?,
-        financials: ProductFinancials.fromMap(Map<String, dynamic>.from(m['financials'] as Map? ?? {})),
-        createdAt: DateTime.tryParse(m['created_at'] as String? ?? '') ?? DateTime.now(),
-        updatedAt: DateTime.tryParse(m['updated_at'] as String? ?? '') ?? DateTime.now(),
-        units:     units,
-      );
+  factory Product.fromMap(Map<String, dynamic> m) {
+    final unitsData = m['units'] as List? ?? [];
+    final units = unitsData.map((u) => ProductUnit.fromMap(Map<String, dynamic>.from(u as Map))).toList();
+    
+    return Product(
+      id:        m['id'] as String? ?? '',
+      name:      m['name'] as String? ?? 'Produk Tanpa Nama',
+      category:  m['category'] as String? ?? 'Lainnya',
+      barcode:   m['barcode'] as String?,
+      description: m['description'] as String?,
+      costPrice: (m['cost_price'] as num? ?? 0).toDouble(),
+      basePrice: (m['base_price'] as num? ?? 0).toDouble(),
+      baseUnit:  m['base_unit'] as String? ?? 'pcs',
+      defaultUnitName: m['default_unit_name'] as String?,
+      stock:     (m['stock'] as num? ?? 0).toDouble(),
+      imagePath: m['image_path'] as String?,
+      financials: ProductFinancials.fromMap(Map<String, dynamic>.from(m['financials'] as Map? ?? {})),
+      createdAt: DateTime.tryParse(m['created_at'] as String? ?? '') ?? DateTime.now(),
+      updatedAt: DateTime.tryParse(m['updated_at'] as String? ?? '') ?? DateTime.now(),
+      units:     units,
+    );
+  }
 
   Map<String, dynamic> toMap() => {
         'id':          id,
@@ -125,11 +129,11 @@ class Product {
         'financials':  financials.toMap(),
         'created_at':  createdAt.toIso8601String(),
         'updated_at':  updatedAt.toIso8601String(),
+        'units':       units.map((u) => u.toMap()).toList(),
       };
 
   bool get isLowStock => stock <= 10;
 
-  /// Returns the base unit as a ProductUnit object
   ProductUnit get baseProductUnit => ProductUnit(
     id:             'base',
     productId:      id,
@@ -138,16 +142,12 @@ class Product {
     sellPrice:      basePrice,
   );
 
-  /// Returns all available units for this product, including the base unit.
-  /// Filters out duplicates to prevent UI crashes.
   List<ProductUnit> get allUnits {
     final base = baseProductUnit;
-    // Only include additional units that don't have the same name as the base unit
     final additional = units.where((u) => u.unitName.toLowerCase() != baseUnit.toLowerCase());
     return [base, ...additional];
   }
 
-  /// Sell price for a given unit (from the units list)
   double priceForUnit(String unitName) {
     final u = units.firstWhere(
       (u) => u.unitName == unitName,

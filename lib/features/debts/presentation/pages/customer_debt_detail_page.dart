@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/formatters.dart';
-import '../../../../shared/widgets/common_widgets.dart';
-import '../../models/customer.dart';
-import '../../models/debt.dart';
-import '../../models/debt_payment.dart';
-import '../../providers/debt_repository.dart';
-import '../../utils/debt_report_helper.dart';
-import '../../../payment/providers/transaction_provider.dart';
+import 'package:buildera/core/utils/formatters.dart';
+import 'package:buildera/shared/widgets/common_widgets.dart';
+import 'package:buildera/features/debts/models/customer.dart';
+import 'package:buildera/features/debts/models/debt.dart';
+import 'package:buildera/features/debts/models/debt_payment.dart';
+import 'package:buildera/features/debts/providers/debt_repository.dart';
+import 'package:buildera/features/debts/utils/debt_report_helper.dart';
+import 'package:buildera/features/payment/providers/transaction_provider.dart';
 
 class CustomerDebtDetailPage extends ConsumerWidget {
   final Customer customer;
@@ -16,18 +15,18 @@ class CustomerDebtDetailPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // We watch the stream instead of using the passed object to get updates
     final customersAsync = ref.watch(customersProvider);
     final currentCustomer = customersAsync.asData?.value.firstWhere((c) => c.id == customer.id, orElse: () => customer) ?? customer;
     
     final debtsAsync = ref.watch(debtsProvider(customer.id));
     final paymentsAsync = ref.watch(debtPaymentsProvider((customerId: customer.id, debtId: null)));
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: AppTheme.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text('Detail Piutang: ${currentCustomer.name}'),
-        backgroundColor: AppTheme.surface,
+        backgroundColor: colorScheme.surface,
         elevation: 0,
         actions: [
           IconButton(
@@ -35,7 +34,7 @@ class CustomerDebtDetailPage extends ConsumerWidget {
               final debts = debtsAsync.asData?.value ?? [];
               await DebtReportHelper.exportCustomerDetailToExcel(currentCustomer, debts);
             },
-            icon: const Icon(Icons.file_download_outlined, color: AppTheme.accent),
+            icon: Icon(Icons.file_download_outlined, color: colorScheme.primary),
             tooltip: 'Export Excel',
           ),
           const SizedBox(width: 8),
@@ -46,10 +45,10 @@ class CustomerDebtDetailPage extends ConsumerWidget {
           // Summary Header
           Container(
             padding: const EdgeInsets.all(24),
-            color: AppTheme.surface,
+            color: colorScheme.surface,
             child: Row(
               children: [
-                Expanded(child: _infoBox(context, 'Total Piutang', Formatters.currency(currentCustomer.totalOutstanding), color: AppTheme.warning)),
+                Expanded(child: _infoBox(context, 'Total Piutang', Formatters.currency(currentCustomer.totalOutstanding), color: colorScheme.secondary)),
                 const SizedBox(width: 16),
                 Expanded(child: _infoBox(context, 'Telepon', currentCustomer.phone)),
                 const SizedBox(width: 16),
@@ -66,6 +65,7 @@ class CustomerDebtDetailPage extends ConsumerWidget {
                 Expanded(
                   flex: 3,
                   child: _buildSection(
+                    context,
                     title: 'Daftar Transaksi Piutang',
                     child: debtsAsync.when(
                       loading: () => const AppLoading(),
@@ -78,12 +78,13 @@ class CustomerDebtDetailPage extends ConsumerWidget {
                   ),
                 ),
 
-                const VerticalDivider(width: 1, color: AppTheme.border),
+                VerticalDivider(width: 1, color: colorScheme.outline),
 
                 // ── Payments History ──────────────────────────────────────
                 Expanded(
                   flex: 2,
                   child: _buildSection(
+                    context,
                     title: 'Riwayat Pembayaran',
                     child: paymentsAsync.when(
                       loading: () => const AppLoading(),
@@ -108,19 +109,19 @@ class CustomerDebtDetailPage extends ConsumerWidget {
         Text(value, style: TextStyle(
           fontSize: 18, 
           fontWeight: FontWeight.bold, 
-          color: color ?? AppTheme.textPrimary,
+          color: color ?? Theme.of(context).colorScheme.onSurface,
         )),
       ],
     );
   }
 
-  Widget _buildSection({required String title, required Widget child}) {
+  Widget _buildSection(BuildContext context, {required String title, required Widget child}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-          child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.accent)),
+          child: Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
         ),
         Expanded(child: child),
       ],
@@ -164,20 +165,21 @@ class _DebtTile extends ConsumerStatefulWidget {
 }
 
 class _DebtTileState extends ConsumerState<_DebtTile> {
-  final bool _expanded = true; // Always expanded for full detail visibility as requested
+  final bool _expanded = true; 
 
   @override
   Widget build(BuildContext context) {
     final d = widget.debt;
     final bool isPaid = d.status == DebtStatus.paid;
     final transactionAsync = ref.watch(transactionByIdProvider(d.transactionId));
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceAlt,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isPaid ? AppTheme.success.withValues(alpha: 0.3) : AppTheme.border),
+        border: Border.all(color: isPaid ? const Color(0xFF2ECC71).withValues(alpha: 0.3) : colorScheme.outline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -194,10 +196,10 @@ class _DebtTileState extends ConsumerState<_DebtTile> {
                         children: [
                           Text(d.invoiceNumber, style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'monospace')),
                           const SizedBox(width: 8),
-                          StatusChip(label: _statusLabel(d.status), color: _statusColor(d.status)),
+                          StatusChip(label: _statusLabel(d.status), color: _statusColor(context, d.status)),
                           if (d.isOverdue) ...[
                             const SizedBox(width: 8),
-                            const StatusChip(label: 'TERLAMBAT', color: AppTheme.danger),
+                            StatusChip(label: 'TERLAMBAT', color: colorScheme.error),
                           ],
                         ],
                       ),
@@ -221,14 +223,14 @@ class _DebtTileState extends ConsumerState<_DebtTile> {
                     title: 'Hapus Piutang', 
                     content: 'Yakin ingin menghapus catatan piutang ini beserta riwayat pembayarannya?',
                     confirmLabel: 'HAPUS',
-                    confirmColor: AppTheme.danger
+                    confirmColor: colorScheme.error
                   );
                   if (ok) {
                     await ref.read(debtRepositoryProvider).deleteDebt(d.id);
                     if (context.mounted) showSuccess(context, 'Piutang berhasil dihapus');
                   }
                 },
-                icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.danger),
+                icon: Icon(Icons.delete_outline, size: 20, color: colorScheme.error),
                 tooltip: 'Hapus Piutang',
               ),
               const SizedBox(width: 8),
@@ -236,13 +238,13 @@ class _DebtTileState extends ConsumerState<_DebtTile> {
                 ElevatedButton(
                   onPressed: () => widget.onRecordPayment(d),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.accent,
+                    backgroundColor: colorScheme.primary,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
                   child: const Text('Bayar'),
                 )
               else
-                const Icon(Icons.check_circle_rounded, color: AppTheme.success),
+                const Icon(Icons.check_circle_rounded, color: Color(0xFF2ECC71)),
             ],
           ),
           
@@ -254,15 +256,15 @@ class _DebtTileState extends ConsumerState<_DebtTile> {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('RINCIAN PRODUK:', 
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textMuted, letterSpacing: 0.5)),
+                    Text('RINCIAN PRODUK:', 
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: colorScheme.onSurface.withValues(alpha: 0.4), letterSpacing: 0.5)),
                     const SizedBox(height: 12),
                     ...tx.items.map((item) => Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Padding(padding: EdgeInsets.only(top: 6), child: Icon(Icons.circle, size: 4, color: AppTheme.accent)),
+                          Padding(padding: const EdgeInsets.only(top: 6), child: Icon(Icons.circle, size: 4, color: colorScheme.primary)),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
@@ -270,7 +272,7 @@ class _DebtTileState extends ConsumerState<_DebtTile> {
                               children: [
                                 Text(item.productName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                                 Text('${Formatters.decimal(item.quantity)} ${item.unitName} × ${Formatters.currency(item.soldPrice)}', 
-                                  style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                                  style: TextStyle(fontSize: 11, color: colorScheme.onSurface.withValues(alpha: 0.6))),
                               ],
                             ),
                           ),
@@ -279,19 +281,19 @@ class _DebtTileState extends ConsumerState<_DebtTile> {
                         ],
                       ),
                     )),
-                    const Divider(height: 24, thickness: 0.5, color: AppTheme.border),
+                    Divider(height: 24, thickness: 0.5, color: colorScheme.outline),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text('TOTAL TRANSAKSI', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                        Text(Formatters.currency(tx.total), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: AppTheme.accent)),
+                        Text(Formatters.currency(tx.total), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: colorScheme.primary)),
                       ],
                     ),
                   ],
                 );
               },
               loading: () => const LinearProgressIndicator(minHeight: 2),
-              error: (e, _) => Text('Gagal memuat rincian: $e', style: const TextStyle(color: AppTheme.danger, fontSize: 12)),
+              error: (e, _) => Text('Gagal memuat rincian: $e', style: TextStyle(color: colorScheme.error, fontSize: 12)),
             ),
           ],
         ],
@@ -308,12 +310,13 @@ class _DebtTileState extends ConsumerState<_DebtTile> {
     }
   }
 
-  Color _statusColor(DebtStatus s) {
+  Color _statusColor(BuildContext context, DebtStatus s) {
+    final colorScheme = Theme.of(context).colorScheme;
     switch(s) {
-      case DebtStatus.unpaid: return AppTheme.textSecondary;
-      case DebtStatus.partiallyPaid: return AppTheme.info;
-      case DebtStatus.paid: return AppTheme.success;
-      case DebtStatus.overdue: return AppTheme.danger;
+      case DebtStatus.unpaid: return colorScheme.onSurface.withValues(alpha: 0.5);
+      case DebtStatus.partiallyPaid: return const Color(0xFF3498DB);
+      case DebtStatus.paid: return const Color(0xFF2ECC71);
+      case DebtStatus.overdue: return colorScheme.error;
     }
   }
 }
@@ -324,12 +327,13 @@ class _PaymentHistoryList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     if (payments.isEmpty) return const EmptyState(icon: Icons.history_rounded, title: 'Belum ada pembayaran');
 
     return ListView.separated(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       itemCount: payments.length,
-      separatorBuilder: (_, __) => const Divider(height: 1, color: AppTheme.border),
+      separatorBuilder: (_, __) => Divider(height: 1, color: colorScheme.outline),
       itemBuilder: (context, i) {
         final p = payments[i];
         return Padding(
@@ -340,7 +344,7 @@ class _PaymentHistoryList extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(Formatters.currency(p.amount), style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.success)),
+                    Text(Formatters.currency(p.amount), style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF2ECC71))),
                     Text(Formatters.dateTime(p.createdAt), style: Theme.of(context).textTheme.bodySmall),
                   ],
                 ),
@@ -413,8 +417,8 @@ class _RecordPaymentDialogState extends ConsumerState<_RecordPaymentDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _infoRow('No. Invoice', widget.debt.invoiceNumber),
-            _infoRow('Sisa Piutang', Formatters.currency(widget.debt.remainingBalance)),
+            _infoRow(context, 'No. Invoice', widget.debt.invoiceNumber),
+            _infoRow(context, 'Sisa Piutang', Formatters.currency(widget.debt.remainingBalance)),
             const Divider(height: 32),
             TextField(
               controller: _amountCtrl,
@@ -443,13 +447,13 @@ class _RecordPaymentDialogState extends ConsumerState<_RecordPaymentDialog> {
     );
   }
 
-  Widget _infoRow(String label, String value) {
+  Widget _infoRow(BuildContext context, String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: AppTheme.textSecondary)),
+          Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
           Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
         ],
       ),

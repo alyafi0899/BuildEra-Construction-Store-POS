@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
-import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/report_helper.dart';
 import '../../../../shared/widgets/common_widgets.dart';
@@ -77,9 +76,10 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     final productsAsync = ref.watch(productsProvider);
     final restocksAsync = ref.watch(restockHistoryProvider);
     final currentPeriod = ref.watch(analyticsPeriodProvider);
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: AppTheme.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Column(
         children: [
           // Header
@@ -102,8 +102,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                     icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
                     label: const Text('Ekspor Laporan'),
                     style: OutlinedButton.styleFrom(
-                      disabledForegroundColor: AppTheme.accent,
-                      side: const BorderSide(color: AppTheme.accent),
+                      disabledForegroundColor: colorScheme.primary,
+                      side: BorderSide(color: colorScheme.primary),
                     ),
                   ),
                   itemBuilder: (context) => [
@@ -117,7 +117,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               const SizedBox(width: 8),
               IconButton(
                 onPressed: () => ref.refresh(salesSummaryProvider),
-                icon: const Icon(Icons.refresh_rounded, color: AppTheme.textSecondary),
+                icon: Icon(Icons.refresh_rounded, color: colorScheme.onSurface.withValues(alpha: 0.6)),
                 tooltip: 'Refresh Data',
               ),
             ],
@@ -126,13 +126,13 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           // Period Filter Bar
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            decoration: const BoxDecoration(
-              color: AppTheme.surface,
-              border: Border(bottom: BorderSide(color: AppTheme.border)),
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              border: Border(bottom: BorderSide(color: colorScheme.outline)),
             ),
             child: Row(
               children: [
-                const Text('Rentang Waktu:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textSecondary)),
+                Text('Rentang Waktu:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.onSurface.withValues(alpha: 0.6))),
                 const SizedBox(width: 16),
                 _periodChip('Hari Ini', AnalyticsPeriod.daily, currentPeriod, ref),
                 const SizedBox(width: 8),
@@ -150,7 +150,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           Expanded(
             child: summaryAsync.when(
               loading: () => const AppLoading(),
-              error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: AppTheme.danger))),
+              error: (e, _) => Center(child: Text('Error: $e', style: TextStyle(color: colorScheme.error))),
               data: (summary) => Scrollbar(
                 controller: _scrollController,
                 thumbVisibility: true,
@@ -168,7 +168,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                           label: 'Laba Bersih',
                           value: summary.totalNetProfit,
                           subtitle: 'Dari ${Formatters.currency(summary.totalRevenue)} omzet',
-                          colors: [const Color(0xFF00B09B), const Color(0xFF96C93D)],
+                          colors: [colorScheme.primary, colorScheme.primary.withValues(alpha: 0.7)],
                           icon: Icons.auto_graph_rounded,
                         )),
                         const SizedBox(width: 16),
@@ -176,7 +176,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                           label: 'Transaksi',
                           value: summary.totalTransactions.toDouble(),
                           subtitle: 'Total Nota Diterbitkan',
-                          colors: [const Color(0xFF3494E6), const Color(0xFFEC6EAD)],
+                          colors: [colorScheme.secondary, colorScheme.secondary.withValues(alpha: 0.7)],
                           icon: Icons.calendar_today_rounded,
                           isCurrency: false,
                         )),
@@ -191,7 +191,6 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                       ]),
                       const SizedBox(height: 32),
 
-                      // ── SECTION 2: SMART CASHFLOW (The restored section) ──
                       _buildFinancialInsights(summary),
                       const SizedBox(height: 32),
 
@@ -227,20 +226,21 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
 
   Widget _periodChip(String label, AnalyticsPeriod period, AnalyticsPeriod current, WidgetRef ref) {
     final active = period == current;
+    final colorScheme = Theme.of(context).colorScheme;
     return InkWell(
       onTap: () => ref.read(analyticsPeriodProvider.notifier).setPeriod(period),
       borderRadius: BorderRadius.circular(20),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         decoration: BoxDecoration(
-          color: active ? AppTheme.accent.withValues(alpha: 0.15) : AppTheme.surfaceAlt,
-          border: Border.all(color: active ? AppTheme.accent : AppTheme.border),
+          color: active ? colorScheme.primary.withValues(alpha: 0.15) : colorScheme.surfaceContainerHighest,
+          border: Border.all(color: active ? colorScheme.primary : colorScheme.outline),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(label, style: TextStyle(
           fontSize: 12, 
           fontWeight: active ? FontWeight.bold : FontWeight.normal,
-          color: active ? AppTheme.accent : AppTheme.textSecondary,
+          color: active ? colorScheme.primary : colorScheme.onSurface.withValues(alpha: 0.6),
         )),
       ),
     );
@@ -255,7 +255,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     bool isCurrency = true,
   }) {
     return Container(
-      height: 140, // Uniform height for KPI cards
+      height: 140, 
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(colors: colors, begin: Alignment.topLeft, end: Alignment.bottomRight),
@@ -286,10 +286,10 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   }
 
   Widget _buildFinancialInsights(SalesSummary summary) {
-    // Advanced Allocation Logic
     final recommendedRestock = summary.totalRevenue * 0.65;
     final recommendedOther = summary.totalNetProfit * 0.15;
     final maxWithdrawal = summary.totalNetProfit * 0.85;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -299,7 +299,6 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Left Column: Insight Cards
             Expanded(
               flex: 3,
               child: Column(
@@ -310,7 +309,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                         title: 'Total Omzet',
                         subtitle: 'Pendapatan kotor periode ini',
                         value: summary.totalRevenue,
-                        color: AppTheme.info,
+                        color: const Color(0xFF3498DB),
                         icon: Icons.payments_rounded,
                       )),
                       const SizedBox(width: 16),
@@ -318,7 +317,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                         title: 'Rekomendasi Re-stock',
                         subtitle: 'Alokasi ideal belanja (65% Omzet)',
                         value: recommendedRestock,
-                        color: AppTheme.accent,
+                        color: colorScheme.primary,
                         icon: Icons.shopping_cart_checkout_rounded,
                       )),
                     ],
@@ -330,24 +329,24 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                         title: 'Dana Cadangan',
                         subtitle: 'Simpanan tak terduga (15% Net)',
                         value: recommendedOther,
-                        color: AppTheme.warning,
+                        color: const Color(0xFFF39C12),
                         icon: Icons.savings_rounded,
                       )),
                       const SizedBox(width: 16),
                       Expanded(
                         child: SizedBox(
-                          height: 120, // Match _insightCard height
+                          height: 120, 
                           child: AppCard(
-                            color: AppTheme.success.withValues(alpha: 0.05),
+                            color: const Color(0xFF2ECC71).withValues(alpha: 0.05),
                             padding: const EdgeInsets.all(16),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Text('TAKE HOME PROFIT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: AppTheme.success)),
+                                const Text('TAKE HOME PROFIT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Color(0xFF2ECC71))),
                                 const SizedBox(height: 8),
-                                Text(Formatters.currency(maxWithdrawal), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppTheme.success)),
-                                const Text('Rekomendasi: 85% Laba Bersih', style: TextStyle(fontSize: 9, color: AppTheme.textMuted)),
+                                Text(Formatters.currency(maxWithdrawal), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Color(0xFF2ECC71))),
+                                Text('Rekomendasi: 85% Laba Bersih', style: TextStyle(fontSize: 9, color: colorScheme.onSurface.withValues(alpha: 0.4))),
                               ],
                             ),
                           ),
@@ -359,7 +358,6 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               ),
             ),
             const SizedBox(width: 24),
-            // Right Column: Consolidated Alerts
             Expanded(
               flex: 1,
               child: _buildConsolidatedAlerts(summary),
@@ -372,27 +370,30 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
 
   Widget _buildConsolidatedAlerts(SalesSummary summary) {
     final hasAlerts = summary.unpaidSupplierDetails.isNotEmpty || summary.unpaidShippingDetails.isNotEmpty;
+    final colorScheme = Theme.of(context).colorScheme;
+    final alertColor = hasAlerts ? colorScheme.error : const Color(0xFF2ECC71);
+
     return Container(
-      height: 256, // Synced height: (120 * 2) + 16 (spacing)
+      height: 256, 
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: hasAlerts ? AppTheme.danger.withValues(alpha: 0.05) : AppTheme.success.withValues(alpha: 0.05),
+        color: alertColor.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: hasAlerts ? AppTheme.danger.withValues(alpha: 0.2) : AppTheme.success.withValues(alpha: 0.2)),
+        border: Border.all(color: alertColor.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
-            Icon(hasAlerts ? Icons.warning_amber_rounded : Icons.check_circle_rounded, color: hasAlerts ? AppTheme.danger : AppTheme.success, size: 20),
+            Icon(hasAlerts ? Icons.warning_amber_rounded : Icons.check_circle_rounded, color: alertColor, size: 20),
             const SizedBox(width: 8),
-            Text('STATUS TAGIHAN', style: TextStyle(color: hasAlerts ? AppTheme.danger : AppTheme.success, fontWeight: FontWeight.bold, fontSize: 12)),
+            Text('STATUS TAGIHAN', style: TextStyle(color: alertColor, fontWeight: FontWeight.bold, fontSize: 12)),
           ]),
           const SizedBox(height: 16),
           if (!hasAlerts)
-            const Text('Semua tagihan lunas! Arus kas belanja aman.', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary))
+            Text('Semua tagihan lunas! Arus kas belanja aman.', style: TextStyle(fontSize: 11, color: colorScheme.onSurface.withValues(alpha: 0.6)))
           else ...[
-            const Text('PENDING:', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textMuted)),
+            Text('PENDING:', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: colorScheme.onSurface.withValues(alpha: 0.4))),
             const SizedBox(height: 8),
             Expanded(
               child: ListView(
@@ -414,20 +415,21 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       child: Row(
         children: [
           Expanded(child: Text(name, style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis)),
-          Text(Formatters.currency(amt), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.danger)),
+          Text(Formatters.currency(amt), style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.error)),
         ],
       ),
     );
   }
 
   Widget _insightCard({required String title, required String subtitle, required double value, required Color color, required IconData icon}) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      height: 120, // Uniform height for insight cards
+      height: 120, 
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceAlt,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.border),
+        border: Border.all(color: colorScheme.outline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -441,7 +443,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           const SizedBox(height: 16),
           Text(Formatters.currency(value), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
           const SizedBox(height: 4),
-          Text(subtitle, style: const TextStyle(fontSize: 9, color: AppTheme.textMuted)),
+          Text(subtitle, style: TextStyle(fontSize: 9, color: colorScheme.onSurface.withValues(alpha: 0.4))),
         ],
       ),
     );
@@ -449,10 +451,10 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
 
   Widget _buildRevenueChart(SalesSummary summary) {
     bool isDaily = summary.period == AnalyticsPeriod.daily;
+    final colorScheme = Theme.of(context).colorScheme;
     
     List<MapEntry<dynamic, double>> entries;
     if (isDaily) {
-      // Focus on active hours: 06:00 to 18:00
       entries = List.generate(13, (i) {
         final hour = i + 6;
         return MapEntry(hour, summary.netProfitByHour[hour] ?? 0.0);
@@ -480,7 +482,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               maxY: entries.every((e) => e.value == 0) ? 100 : entries.map((e) => e.value).reduce((a, b) => a > b ? a : b) * 1.3,
               barTouchData: BarTouchData(
                 touchTooltipData: BarTouchTooltipData(
-                  getTooltipColor: (_) => AppTheme.surfaceAlt,
+                  getTooltipColor: (_) => colorScheme.surfaceContainerHighest,
                   getTooltipItem: (group, groupIndex, rod, rodIndex) {
                     String label;
                     if (isDaily) {
@@ -490,11 +492,11 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                     }
                     return BarTooltipItem(
                       '$label\n',
-                      const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.bold),
                       children: [
                         TextSpan(
                           text: Formatters.currency(rod.toY),
-                          style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.w900, fontSize: 12),
+                          style: TextStyle(color: colorScheme.primary, fontWeight: FontWeight.w900, fontSize: 12),
                         ),
                       ],
                     );
@@ -506,15 +508,13 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 bottomTitles: AxisTitles(sideTitles: SideTitles(
                   showTitles: true,
                   reservedSize: 30,
-                  interval: 1, // Show every hour label since range is smaller
+                  interval: 1, 
                   getTitlesWidget: (val, _) {
-                    // For daily, val is the actual hour (6-18)
-                    // For non-daily, val is the index (0-length)
                     if (isDaily) {
                       if (val < 6 || val > 18) return const SizedBox();
                       return Padding(
                         padding: const EdgeInsets.only(top: 8), 
-                        child: Text('${val.toInt().toString().padLeft(2, '0')}:00', style: const TextStyle(fontSize: 8, color: AppTheme.textSecondary))
+                        child: Text('${val.toInt().toString().padLeft(2, '0')}:00', style: TextStyle(fontSize: 8, color: colorScheme.onSurface.withValues(alpha: 0.6)))
                       );
                     }
 
@@ -522,7 +522,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                     final label = entries[val.toInt()].key.toString().split('-').last;
                     return Padding(
                       padding: const EdgeInsets.only(top: 8), 
-                      child: Text(label, style: const TextStyle(fontSize: 9, color: AppTheme.textSecondary))
+                      child: Text(label, style: TextStyle(fontSize: 9, color: colorScheme.onSurface.withValues(alpha: 0.6)))
                     );
                   },
                 )),
@@ -537,7 +537,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 barRods: [
                   BarChartRodData(
                     toY: e.value.value, 
-                    color: AppTheme.accent, 
+                    color: colorScheme.primary, 
                     width: isDaily ? 12 : 20, 
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(4))
                   )
@@ -555,6 +555,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     final qris = summary.revenueByPayment['QRIS'] ?? 0;
     final debt = summary.revenueByPayment['Piutang'] ?? 0;
     final total = cash + qris + debt;
+    final colorScheme = Theme.of(context).colorScheme;
+
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -564,14 +566,14 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           if (total == 0) const Center(child: Padding(padding: EdgeInsets.all(40), child: Text('Belum ada data')))
           else Column(children: [
             SizedBox(height: 180, child: PieChart(PieChartData(sectionsSpace: 4, centerSpaceRadius: 40, sections: [
-              PieChartSectionData(value: cash, title: '${(cash/total*100).toStringAsFixed(0)}%', color: AppTheme.success, radius: 50, titleStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
-              PieChartSectionData(value: qris, title: '${(qris/total*100).toStringAsFixed(0)}%', color: AppTheme.info, radius: 50, titleStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
-              PieChartSectionData(value: debt, title: '${(debt/total*100).toStringAsFixed(0)}%', color: AppTheme.warning, radius: 50, titleStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+              PieChartSectionData(value: cash, title: '${(cash/total*100).toStringAsFixed(0)}%', color: const Color(0xFF2ECC71), radius: 50, titleStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+              PieChartSectionData(value: qris, title: '${(qris/total*100).toStringAsFixed(0)}%', color: const Color(0xFF3498DB), radius: 50, titleStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+              PieChartSectionData(value: debt, title: '${(debt/total*100).toStringAsFixed(0)}%', color: colorScheme.primary, radius: 50, titleStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
             ]))),
             const SizedBox(height: 24),
-            _legendItem('Tunai', cash, AppTheme.success),
-            _legendItem('QRIS', qris, AppTheme.info),
-            _legendItem('Piutang', debt, AppTheme.warning),
+            _legendItem('Tunai', cash, const Color(0xFF2ECC71)),
+            _legendItem('QRIS', qris, const Color(0xFF3498DB)),
+            _legendItem('Piutang', debt, colorScheme.primary),
           ]),
         ],
       ),
@@ -589,6 +591,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   }
 
   Widget _buildTopProducts(SalesSummary summary) {
+    final colorScheme = Theme.of(context).colorScheme;
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -601,14 +604,14 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
             ...summary.topProducts.take(5).map((p) {
               final idx = summary.topProducts.indexOf(p) + 1;
               return Padding(padding: const EdgeInsets.only(bottom: 12), child: Row(children: [
-                Container(width: 24, height: 24, decoration: BoxDecoration(color: idx <= 3 ? AppTheme.accent : AppTheme.surfaceAlt, shape: BoxShape.circle),
-                  child: Center(child: Text('$idx', style: TextStyle(color: idx <= 3 ? Colors.white : AppTheme.textMuted, fontSize: 10, fontWeight: FontWeight.bold)))),
+                Container(width: 24, height: 24, decoration: BoxDecoration(color: idx <= 3 ? colorScheme.primary : colorScheme.surfaceContainerHighest, shape: BoxShape.circle),
+                  child: Center(child: Text('$idx', style: TextStyle(color: idx <= 3 ? colorScheme.onPrimary : colorScheme.onSurface.withValues(alpha: 0.4), fontSize: 10, fontWeight: FontWeight.bold)))),
                 const SizedBox(width: 12),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  Text('${Formatters.decimal(p.qty)} ${p.unit} terjual', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                  Text('${Formatters.decimal(p.qty)} ${p.unit} terjual', style: TextStyle(fontSize: 11, color: colorScheme.onSurface.withValues(alpha: 0.6))),
                 ])),
-                Text(Formatters.currency(p.revenue), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.accent)),
+                Text(Formatters.currency(p.revenue), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: colorScheme.primary)),
               ]));
             }),
         ],
@@ -649,14 +652,15 @@ class _DailyRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: Material(
-        color: AppTheme.surfaceAlt,
+        color: colorScheme.surface,
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: AppTheme.border),
+          side: BorderSide(color: colorScheme.outline),
         ),
         child: Consumer(builder: (context, ref, child) {
           return ExpansionTile(
@@ -664,25 +668,25 @@ class _DailyRow extends StatelessWidget {
             title: Row(children: [
               SizedBox(width: 120, child: Text(detail.date, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16))),
               const Spacer(),
-              _miniTitleStat('Omzet', detail.revenue, AppTheme.textPrimary),
+              _miniTitleStat(context, 'Omzet', detail.revenue, colorScheme.onSurface),
               const SizedBox(width: 24),
-              _miniTitleStat('Profit', detail.netProfit, AppTheme.success),
+              _miniTitleStat(context, 'Profit', detail.netProfit, const Color(0xFF2ECC71)),
               const SizedBox(width: 24),
-              _miniTitleStat('Nota', detail.transactionCount.toDouble(), AppTheme.info, isCurrency: false),
+              _miniTitleStat(context, 'Nota', detail.transactionCount.toDouble(), const Color(0xFF3498DB), isCurrency: false),
             ]),
             trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-              IconButton(onPressed: () => _downloadDailyReport(ref), icon: const Icon(Icons.picture_as_pdf_rounded, size: 20, color: AppTheme.accent), tooltip: 'Ekspor PDF Harian'),
+              IconButton(onPressed: () => _downloadDailyReport(ref), icon: Icon(Icons.picture_as_pdf_rounded, size: 20, color: colorScheme.primary), tooltip: 'Ekspor PDF Harian'),
               const Icon(Icons.keyboard_arrow_down_rounded),
             ]),
             children: [
-              Container(padding: const EdgeInsets.all(24), color: AppTheme.bg.withValues(alpha: 0.4), child: Column(children: [
+              Container(padding: const EdgeInsets.all(24), color: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.4), child: Column(children: [
                 Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-                  _breakdownBox('TUNAI', detail.cashTotal, AppTheme.success, Icons.payments_rounded),
-                  _breakdownBox('QRIS', detail.qrisTotal, AppTheme.info, Icons.qr_code_scanner_rounded),
-                  _breakdownBox('PIUTANG', detail.debtTotal, AppTheme.warning, Icons.account_balance_wallet_rounded),
+                  _breakdownBox(context, 'TUNAI', detail.cashTotal, const Color(0xFF2ECC71), Icons.payments_rounded),
+                  _breakdownBox(context, 'QRIS', detail.qrisTotal, const Color(0xFF3498DB), Icons.qr_code_scanner_rounded),
+                  _breakdownBox(context, 'PIUTANG', detail.debtTotal, colorScheme.primary, Icons.account_balance_wallet_rounded),
                 ]),
                 const SizedBox(height: 32),
-                const Align(alignment: Alignment.centerLeft, child: Text('LOG AUDIT TRANSAKSI:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: AppTheme.textMuted, letterSpacing: 1.2))),
+                Align(alignment: Alignment.centerLeft, child: Text('LOG AUDIT TRANSAKSI:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: colorScheme.onSurface.withValues(alpha: 0.4), letterSpacing: 1.2))),
                 const SizedBox(height: 16),
                 ...detail.transactions.map((tx) => _DetailedTxAuditTile(tx: tx)),
               ])),
@@ -693,17 +697,18 @@ class _DailyRow extends StatelessWidget {
     );
   }
 
-  Widget _miniTitleStat(String l, double v, Color c, {bool isCurrency = true}) {
+  Widget _miniTitleStat(BuildContext context, String l, double v, Color c, {bool isCurrency = true}) {
     return Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-      Text(l, style: const TextStyle(fontSize: 9, color: AppTheme.textMuted, fontWeight: FontWeight.bold)),
+      Text(l, style: TextStyle(fontSize: 9, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4), fontWeight: FontWeight.bold)),
       Text(isCurrency ? Formatters.currency(v) : v.toInt().toString(), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: c)),
     ]);
   }
 
-  Widget _breakdownBox(String label, double val, Color color, IconData icon) {
+  Widget _breakdownBox(BuildContext context, String label, double val, Color color, IconData icon) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Expanded(child: Container(margin: const EdgeInsets.symmetric(horizontal: 6), padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(color: color.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withValues(alpha: 0.15))),
-        child: Column(children: [Icon(icon, color: color, size: 20), const SizedBox(height: 8), Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textSecondary)),
+        child: Column(children: [Icon(icon, color: color, size: 20), const SizedBox(height: 8), Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: colorScheme.onSurface.withValues(alpha: 0.6))),
           const SizedBox(height: 4), Text(Formatters.currency(val), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900))])));
   }
 }
@@ -714,12 +719,13 @@ class _DetailedTxAuditTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: AppTheme.surface.withValues(alpha: 0.5),
+        color: colorScheme.surface.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.border),
+        border: Border.all(color: colorScheme.outline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -727,47 +733,47 @@ class _DetailedTxAuditTile extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: AppTheme.surfaceAlt.withValues(alpha: 0.3),
+              color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
             ),
             child: Row(
               children: [
-                Text(tx.invoiceNumber, style: const TextStyle(fontFamily: 'monospace', fontSize: 13, fontWeight: FontWeight.w900, color: Colors.white)),
+                Text(tx.invoiceNumber, style: const TextStyle(fontFamily: 'monospace', fontSize: 13, fontWeight: FontWeight.w900)),
                 const SizedBox(width: 12),
-                StatusChip(label: tx.paymentMethod.toUpperCase(), color: AppTheme.textMuted),
-                if (tx.customerName != null) ...[const SizedBox(width: 8), Text('• ${tx.customerName}', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary))],
+                StatusChip(label: tx.paymentMethod.toUpperCase(), color: colorScheme.onSurface.withValues(alpha: 0.5)),
+                if (tx.customerName != null) ...[const SizedBox(width: 8), Text('• ${tx.customerName}', style: TextStyle(fontSize: 12, color: colorScheme.onSurface.withValues(alpha: 0.6)))],
                 const Spacer(),
-                Text('Total: ${Formatters.currency(tx.total)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.white)),
+                Text('Total: ${Formatters.currency(tx.total)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900)),
               ],
             ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Row(children: [_th('Produk', 5), _th('Qty', 2, align: TextAlign.center), _th('Modal', 3, align: TextAlign.right), _th('Jual', 3, align: TextAlign.right), _th('Profit', 3, align: TextAlign.right)]),
+            child: Row(children: [_th(context, 'Produk', 5), _th(context, 'Qty', 2, align: TextAlign.center), _th(context, 'Modal', 3, align: TextAlign.right), _th(context, 'Jual', 3, align: TextAlign.right), _th(context, 'Profit', 3, align: TextAlign.right)]),
           ),
           ...tx.items.map((item) {
             final profit = item.subtotal - (item.costPrice * item.quantity);
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: Row(children: [
-                Expanded(flex: 5, child: Text(item.productName, style: const TextStyle(fontSize: 12, color: Colors.white70))),
-                Expanded(flex: 2, child: Text('${Formatters.decimal(item.quantity)} ${item.unitName}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary))),
-                Expanded(flex: 3, child: Text(Formatters.currency(item.costPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, color: AppTheme.textMuted))),
-                Expanded(flex: 3, child: Text(Formatters.currency(item.soldPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, color: Colors.white))),
-                Expanded(flex: 3, child: Text(Formatters.currency(profit), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.success))),
+                Expanded(flex: 5, child: Text(item.productName, style: TextStyle(fontSize: 12, color: colorScheme.onSurface.withValues(alpha: 0.8)))),
+                Expanded(flex: 2, child: Text('${Formatters.decimal(item.quantity)} ${item.unitName}', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: colorScheme.onSurface.withValues(alpha: 0.6)))),
+                Expanded(flex: 3, child: Text(Formatters.currency(item.costPrice), textAlign: TextAlign.right, style: TextStyle(fontSize: 11, color: colorScheme.onSurface.withValues(alpha: 0.4)))),
+                Expanded(flex: 3, child: Text(Formatters.currency(item.soldPrice), textAlign: TextAlign.right, style: TextStyle(fontSize: 11, color: colorScheme.onSurface))),
+                Expanded(flex: 3, child: Text(Formatters.currency(profit), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF2ECC71)))),
               ]),
             );
           }),
           if (tx.notes != null && tx.notes!.isNotEmpty) ...[
-            const Padding(padding: EdgeInsets.all(16), child: Divider(height: 1, color: AppTheme.border)),
-            Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 16), child: Text('Catatan: ${tx.notes}', style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: AppTheme.textMuted))),
+            Padding(padding: const EdgeInsets.all(16), child: Divider(height: 1, color: colorScheme.outline)),
+            Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 16), child: Text('Catatan: ${tx.notes}', style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: colorScheme.onSurface.withValues(alpha: 0.5)))),
           ] else const SizedBox(height: 12),
         ],
       ),
     );
   }
 
-  Widget _th(String label, int flex, {TextAlign align = TextAlign.left}) {
-    return Expanded(flex: flex, child: Text(label, textAlign: align, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textMuted, letterSpacing: 0.5)));
+  Widget _th(BuildContext context, String label, int flex, {TextAlign align = TextAlign.left}) {
+    return Expanded(flex: flex, child: Text(label, textAlign: align, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4), letterSpacing: 0.5)));
   }
 }

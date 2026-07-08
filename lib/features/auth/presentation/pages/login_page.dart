@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../shared/widgets/common_widgets.dart';
+import 'package:buildera/shared/widgets/common_widgets.dart';
 import '../../providers/auth_provider.dart';
 import 'register_page.dart';
 import 'forgot_password_page.dart';
@@ -36,7 +35,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         _emailCtrl.text.trim(),
         _passCtrl.text,
       );
-      // AuthGate will handle navigation
     } catch (e) {
       if (mounted) {
         String msg = 'Gagal masuk. Silakan cek email dan password Anda.';
@@ -51,16 +49,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: AppTheme.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Center(
         child: Container(
           width: 400,
           padding: const EdgeInsets.all(32),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: colorScheme.surface,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.border),
+            border: Border.all(color: colorScheme.outline),
           ),
           child: Form(
             key: _formKey,
@@ -70,7 +69,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 Image.asset('assets/images/logo.png', width: 80, height: 80),
                 const SizedBox(height: 16),
                 Text('Masuk ke BuildEra', style: Theme.of(context).textTheme.headlineMedium),
-                const Text('Material and Construction POS', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                Text('Material and Construction POS', 
+                  style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 12)),
                 const SizedBox(height: 32),
                 TextFormField(
                   controller: _emailCtrl,
@@ -116,7 +116,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text('Belum punya akun?', style: TextStyle(color: AppTheme.textSecondary)),
+                    Text('Belum punya akun?', 
+                      style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6))),
                     TextButton(
                       onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterPage())),
                       child: const Text('Daftar Sekarang'),

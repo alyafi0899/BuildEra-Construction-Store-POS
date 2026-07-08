@@ -1,21 +1,15 @@
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/formatters.dart';
-import '../../../../shared/widgets/common_widgets.dart';
-import '../../../products/models/product_financials.dart';
-import '../../../products/providers/product_provider.dart';
-import '../../providers/restock_provider.dart';
-import '../../models/restock_record.dart';
-import '../../../../shared/models/product.dart';
-
-import '../../../products/models/supplier.dart';
-import '../../../products/models/shipping_service.dart';
-import '../../../products/providers/entity_provider.dart';
-import '../../models/bill_payment.dart';
-import '../../providers/bill_payment_provider.dart';
+import 'package:buildera/core/utils/formatters.dart';
+import 'package:buildera/shared/widgets/common_widgets.dart';
+import 'package:buildera/features/products/providers/product_provider.dart';
+import 'package:buildera/features/inventory/providers/restock_provider.dart';
+import 'package:buildera/features/inventory/providers/bill_payment_provider.dart';
+import 'package:buildera/features/inventory/models/bill_payment.dart';
+import 'package:buildera/features/inventory/models/restock_record.dart';
+import 'package:buildera/shared/models/product.dart';
+import 'package:buildera/features/products/models/product_financials.dart';
 
 class BillsPage extends ConsumerStatefulWidget {
   const BillsPage({super.key});
@@ -26,6 +20,7 @@ class BillsPage extends ConsumerStatefulWidget {
 
 class _BillsPageState extends ConsumerState<BillsPage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  String _filter = 'unpaid'; // unpaid, paid, all
 
   @override
   void initState() {
@@ -43,615 +38,420 @@ class _BillsPageState extends ConsumerState<BillsPage> with SingleTickerProvider
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsProvider);
     final restocksAsync = ref.watch(restockHistoryProvider);
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: AppTheme.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Column(
         children: [
           const PageHeader(
             title: 'Manajemen Tagihan',
             subtitle: 'Pantau riwayat biaya dan kelola hutang operasional',
-            icon: Icons.receipt_rounded,
+            icon: Icons.receipt_long_rounded,
           ),
-          
-          _buildQuickStats(productsAsync, restocksAsync),
 
+          // ── Stats Summary ─────────────────────────────────────────────
+          if (productsAsync.hasValue && restocksAsync.hasValue)
+            _buildStatsHeader(productsAsync.value!, restocksAsync.value!),
+
+          // ── Tabs ──────────────────────────────────────────────────────
           Container(
-            color: AppTheme.surface,
+            color: colorScheme.surface,
             child: TabBar(
               controller: _tabController,
-              indicatorColor: AppTheme.accent,
-              labelColor: AppTheme.accent,
-              unselectedLabelColor: AppTheme.textSecondary,
               tabs: const [
                 Tab(text: 'Tagihan Supplier'),
                 Tab(text: 'Tagihan Ekspedisi'),
               ],
+              labelColor: colorScheme.primary,
+              unselectedLabelColor: colorScheme.onSurface.withValues(alpha: 0.5),
+              indicatorColor: colorScheme.primary,
+              indicatorWeight: 3,
             ),
           ),
 
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
+          // ── Filter Chips ──────────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              border: Border(bottom: BorderSide(color: colorScheme.outline)),
+            ),
+            child: Row(
               children: [
-                _BillsList(isSupplier: true, products: productsAsync, restocks: restocksAsync),
-                _BillsList(isSupplier: false, products: productsAsync, restocks: restocksAsync),
+                _filterChip('Belum Lunas', 'unpaid'),
+                const SizedBox(width: 8),
+                _filterChip('Sudah Lunas', 'paid'),
+                const SizedBox(width: 8),
+                _filterChip('Semua', 'all'),
               ],
             ),
           ),
+
+          // ── List Content ──────────────────────────────────────────────
+          Expanded(
+            child: (productsAsync.hasValue && restocksAsync.hasValue)
+                ? TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildEntityGroupedList(productsAsync.value!, restocksAsync.value!, true),
+                      _buildEntityGroupedList(productsAsync.value!, restocksAsync.value!, false),
+                    ],
+                  )
+                : const AppLoading(),
+          ),
         ],
       ),
-    );
-  }
-
-  Widget _buildQuickStats(AsyncValue<List<Product>> products, AsyncValue<List<RestockRecord>> restocks) {
-    return products.when(
-      data: (pList) => restocks.when(
-        data: (rList) {
-          double totalCost = 0;
-          double totalPaid = 0;
-          int pendingCount = 0;
-
-          void process(double total, double paid, PaymentStatus status) {
-            if (status == PaymentStatus.notApplicable) return;
-            totalCost += total;
-            totalPaid += paid;
-            if (status != PaymentStatus.paid) pendingCount++;
-          }
-
-          for (final p in pList) {
-            process(p.financials.supplierPrice, p.financials.supplierPaidAmount, p.financials.supplierPaymentStatus);
-            process(p.financials.supplierShippingCost, p.financials.shippingPaidAmount, p.financials.shippingPaymentStatus);
-          }
-          for (final r in rList) {
-            process(r.supplierPrice, r.supplierPaidAmount, r.supplierPaymentStatus);
-            process(r.shippingCost, r.shippingPaidAmount, r.shippingPaymentStatus);
-          }
-
-          final totalRemaining = totalCost - totalPaid;
-
-          return Container(
-            padding: const EdgeInsets.all(20),
-            decoration: const BoxDecoration(
-              color: AppTheme.surface,
-              border: Border(bottom: BorderSide(color: AppTheme.border)),
-            ),
-            child: Row(children: [
-              Expanded(child: StatCard(
-                label: 'Total Biaya Pengadaan', 
-                value: Formatters.currency(totalCost), 
-                icon: Icons.account_balance_wallet_rounded,
-                accentColor: AppTheme.info,
-                subtitle: 'Total Keseluruhan',
-              )),
-              const SizedBox(width: 16),
-              Expanded(child: StatCard(
-                label: 'Sudah Terbayar', 
-                value: Formatters.currency(totalPaid), 
-                icon: Icons.check_circle_outline_rounded,
-                accentColor: AppTheme.success,
-                subtitle: '${totalCost > 0 ? ((totalPaid / totalCost) * 100).toStringAsFixed(1) : 0}% Terlunasi',
-              )),
-              const SizedBox(width: 16),
-              Expanded(child: StatCard(
-                label: 'Sisa Hutang Aktif', 
-                value: Formatters.currency(totalRemaining), 
-                icon: Icons.pending_actions_rounded,
-                accentColor: AppTheme.warning,
-                subtitle: '$pendingCount Nota Belum Lunas',
-              )),
-            ]),
-          );
-        },
-        loading: () => const SizedBox(height: 100),
-        error: (_, __) => const SizedBox(),
-      ),
-      loading: () => const SizedBox(),
-      error: (_, __) => const SizedBox(),
-    );
-  }
-}
-
-class _BillsList extends ConsumerStatefulWidget {
-  final bool isSupplier;
-  final AsyncValue<List<Product>> products;
-  final AsyncValue<List<RestockRecord>> restocks;
-
-  const _BillsList({required this.isSupplier, required this.products, required this.restocks});
-
-  @override
-  ConsumerState<_BillsList> createState() => _BillsListState();
-}
-
-class _BillsListState extends ConsumerState<_BillsList> {
-  String _filter = 'unpaid';
-
-  @override
-  Widget build(BuildContext context) {
-    return widget.products.when(
-      data: (pList) => widget.restocks.when(
-        data: (rList) {
-          final bills = <_BillItem>[];
-
-          void addIfMatch(String id, String name, String? entity, double total, double paid, PaymentStatus status, DateTime date, bool isInitial, dynamic original) {
-            bool matches = false;
-            if (_filter == 'all') {
-              matches = true;
-            } else if (_filter == 'unpaid') {
-              matches = (status == PaymentStatus.unpaid || status == PaymentStatus.partial);
-            } else if (_filter == 'paid') {
-              matches = (status == PaymentStatus.paid);
-            }
-
-            if (status == PaymentStatus.notApplicable) {
-              matches = false;
-            }
-
-            if (matches) {
-              bills.add(_BillItem(
-                id: id,
-                name: name,
-                entityName: entity ?? 'Umum / Manual',
-                amount: total,
-                paidAmount: paid,
-                status: status,
-                date: date,
-                isInitial: isInitial,
-                original: original,
-              ));
-            }
-          }
-
-          for (final p in pList) {
-            final f = p.financials;
-            if (widget.isSupplier) {
-              addIfMatch(p.id, p.name, f.supplierName, f.supplierPrice, f.supplierPaidAmount, f.supplierPaymentStatus, p.createdAt, true, p);
-            } else {
-              addIfMatch(p.id, p.name, f.shippingServiceName, f.supplierShippingCost, f.shippingPaidAmount, f.shippingPaymentStatus, p.createdAt, true, p);
-            }
-          }
-
-          for (final r in rList) {
-            if (widget.isSupplier) {
-              addIfMatch(r.id, r.productName, r.supplierName, r.supplierPrice, r.supplierPaidAmount, r.supplierPaymentStatus, r.createdAt, false, r);
-            } else {
-              addIfMatch(r.id, r.productName, r.shippingServiceName, r.shippingCost, r.shippingPaidAmount, r.shippingPaymentStatus, r.createdAt, false, r);
-            }
-          }
-
-          bills.sort((a, b) => b.date.compareTo(a.date));
-
-          return Column(
-            children: [
-              _buildFilterBar(),
-              Expanded(
-                child: bills.isEmpty 
-                  ? const EmptyState(icon: Icons.receipt_long_rounded, title: 'Tidak ada data tagihan')
-                  : _buildGroupedList(bills),
-              ),
-            ],
-          );
-        },
-        loading: () => const AppLoading(),
-        error: (e, _) => Center(child: Text('Error: $e')),
-      ),
-      loading: () => const SizedBox(),
-      error: (_, __) => const SizedBox(),
-    );
-  }
-
-  Widget _buildFilterBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppTheme.border)),
-      ),
-      child: Row(children: [
-        _filterChip('Belum Lunas', 'unpaid'),
-        const SizedBox(width: 8),
-        _filterChip('Sudah Lunas', 'paid'),
-        const SizedBox(width: 8),
-        _filterChip('Semua', 'all'),
-      ]),
     );
   }
 
   Widget _filterChip(String label, String value) {
     final active = _filter == value;
-    return InkWell(
-      onTap: () => setState(() => _filter = value),
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        decoration: BoxDecoration(
-          color: active ? AppTheme.accent.withValues(alpha: 0.15) : AppTheme.surfaceAlt,
-          border: Border.all(color: active ? AppTheme.accent : AppTheme.border),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(label, style: TextStyle(
-          fontSize: 12, 
-          fontWeight: active ? FontWeight.bold : FontWeight.normal,
-          color: active ? AppTheme.accent : AppTheme.textSecondary,
-        )),
+    final colorScheme = Theme.of(context).colorScheme;
+    return ChoiceChip(
+      label: Text(label, style: TextStyle(fontSize: 12, color: active ? colorScheme.onPrimary : colorScheme.onSurface)),
+      selected: active,
+      onSelected: (v) => setState(() => _filter = value),
+      selectedColor: colorScheme.primary,
+      backgroundColor: colorScheme.surfaceContainerHighest,
+    );
+  }
+
+  Widget _buildStatsHeader(List<Product> products, List<RestockRecord> restocks) {
+    double totalCost = 0;
+    double totalPaid = 0;
+    int unpaidCount = 0;
+
+    void process(double amount, double paid, PaymentStatus status) {
+      if (status == PaymentStatus.notApplicable) return;
+      totalCost += amount;
+      totalPaid += paid;
+      if (amount - paid > 0.5) unpaidCount++;
+    }
+
+    for (var p in products) {
+      process(p.financials.supplierPrice, p.financials.supplierPaidAmount, p.financials.supplierPaymentStatus);
+      process(p.financials.supplierShippingCost, p.financials.shippingPaidAmount, p.financials.shippingPaymentStatus);
+    }
+    for (var r in restocks) {
+      process(r.supplierPrice, r.supplierPaidAmount, r.supplierPaymentStatus);
+      process(r.shippingCost, r.shippingPaidAmount, r.shippingPaymentStatus);
+    }
+
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      color: colorScheme.surface,
+      child: Row(
+        children: [
+          Expanded(child: StatCard(
+            label: 'Total Biaya Pengadaan',
+            value: Formatters.currency(totalCost),
+            icon: Icons.shopping_bag_rounded,
+            accentColor: colorScheme.primary,
+          )),
+          const SizedBox(width: 16),
+          Expanded(child: StatCard(
+            label: 'Sudah Terbayar',
+            value: Formatters.currency(totalPaid),
+            icon: Icons.check_circle_rounded,
+            accentColor: const Color(0xFF2ECC71),
+            subtitle: '${((totalPaid/totalCost)*100).toStringAsFixed(1)}% Terlunasi',
+          )),
+          const SizedBox(width: 16),
+          Expanded(child: StatCard(
+            label: 'Sisa Hutang Aktif',
+            value: Formatters.currency(totalCost - totalPaid),
+            icon: Icons.assignment_late_rounded,
+            accentColor: const Color(0xFFF1C40F),
+            subtitle: '$unpaidCount Nota Belum Lunas',
+          )),
+        ],
       ),
     );
   }
 
-  Widget _buildGroupedList(List<_BillItem> bills) {
-    final grouped = groupBy(bills, (b) => b.entityName);
-    final entities = grouped.keys.toList()..sort();
-    
-    final suppliers = ref.watch(suppliersProvider).asData?.value ?? [];
-    final shippings = ref.watch(shippingServicesProvider).asData?.value ?? [];
+  Widget _buildEntityGroupedList(List<Product> products, List<RestockRecord> restocks, bool isSupplier) {
+    final Map<String, List<_BillRecord>> groups = {};
 
-    return ListView.separated(
-      padding: const EdgeInsets.all(24),
-      itemCount: entities.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 16),
-      itemBuilder: (context, i) {
-        final entityName = entities[i];
-        final items = grouped[entityName]!;
-        final totalBill = items.fold<double>(0, (s, item) => s + item.amount);
-        final totalPaid = items.fold<double>(0, (s, item) => s + item.paidAmount);
-        final totalRemaining = totalBill - totalPaid;
+    void addRecord(String entity, String productName, double amount, double paid, DateTime date, bool isInitial, String id, bool isSupplierSide) {
+      final rem = amount - paid;
+      final isPaid = rem <= 0.5;
 
-        dynamic entityObj;
-        if (widget.isSupplier) {
-          entityObj = suppliers.firstWhereOrNull((s) => s.name == entityName);
-        } else {
-          entityObj = shippings.firstWhereOrNull((s) => s.name == entityName);
+      if (_filter == 'unpaid' && isPaid) return;
+      if (_filter == 'paid' && !isPaid) return;
+
+      groups.putIfAbsent(entity, () => []).add(_BillRecord(
+        id: id, productName: productName, amount: amount, paid: paid, date: date, isInitial: isInitial, isForSupplier: isSupplierSide
+      ));
+    }
+
+    for (var p in products) {
+      final f = p.financials;
+      if (isSupplier) {
+        if (f.supplierPaymentStatus != PaymentStatus.notApplicable) {
+          addRecord(f.supplierName ?? 'Supplier Umum', p.name, f.supplierPrice, f.supplierPaidAmount, p.createdAt, true, p.id, true);
         }
+      } else {
+        if (f.shippingPaymentStatus != PaymentStatus.notApplicable) {
+          addRecord(f.shippingServiceName ?? 'Ekspedisi Umum', p.name, f.supplierShippingCost, f.shippingPaidAmount, p.createdAt, true, p.id, false);
+        }
+      }
+    }
 
-        return _EntityExpandableGroup(
-          entityName: entityName,
-          isSupplier: widget.isSupplier,
-          totalBill: totalBill,
-          totalPaid: totalPaid,
-          totalRemaining: totalRemaining,
-          items: items,
-          entity: entityObj,
+    for (var r in restocks) {
+      if (isSupplier) {
+        if (r.supplierPaymentStatus != PaymentStatus.notApplicable) {
+          addRecord(r.supplierName ?? 'Supplier Umum', r.productName, r.supplierPrice, r.supplierPaidAmount, r.createdAt, false, r.id, true);
+        }
+      } else {
+        if (r.shippingPaymentStatus != PaymentStatus.notApplicable) {
+          addRecord(r.shippingServiceName ?? 'Ekspedisi Umum', r.productName, r.shippingCost, r.shippingPaidAmount, r.createdAt, false, r.id, false);
+        }
+      }
+    }
+
+    if (groups.isEmpty) {
+      return const EmptyState(
+        icon: Icons.receipt_long_outlined,
+        title: 'Tidak ada data tagihan',
+        subtitle: 'Semua tagihan lunas atau belum ada input pengadaan',
+      );
+    }
+
+    final sortedEntities = groups.keys.toList()..sort();
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(24),
+      itemCount: sortedEntities.length,
+      itemBuilder: (context, index) {
+        final entity = sortedEntities[index];
+        final records = groups[entity]!;
+        final totalDue = records.fold<double>(0, (s, r) => s + r.amount);
+        final totalPaid = records.fold<double>(0, (s, r) => s + r.paid);
+        final totalRem = totalDue - totalPaid;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: colorScheme.outline),
+          ),
+          child: Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: colorScheme.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                child: Icon(isSupplier ? Icons.business_rounded : Icons.local_shipping_rounded, color: colorScheme.primary, size: 20),
+              ),
+              title: Text(entity, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              subtitle: Text('${records.length} Batch Nota', style: const TextStyle(fontSize: 11)),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _tileStat('Total Biaya', totalDue, colorScheme.onSurface),
+                  const SizedBox(width: 16),
+                  _tileStat('Terbayar', totalPaid, const Color(0xFF2ECC71)),
+                  const SizedBox(width: 16),
+                  _tileStat('Sisa Hutang', totalRem, colorScheme.primary, isBold: true),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.keyboard_arrow_down_rounded),
+                ],
+              ),
+              children: [
+                const Divider(height: 1),
+                ...records.map((r) => _recordItem(r, entity)),
+              ],
+            ),
+          ),
         );
       },
     );
   }
+
+  Widget _tileStat(String label, double val, Color color, {bool isBold = false}) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(label, style: TextStyle(fontSize: 8, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5))),
+        Text(Formatters.currency(val), style: TextStyle(fontSize: 12, fontWeight: isBold ? FontWeight.bold : FontWeight.w500, color: color)),
+      ],
+    );
+  }
+
+  Widget _recordItem(_BillRecord r, String entity) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final rem = r.amount - r.paid;
+    final isPaid = rem <= 0.5;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: colorScheme.outline.withValues(alpha: 0.5))),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(r.productName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(width: 8),
+                    StatusChip(
+                      label: r.isInitial ? 'Stok Awal' : 'Restock',
+                      color: r.isInitial ? colorScheme.secondary : const Color(0xFF3498DB),
+                    ),
+                  ],
+                ),
+                Text('Batch: ${Formatters.dateTime(r.date)}', style: TextStyle(fontSize: 11, color: colorScheme.onSurface.withValues(alpha: 0.6))),
+              ],
+            ),
+          ),
+          _tileStat('Tagihan', r.amount, colorScheme.onSurface),
+          const SizedBox(width: 24),
+          _tileStat('Sisa', rem, colorScheme.primary, isBold: true),
+          const SizedBox(width: 24),
+          if (!isPaid)
+            ElevatedButton(
+              onPressed: () => _showPayDialog(r, entity),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                minimumSize: const Size(80, 36),
+              ),
+              child: const Text('BAYAR', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+            )
+          else
+            Icon(Icons.check_circle_rounded, color: const Color(0xFF2ECC71), size: 24),
+        ],
+      ),
+    );
+  }
+
+  void _showPayDialog(_BillRecord item, String entityName) {
+    showDialog(
+      context: context,
+      builder: (context) => _PayBillDialog(
+        item: item,
+        entityName: entityName,
+      ),
+    );
+  }
 }
 
-class _EntityExpandableGroup extends StatefulWidget {
-  final String entityName;
-  final bool isSupplier;
-  final double totalBill;
-  final double totalPaid;
-  final double totalRemaining;
-  final List<_BillItem> items;
-  final dynamic entity;
+class _BillRecord {
+  final String id;
+  final String productName;
+  final double amount;
+  final double paid;
+  final DateTime date;
+  final bool isInitial;
+  final bool isForSupplier;
+  _BillRecord({required this.id, required this.productName, required this.amount, required this.paid, required this.date, required this.isInitial, required this.isForSupplier});
+}
 
-  const _EntityExpandableGroup({
-    required this.entityName,
-    required this.isSupplier,
-    required this.totalBill,
-    required this.totalPaid,
-    required this.totalRemaining,
-    required this.items,
-    this.entity,
-  });
+class _PayBillDialog extends ConsumerStatefulWidget {
+  final _BillRecord item;
+  final String entityName;
+  const _PayBillDialog({required this.item, required this.entityName});
 
   @override
-  State<_EntityExpandableGroup> createState() => _EntityExpandableGroupState();
+  ConsumerState<_PayBillDialog> createState() => _PayBillDialogState();
 }
 
-class _EntityExpandableGroupState extends State<_EntityExpandableGroup> {
-  bool _isExpanded = false;
+class _PayBillDialogState extends ConsumerState<_PayBillDialog> {
+  final _amountCtrl = TextEditingController();
+  final _notesCtrl = TextEditingController();
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final rem = widget.item.amount - widget.item.paid;
+    _amountCtrl.text = rem.toStringAsFixed(0);
+  }
+
+  Future<void> _submit() async {
+    final amt = double.tryParse(_amountCtrl.text) ?? 0;
+    if (amt <= 0) return;
+
+    setState(() => _loading = true);
+    try {
+      final payment = BillPayment(
+        id: const Uuid().v4(),
+        billId: widget.item.id,
+        entityName: widget.entityName,
+        productName: widget.item.productName,
+        amount: amt,
+        status: PaymentStatus.paid,
+        createdAt: DateTime.now(),
+        isInitialBill: widget.item.isInitial,
+        isForSupplier: widget.item.isForSupplier,
+        notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+      );
+
+      await ref.read(billPaymentRepositoryProvider).savePayment(payment);
+      
+      if (mounted) {
+        Navigator.pop(context);
+        showSuccess(context, 'Pembayaran berhasil dicatat');
+      }
+    } catch (e) {
+      if (mounted) showError(context, 'Gagal: $e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    String? contact;
-    if (widget.entity is Supplier) contact = (widget.entity as Supplier).phone;
-    if (widget.entity is ShippingService) contact = (widget.entity as ShippingService).phone;
-
-    return Column(
-      children: [
-        Material(
-          color: AppTheme.surfaceAlt,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: _isExpanded ? AppTheme.accent.withValues(alpha: 0.3) : AppTheme.border),
-          ),
-          child: InkWell(
-            onTap: () => setState(() => _isExpanded = !_isExpanded),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              child: Row(children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: widget.isSupplier ? AppTheme.accent : AppTheme.info, 
-                    borderRadius: BorderRadius.circular(8)
-                  ),
-                  child: Icon(
-                    widget.isSupplier ? Icons.business_rounded : Icons.local_shipping_rounded, 
-                    size: 20, color: Colors.white
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(widget.entityName.toUpperCase(), 
-                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 0.5)),
-                      if (contact != null)
-                        Text('Hubungi: $contact', style: const TextStyle(fontSize: 10, color: AppTheme.accent, fontWeight: FontWeight.bold))
-                      else
-                        Text('${widget.items.length} Batch Nota', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
-                    ],
-                  ),
-                ),
-                _summarySmallItem('Total Biaya', widget.totalBill, AppTheme.textPrimary),
-                const SizedBox(width: 20),
-                _summarySmallItem('Terbayar', widget.totalPaid, AppTheme.success),
-                const SizedBox(width: 20),
-                _summarySmallItem('Sisa Hutang', widget.totalRemaining, AppTheme.warning),
-                const SizedBox(width: 12),
-                Icon(
-                  _isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, 
-                  color: AppTheme.textMuted
-                ),
-              ]),
-            ),
-          ),
-        ),
-        if (_isExpanded)
-          Padding(
-            padding: const EdgeInsets.only(top: 8, left: 12),
-            child: Column(
-              children: widget.items.map((item) => _BillTile(item: item, isSupplier: widget.isSupplier)).toList(),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _summarySmallItem(String label, double value, Color color) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Text(label, style: const TextStyle(fontSize: 9, color: AppTheme.textMuted, fontWeight: FontWeight.bold)),
-        Text(Formatters.currency(value), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: color)),
-      ],
-    );
-  }
-}
-
-class _BillItem {
-  final String id;
-  final String name;
-  final String entityName;
-  final double amount;
-  final double paidAmount;
-  final PaymentStatus status;
-  final DateTime date;
-  final bool isInitial;
-  final dynamic original;
-
-  _BillItem({
-    required this.id, 
-    required this.name, 
-    required this.entityName, 
-    required this.amount, 
-    required this.paidAmount,
-    required this.status,
-    required this.date, 
-    required this.isInitial,
-    required this.original,
-  });
-}
-
-class _BillTile extends ConsumerWidget {
-  final _BillItem item;
-  final bool isSupplier;
-  const _BillTile({required this.item, required this.isSupplier});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final remaining = item.amount - item.paidAmount;
-    final isPaid = item.status == PaymentStatus.paid;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isPaid ? AppTheme.success.withValues(alpha: 0.2) : AppTheme.border),
-      ),
-      child: Column(
-        children: [
-          Row(children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    if (item.isInitial) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: AppTheme.accent.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
-                        child: const Text('Stok Awal', style: TextStyle(fontSize: 9, color: AppTheme.accent, fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-                  ]),
-                  Text('Batch: ${Formatters.dateTime(item.date)}', style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
-                ],
-              ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(Formatters.currency(item.amount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                Text(isPaid ? 'LUNAS' : 'Sisa: ${Formatters.currency(remaining)}', 
-                  style: TextStyle(
-                    fontSize: 11, 
-                    fontWeight: FontWeight.w900, 
-                    color: isPaid ? AppTheme.success : AppTheme.warning,
-                  )),
-              ],
-            ),
-            const SizedBox(width: 16),
-            if (!isPaid)
-              ElevatedButton(
-                onPressed: () => _showPaymentDialog(context, ref),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.accent,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                ),
-                child: const Text('BAYAR', style: TextStyle(fontSize: 11)),
-              )
-            else
-              const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 20),
-          ]),
-          
-          _buildPaymentHistory(context, ref),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPaymentHistory(BuildContext context, WidgetRef ref) {
-    final paymentsAsync = ref.watch(billPaymentsProvider);
-    
-    return paymentsAsync.when(
-      data: (allPayments) {
-        final itemPayments = allPayments.where((p) => p.billId == item.id).toList();
-        if (itemPayments.isEmpty && item.paidAmount == 0) return const SizedBox();
-
-        return Column(
-          children: [
-            const Divider(height: 24),
-            Row(children: [
-              const Icon(Icons.history_rounded, size: 12, color: AppTheme.textMuted),
-              const SizedBox(width: 6),
-              Text('Riwayat Pembayaran:', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textMuted)),
-              const Spacer(),
-              LinearProgressIndicator(
-                value: item.amount > 0 ? (item.paidAmount / item.amount) : 0,
-                backgroundColor: AppTheme.bg,
-                valueColor: const AlwaysStoppedAnimation(AppTheme.success),
-                minHeight: 4,
-              ).constrained(width: 80),
-            ]),
-            const SizedBox(height: 12),
-            ...itemPayments.map((p) => Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Row(children: [
-                Text(Formatters.dateTime(p.createdAt), style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
-                const SizedBox(width: 12),
-                Expanded(child: Text(p.notes ?? 'Cicilan Pembayaran', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500))),
-                Text(Formatters.currency(p.amount), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.success)),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: () async {
-                    final ok = await showConfirmDialog(context, title: 'Hapus Pembayaran', content: 'Hapus catatan pembayaran ini? Sisa hutang akan bertambah kembali.');
-                    if (ok) {
-                      await ref.read(billPaymentRepositoryProvider).deletePayment(p);
-                    }
-                  },
-                  icon: const Icon(Icons.delete_outline_rounded, size: 14, color: AppTheme.danger),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              ]),
-            )),
-            if (itemPayments.isEmpty && item.paidAmount > 0)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 4),
-                child: Text('Data pembayaran lama (sebelum update riwayat)', style: TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: AppTheme.textMuted)),
-              ),
-          ],
-        );
-      },
-      loading: () => const SizedBox(),
-      error: (_, __) => const SizedBox(),
-    );
-  }
-
-  void _showPaymentDialog(BuildContext context, WidgetRef ref) {
-    final remaining = item.amount - item.paidAmount;
-    final amountCtrl = TextEditingController(text: remaining.toStringAsFixed(0));
-    final notesCtrl = TextEditingController();
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Input Pembayaran Tagihan'),
-        content: Column(
+    final rem = widget.item.amount - widget.item.paid;
+    return AlertDialog(
+      title: const Text('Catat Pembayaran Tagihan'),
+      content: SizedBox(
+        width: 400,
+        child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Tagihan: ${item.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
-            Text('Sisa Hutang: ${Formatters.currency(remaining)}', style: const TextStyle(fontSize: 12, color: AppTheme.warning)),
-            const SizedBox(height: 20),
-            TextFormField(
-              controller: amountCtrl,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Jumlah Bayar (Rp) *',
-                prefixText: 'Rp ',
-              ),
+            _infoRow('Produk', widget.item.productName),
+            _infoRow('Entitas', widget.entityName),
+            _infoRow('Sisa Tagihan', Formatters.currency(rem)),
+            const Divider(height: 32),
+            TextField(
+              controller: _amountCtrl,
               keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Jumlah Bayar', prefixText: 'Rp '),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: notesCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Keterangan / Catatan',
-                hintText: 'Contoh: Titip ke Supir, Transfer Bank, dll',
-              ),
-            ),
+            const SizedBox(height: 16),
+            TextField(controller: _notesCtrl, decoration: const InputDecoration(labelText: 'Catatan (Opsional)')),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
-          ElevatedButton(
-            onPressed: () async {
-              final val = double.tryParse(amountCtrl.text) ?? 0;
-              if (val <= 0) return;
-              
-              final payment = BillPayment(
-                id: const Uuid().v4(),
-                billId: item.id,
-                amount: val,
-                notes: notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim(),
-                createdAt: DateTime.now(),
-                isInitialBill: item.isInitial,
-                isForSupplier: isSupplier,
-              );
-
-              await ref.read(billPaymentRepositoryProvider).savePayment(payment);
-
-              if (context.mounted) {
-                Navigator.pop(context);
-                showSuccess(context, 'Pembayaran berhasil dicatat');
-              }
-            },
-            child: const Text('Simpan Pembayaran'),
-          ),
-        ],
       ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('BATAL')),
+        ElevatedButton(
+          onPressed: _loading ? null : _submit,
+          child: _loading ? const AppLoading() : const Text('SIMPAN PEMBAYARAN'),
+        ),
+      ],
     );
   }
-}
 
-Map<K, List<V>> groupBy<V, K>(Iterable<V> values, K Function(V) key) {
-  var map = <K, List<V>>{};
-  for (var element in values) {
-    (map[key(element)] ??= []).add(element);
+  Widget _infoRow(String l, String v) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text(l, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
+        Text(v, style: const TextStyle(fontWeight: FontWeight.bold)),
+      ]),
+    );
   }
-  return map;
-}
-
-extension on Widget {
-  Widget constrained({double? width, double? height}) => SizedBox(width: width, height: height, child: this);
 }

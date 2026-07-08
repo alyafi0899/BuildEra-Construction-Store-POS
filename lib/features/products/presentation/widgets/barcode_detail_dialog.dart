@@ -4,7 +4,6 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/models/product.dart';
 import '../../../../core/utils/formatters.dart';
 
@@ -56,11 +55,12 @@ class BarcodeDetailDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final barcode = product.barcode ?? '';
     final hasBarcode = barcode.isNotEmpty;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return AlertDialog(
       title: Row(
         children: [
-          const Icon(Icons.qr_code_2_rounded, color: AppTheme.accent),
+          Icon(Icons.qr_code_2_rounded, color: colorScheme.primary),
           const SizedBox(width: 12),
           Expanded(child: Text(product.name, style: const TextStyle(fontSize: 16))),
         ],
@@ -69,26 +69,26 @@ class BarcodeDetailDialog extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (hasBarcode) ...[
-            const Text('Barcode (EAN-13)', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+            Text('Barcode (EAN-13)', style: TextStyle(fontSize: 12, color: colorScheme.onSurface.withValues(alpha: 0.6))),
             const SizedBox(height: 12),
             bc.BarcodeWidget(
               data: barcode,
               barcode: bc.Barcode.ean13(),
               width: 200,
               height: 80,
-              color: AppTheme.textPrimary,
+              color: colorScheme.onSurface,
               drawText: true,
-              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+              style: TextStyle(color: colorScheme.onSurface, fontSize: 12),
             ),
             const SizedBox(height: 32),
-            const Text('QR Code', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+            Text('QR Code', style: TextStyle(fontSize: 12, color: colorScheme.onSurface.withValues(alpha: 0.6))),
             const SizedBox(height: 12),
             QrImageView(
               data: barcode,
               version: QrVersions.auto,
               size: 150,
-              eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: AppTheme.textPrimary),
-              dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: AppTheme.textPrimary),
+              eyeStyle: QrEyeStyle(eyeShape: QrEyeShape.square, color: colorScheme.onSurface),
+              dataModuleStyle: QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: colorScheme.onSurface),
             ),
           ] else
             const Padding(

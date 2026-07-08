@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:excel/excel.dart' hide Border;
 import 'package:printing/printing.dart';
-import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../shared/models/product.dart';
@@ -85,11 +84,12 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
       return;
     }
 
+    final colorScheme = Theme.of(context).colorScheme;
     final ok = await showConfirmDialog(context,
         title: 'Generate Barcode Massal',
         content: 'Akan membuat barcode unik untuk ${missing.length} produk. Lanjutkan?',
         confirmLabel: 'Generate',
-        confirmColor: AppTheme.accent);
+        confirmColor: colorScheme.primary);
     
     if (!mounted || !ok) return;
 
@@ -109,7 +109,6 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
           final rawData = BarcodeHelper.generateRandomEAN13Data();
           newBarcode = BarcodeHelper.getEAN13WithCheckDigit(rawData);
           final used = await historyRepo.isBarcodeUsed(newBarcode);
-          // Also check in our current batch to avoid duplicate within the same generation
           final duplicateInBatch = updatedProducts.any((p) => p.barcode == newBarcode);
           
           if (!used && !duplicateInBatch) isUnique = true;
@@ -139,7 +138,6 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
       final excel = Excel.createExcel();
       final sheet = excel['Sheet1'];
 
-      // Header row matching the import format + metadata
       sheet.appendRow([
         TextCellValue('Nama Produk'),
         TextCellValue('Barcode'),
@@ -152,7 +150,6 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
         TextCellValue('Terakhir Diubah'),
       ]);
 
-      // Data rows
       for (final p in products) {
         sheet.appendRow([
           TextCellValue(p.name),
@@ -191,26 +188,26 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     final categoryFilter = ref.watch(productCategoryFilterProvider);
     final sort = ref.watch(productSortProvider);
     final filters = ref.watch(productFiltersProvider);
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: AppTheme.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Column(
         children: [
-          // Top bar
           PageHeader(
           title: 'Manajemen Produk',
           subtitle: 'Kelola daftar produk dan satuan jual',
           icon: Icons.inventory_2_rounded,
           actions: [
             if (_isGenerating)
-              const Row(
+              Row(
                 children: [
                   SizedBox(
                     width: 16, height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary),
                   ),
-                  SizedBox(width: 12),
-                  Text('Generating Barcodes...', style: TextStyle(color: AppTheme.accent, fontSize: 13, fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 12),
+                  Text('Generating Barcodes...', style: TextStyle(color: colorScheme.primary, fontSize: 13, fontWeight: FontWeight.bold)),
                 ],
               ),
             OutlinedButton.icon(
@@ -239,7 +236,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
         // Filters & Sorting
         Container(
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
-          color:   AppTheme.surface,
+          color:   colorScheme.surface,
           child:   Column(
             children: [
               Row(children: [
@@ -263,7 +260,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                     value:          categoryFilter,
                     isExpanded:     true,
                     decoration:     const InputDecoration(labelText: 'Kategori', isDense: true),
-                    dropdownColor:  AppTheme.surfaceAlt,
+                    dropdownColor:  colorScheme.surface,
                     items: [
                       const DropdownMenuItem(value: null, child: Text('Semua Kategori')),
                       ...AppConstants.categories.map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis))),
@@ -279,7 +276,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                     value:          sort.field,
                     isExpanded:     true,
                     decoration:     const InputDecoration(labelText: 'Urutkan', isDense: true),
-                    dropdownColor:  AppTheme.surfaceAlt,
+                    dropdownColor:  colorScheme.surface,
                     items: const [
                       DropdownMenuItem(value: ProductSortField.name,     child: Text('Nama (A-Z)')),
                       DropdownMenuItem(value: ProductSortField.category, child: Text('Kategori')),
@@ -296,14 +293,14 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                 const SizedBox(width: 8),
                 IconButton(
                   onPressed: () => ref.read(productSortProvider.notifier).toggleOrder(),
-                  icon: Icon(sort.ascending ? Icons.south_rounded : Icons.north_rounded, color: AppTheme.accent),
+                  icon: Icon(sort.ascending ? Icons.south_rounded : Icons.north_rounded, color: colorScheme.primary),
                   tooltip: sort.ascending ? 'Ascending' : 'Descending',
                 ),
                 const SizedBox(width: 16),
                 if (_selectedIds.isNotEmpty)
                   ElevatedButton.icon(
                     onPressed: _bulkDelete,
-                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
+                    style: ElevatedButton.styleFrom(backgroundColor: colorScheme.error),
                     icon: const Icon(Icons.delete_sweep_rounded, size: 18),
                     label: Text('Hapus (${_selectedIds.length})'),
                   ),
@@ -316,7 +313,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
               ]),
               const SizedBox(height: 12),
               Row(children: [
-                const Icon(Icons.filter_list_rounded, size: 18, color: AppTheme.textMuted),
+                Icon(Icons.filter_list_rounded, size: 18, color: colorScheme.onSurface.withValues(alpha: 0.5)),
                 const SizedBox(width: 12),
                 const _FilterLabel('Stok:'),
                 _FilterTab(label: 'Semua', selected: filters.stock == 'all', onTap: () => ref.read(productFiltersProvider.notifier).setStock('all')),
@@ -392,6 +389,7 @@ class _ProductTableState extends State<_ProductTable> {
   Widget build(BuildContext context) {
     final allSelected = widget.products.isNotEmpty && 
                         widget.selectedIds.length == widget.products.length;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scrollbar(
       controller: _scrollController,
@@ -403,13 +401,12 @@ class _ProductTableState extends State<_ProductTable> {
         itemCount: widget.products.length + 1, // Header + rows
         itemBuilder: (context, index) {
           if (index == 0) {
-            // Table header
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color:        AppTheme.surfaceAlt,
+                color:        colorScheme.surfaceContainerHighest,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
-                border:       Border.all(color: AppTheme.border),
+                border:       Border.all(color: colorScheme.outline),
               ),
               child: Row(children: [
                 SizedBox(
@@ -417,7 +414,7 @@ class _ProductTableState extends State<_ProductTable> {
                   child: Checkbox(
                     value: allSelected,
                     onChanged: (_) => widget.onSelectAll(),
-                    activeColor: AppTheme.accent,
+                    activeColor: colorScheme.primary,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                   ),
                 ),
@@ -447,13 +444,14 @@ class _ProductTableState extends State<_ProductTable> {
   }
 
   Widget _th(String label, {int flex = 1, TextAlign align = TextAlign.left}) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Expanded(
       flex: flex,
       child: Text(
         label,
         textAlign: align,
-        style: const TextStyle(
-          color:      AppTheme.textSecondary,
+        style: TextStyle(
+          color:      colorScheme.onSurface.withValues(alpha: 0.6),
           fontSize:   12,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.5,
@@ -481,103 +479,106 @@ class _ProductRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final profit = product.basePrice - product.costPrice;
     final f = product.financials;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color:  isSelected 
-          ? AppTheme.accent.withValues(alpha: 0.05) 
-          : (isEven ? AppTheme.card : AppTheme.surface),
         border: Border(
-          left:   BorderSide(color: isSelected ? AppTheme.accent : AppTheme.border),
-          right:  BorderSide(color: isSelected ? AppTheme.accent : AppTheme.border),
-          bottom: BorderSide(color: AppTheme.border),
+          left:   BorderSide(color: isSelected ? colorScheme.primary : colorScheme.outline),
+          right:  BorderSide(color: isSelected ? colorScheme.primary : colorScheme.outline),
+          bottom: BorderSide(color: colorScheme.outline),
         ),
       ),
-      child: Row(children: [
-        SizedBox(
-          width: 40,
-          child: Checkbox(
-            value: isSelected,
-            onChanged: (_) => onToggleSelect(),
-            activeColor: AppTheme.accent,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-          ),
-        ),
-        // Product name + icon
-        Expanded(flex: 4, child: InkWell(
-          onTap: () => ProductDetailDialog.show(context, product),
+      child: Material(
+        color:  isSelected 
+          ? colorScheme.primary.withValues(alpha: 0.05) 
+          : (isEven ? colorScheme.surface : colorScheme.surfaceContainerHighest),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(children: [
-            ProductImage(imagePath: product.imagePath, size: 36),
-            const SizedBox(width: 12),
-            Flexible(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
-              Row(
-                children: [
-                  Text(product.baseUnit, style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
-                  if (product.barcode != null) ...[
-                    const SizedBox(width: 8),
-                    Text('• ${product.barcode}', style: const TextStyle(fontFamily: 'monospace', fontSize: 10, color: AppTheme.textMuted)),
-                  ],
-                ],
+            SizedBox(
+              width: 40,
+              child: Checkbox(
+                value: isSelected,
+                onChanged: (_) => onToggleSelect(),
+                activeColor: colorScheme.primary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+              ),
+            ),
+            Expanded(flex: 4, child: InkWell(
+              onTap: () => ProductDetailDialog.show(context, product),
+              child: Row(children: [
+                ProductImage(imagePath: product.imagePath, size: 36),
+                const SizedBox(width: 12),
+                Flexible(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
+                  Row(
+                    children: [
+                      Text(product.baseUnit, style: TextStyle(fontSize: 10, color: colorScheme.onSurface.withValues(alpha: 0.6))),
+                      if (product.barcode != null) ...[
+                        const SizedBox(width: 8),
+                        Text('• ${product.barcode}', style: TextStyle(fontFamily: 'monospace', fontSize: 10, color: colorScheme.onSurface.withValues(alpha: 0.4))),
+                      ],
+                    ],
+                  ),
+                ])),
+              ]),
+            )),
+            Expanded(flex: 2, child: Text(product.category, style: const TextStyle(fontSize: 12))),
+            
+            Expanded(flex: 2, child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (f.supplierName != null)
+                  _statusBadge(context, Icons.business_rounded, f.supplierName!, f.supplierPaymentStatus),
+                if (f.shippingServiceName != null)
+                  _statusBadge(context, Icons.local_shipping_rounded, f.shippingServiceName!, f.shippingPaymentStatus),
+                if (f.supplierName == null && f.shippingServiceName == null)
+                  Text('—', style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.4))),
+              ],
+            )),
+
+            Expanded(flex: 1, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              if (product.isLowStock)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Icon(Icons.warning_amber_rounded, color: colorScheme.secondary, size: 14),
+                ),
+              Text(
+                Formatters.decimal(product.stock),
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  color:      product.isLowStock ? colorScheme.secondary : colorScheme.onSurface,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
               ),
             ])),
+            Expanded(flex: 1, child: Text(Formatters.currency(product.costPrice), textAlign: TextAlign.right, style: TextStyle(fontSize: 11, color: colorScheme.onSurface.withValues(alpha: 0.6)))),
+            Expanded(flex: 1, child: Text(Formatters.currency(product.basePrice), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+            Expanded(flex: 1, child: Text(Formatters.currency(profit), textAlign: TextAlign.right, style: TextStyle(color: profit >= 0 ? const Color(0xFF2ECC71) : colorScheme.error, fontWeight: FontWeight.bold, fontSize: 12))),
+            
+            Expanded(flex: 1, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              IconButton(
+                onPressed: () => ProductFormDialog.show(context, product: product),
+                icon: Icon(Icons.edit_rounded, size: 16, color: colorScheme.onSurface.withValues(alpha: 0.6)),
+                tooltip: 'Edit',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              const SizedBox(width: 4),
+              _DeleteButton(product: product),
+            ])),
           ]),
-        )),
-        Expanded(flex: 2, child: Text(product.category, style: const TextStyle(fontSize: 12))),
-        
-        // Supplier & Shipping Info
-        Expanded(flex: 2, child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (f.supplierName != null)
-              _statusBadge(Icons.business_rounded, f.supplierName!, f.supplierPaymentStatus),
-            if (f.shippingServiceName != null)
-              _statusBadge(Icons.local_shipping_rounded, f.shippingServiceName!, f.shippingPaymentStatus),
-            if (f.supplierName == null && f.shippingServiceName == null)
-              const Text('—', style: TextStyle(color: AppTheme.textMuted)),
-          ],
-        )),
-
-        Expanded(flex: 1, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-          if (product.isLowStock)
-            const Padding(
-              padding: EdgeInsets.only(right: 4),
-              child: Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 14),
-            ),
-          Text(
-            Formatters.decimal(product.stock),
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              color:      product.isLowStock ? AppTheme.warning : AppTheme.textPrimary,
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
-            ),
-          ),
-        ])),
-        Expanded(flex: 1, child: Text(Formatters.currency(product.costPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary))),
-        Expanded(flex: 1, child: Text(Formatters.currency(product.basePrice), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-        Expanded(flex: 1, child: Text(Formatters.currency(profit), textAlign: TextAlign.right, style: TextStyle(color: profit >= 0 ? AppTheme.success : AppTheme.danger, fontWeight: FontWeight.bold, fontSize: 12))),
-        
-        Expanded(flex: 1, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          IconButton(
-            onPressed: () => ProductFormDialog.show(context, product: product),
-            icon: const Icon(Icons.edit_rounded, size: 16, color: AppTheme.textSecondary),
-            tooltip: 'Edit',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-          ),
-          const SizedBox(width: 4),
-          _DeleteButton(product: product),
-        ])),
-      ]),
+        ),
+      ),
     );
   }
 
-  Widget _statusBadge(IconData icon, String label, PaymentStatus status) {
+  Widget _statusBadge(BuildContext context, IconData icon, String label, PaymentStatus status) {
     if (status == PaymentStatus.notApplicable) return const SizedBox();
-    
-    final color = status == PaymentStatus.paid ? AppTheme.success : AppTheme.warning;
+    final colorScheme = Theme.of(context).colorScheme;
+    final color = status == PaymentStatus.paid ? const Color(0xFF2ECC71) : colorScheme.secondary;
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Row(
@@ -603,6 +604,7 @@ class _DeleteButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colorScheme = Theme.of(context).colorScheme;
     return IconButton(
       onPressed: () async {
         final ok = await showConfirmDialog(context,
@@ -617,7 +619,7 @@ class _DeleteButton extends ConsumerWidget {
           }
         }
       },
-      icon: const Icon(Icons.delete_rounded, size: 16, color: AppTheme.danger),
+      icon: Icon(Icons.delete_rounded, size: 16, color: colorScheme.error),
       tooltip: 'Hapus',
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(),
@@ -630,7 +632,8 @@ class _FilterLabel extends StatelessWidget {
   const _FilterLabel(this.label);
   @override
   Widget build(BuildContext context) {
-    return Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textMuted));
+    final colorScheme = Theme.of(context).colorScheme;
+    return Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorScheme.onSurface.withValues(alpha: 0.5)));
   }
 }
 
@@ -642,6 +645,7 @@ class _FilterTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(left: 8),
       child: InkWell(
@@ -651,11 +655,11 @@ class _FilterTab extends StatelessWidget {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: selected ? AppTheme.accent.withValues(alpha: 0.1) : Colors.transparent,
+            color: selected ? colorScheme.primary.withValues(alpha: 0.1) : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: selected ? AppTheme.accent : AppTheme.border),
+            border: Border.all(color: selected ? colorScheme.primary : colorScheme.outline),
           ),
-          child: Text(label, style: TextStyle(fontSize: 10, fontWeight: selected ? FontWeight.bold : FontWeight.normal, color: selected ? AppTheme.accent : AppTheme.textSecondary)),
+          child: Text(label, style: TextStyle(fontSize: 10, fontWeight: selected ? FontWeight.bold : FontWeight.normal, color: selected ? colorScheme.primary : colorScheme.onSurface.withValues(alpha: 0.6))),
         ),
       ),
     );

@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../shared/widgets/common_widgets.dart';
+import 'package:buildera/shared/widgets/common_widgets.dart';
 import '../../providers/auth_provider.dart';
 
 class VerifyEmailPage extends ConsumerStatefulWidget {
@@ -19,7 +18,6 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
   @override
   void initState() {
     super.initState();
-    // Auto check verification status every 3 seconds
     _timer = Timer.periodic(const Duration(seconds: 3), (_) {
       ref.read(authRepositoryProvider).reloadUser();
     });
@@ -47,28 +45,29 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: AppTheme.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Center(
         child: Container(
           width: 450,
           padding: const EdgeInsets.all(40),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: colorScheme.surface,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.border),
+            border: Border.all(color: colorScheme.outline),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.mark_email_read_outlined, size: 80, color: AppTheme.accent),
+              Icon(Icons.mark_email_read_outlined, size: 80, color: colorScheme.primary),
               const SizedBox(height: 24),
               Text('Verifikasi Email Anda', style: Theme.of(context).textTheme.headlineMedium),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'Kami telah mengirimkan email verifikasi. Silakan cek inbox (atau folder spam) dan klik link verifikasi untuk melanjutkan.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppTheme.textSecondary),
+                style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6)),
               ),
               const SizedBox(height: 40),
               SizedBox(
@@ -88,7 +87,7 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
                 onPressed: () => ref.read(authRepositoryProvider).logout(),
                 icon: const Icon(Icons.logout),
                 label: const Text('Keluar dan Gunakan Akun Lain'),
-                style: TextButton.styleFrom(foregroundColor: AppTheme.danger),
+                style: TextButton.styleFrom(foregroundColor: colorScheme.error),
               ),
             ],
           ),

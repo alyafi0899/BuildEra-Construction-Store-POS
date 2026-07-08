@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/theme/app_theme.dart';
 import '../../features/settings/providers/settings_provider.dart';
 import '../../core/sync/widgets/sync_status_bar.dart';
 
@@ -46,16 +45,17 @@ class AppSidebar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
     final businessName = settings.businessName.isEmpty ? 'KONST.POS' : settings.businessName.toUpperCase();
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
       width: 220,
-      color: AppTheme.surface,
+      color: colorScheme.surface,
       child: Column(children: [
         // Logo area
         Container(
           padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: AppTheme.border)),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: colorScheme.outline)),
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
@@ -66,11 +66,11 @@ class AppSidebar extends ConsumerWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('BuildEra',
+                  Text('BuildEra',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                            color:       Colors.white,
+                            color:       colorScheme.onSurface,
                             fontSize:    15,
                             fontWeight:  FontWeight.w900,
                             letterSpacing: 1.0,
@@ -79,7 +79,7 @@ class AppSidebar extends ConsumerWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                            color:       AppTheme.accent,
+                            color:       colorScheme.primary,
                             fontSize:    10,
                             fontWeight:  FontWeight.w600,
                             letterSpacing: 0.5,
@@ -111,14 +111,14 @@ class AppSidebar extends ConsumerWidget {
         // Bottom
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: const BoxDecoration(
-            border: Border(top: BorderSide(color: AppTheme.border)),
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: colorScheme.outline)),
           ),
           child: Row(children: [
-            const CircleAvatar(
+            CircleAvatar(
               radius:          16,
-              backgroundColor: AppTheme.accent,
-              child: Icon(Icons.person, color: Colors.white, size: 18),
+              backgroundColor: colorScheme.primary,
+              child: Icon(Icons.person, color: colorScheme.onPrimary, size: 18),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -152,7 +152,7 @@ class AppSidebar extends ConsumerWidget {
                   letterSpacing: 1.5,
                   fontWeight: FontWeight.w900,
                   fontSize: 10,
-                  color: AppTheme.textMuted,
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
                 )),
       ));
       widgets.addAll(items.map((item) => _NavTile(
@@ -174,10 +174,11 @@ class _NavTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Material(
-        color:        selected ? AppTheme.accent.withValues(alpha: 0.15) : Colors.transparent,
+        color:        selected ? colorScheme.primary.withValues(alpha: 0.15) : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           onTap:        onTap,
@@ -188,13 +189,13 @@ class _NavTile extends StatelessWidget {
               Icon(
                 item.icon,
                 size:  20,
-                color: selected ? AppTheme.accent : AppTheme.textSecondary,
+                color: selected ? colorScheme.primary : colorScheme.onSurface.withValues(alpha: 0.6),
               ),
               const SizedBox(width: 12),
               Text(
                 item.label,
                 style: TextStyle(
-                  color:      selected ? AppTheme.accent : AppTheme.textSecondary,
+                  color:      selected ? colorScheme.primary : colorScheme.onSurface.withValues(alpha: 0.6),
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                   fontSize:   14,
                 ),
@@ -203,8 +204,8 @@ class _NavTile extends StatelessWidget {
                 const Spacer(),
                 Container(
                   width: 4, height: 4,
-                  decoration: const BoxDecoration(
-                    color:  AppTheme.accent,
+                  decoration: BoxDecoration(
+                    color:  colorScheme.primary,
                     shape:  BoxShape.circle,
                   ),
                 ),
