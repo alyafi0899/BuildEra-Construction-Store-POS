@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:buildera/core/utils/formatters.dart';
 import 'package:buildera/shared/widgets/common_widgets.dart';
 import 'package:buildera/features/products/providers/product_provider.dart';
+import 'package:buildera/features/inventory/providers/restock_provider.dart';
+import 'package:buildera/features/inventory/models/restock_record.dart';
 import 'package:buildera/shared/models/product.dart';
 import '../widgets/restock_dialog.dart';
 
@@ -33,34 +35,17 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Column(
         children: [
-          PageHeader(
-            title: 'Manajemen Inventori',
-            subtitle: 'Pantau stok dan riwayat masuk barang',
+          const PageHeader(
+            title: 'Inventori',
+            subtitle: 'Monitor stok produk secara real-time',
             icon: Icons.warehouse_rounded,
           ),
 
-          // Overview Stats
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            color: colorScheme.surface,
-            child: productsAsync.when(
-              data: (list) {
-                final lowStock = list.where((p) => p.isLowStock && p.stock > 0).length;
-                final outOfStock = list.where((p) => p.stock <= 0).length;
-                return Row(
-                  children: [
-                    Expanded(child: StatCard(label: 'Stok Rendah', value: lowStock.toString(), icon: Icons.warning_amber_rounded, accentColor: colorScheme.secondary)),
-                    const SizedBox(width: 16),
-                    Expanded(child: StatCard(label: 'Habis', value: outOfStock.toString(), icon: Icons.error_outline_rounded, accentColor: colorScheme.error)),
-                  ],
-                );
-              },
-              loading: () => const SizedBox(height: 100),
-              error: (_, __) => const SizedBox(),
-            ),
-          ),
+          // ── Stats Summary ─────────────────────────────────────────────
+          if (productsAsync.hasValue)
+            _buildStatsHeader(productsAsync.value!),
 
-          // Filters
+          // ── Filters ──────────────────────────────────────────────
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             decoration: BoxDecoration(
@@ -72,7 +57,7 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
                 width: 300,
                 child: AppSearchField(
                   controller: _searchCtrl,
-                  hintText: 'Cari nama atau kategori...',
+                  hintText: 'Cari produk...',
                   onChanged: (v) => setState(() => _search = v),
                   onClear: () => setState(() {
                     _search = '';
@@ -82,17 +67,20 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
               ),
               const SizedBox(width: 16),
               FilterChip(
-                label: const Text('Hanya Stok Menipis/Habis'),
+                label: const Text('Stok Rendah'),
                 selected: _lowOnly,
                 onSelected: (v) => setState(() => _lowOnly = v),
-                selectedColor: colorScheme.secondary.withValues(alpha: 0.2),
-                checkmarkColor: colorScheme.secondary,
-                side: BorderSide(color: _lowOnly ? colorScheme.secondary : colorScheme.outline),
+                selectedColor: colorScheme.primary.withValues(alpha: 0.1),
+                checkmarkColor: colorScheme.primary,
+                side: BorderSide(color: _lowOnly ? colorScheme.primary : colorScheme.outline),
               ),
             ]),
           ),
 
-          // Product List
+          // ── Product Table Header ─────────────────────────────────────
+          _buildTableHeader(context),
+
+          // ── Product List ──────────────────────────────────────────────
           Expanded(
             child: productsAsync.when(
               loading: () => const AppLoading(),
@@ -105,14 +93,17 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
                   return matchSearch && matchStock;
                 }).toList();
 
+                // Sort by stock ascending (priority: lowest stock first as requested)
+                filtered.sort((a, b) => a.stock.compareTo(b.stock));
+
                 if (filtered.isEmpty) {
                   return const EmptyState(icon: Icons.inventory_2_outlined, title: 'Tidak ada data stok');
                 }
 
                 return ListView.builder(
-                  padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
                   itemCount: filtered.length,
-                  itemBuilder: (context, i) => _InventoryItemRow(product: filtered[i]),
+                  itemBuilder: (context, i) => _InventoryRow(product: filtered[i]),
                 );
               },
             ),
@@ -121,142 +112,74 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
       ),
     );
   }
-}
 
-class _InventoryItemRow extends StatefulWidget {
-  final Product product;
-  const _InventoryItemRow({required this.product});
-
-  @override
-  State<_InventoryItemRow> createState() => _InventoryItemRowState();
-}
-
-class _InventoryItemRowState extends State<_InventoryItemRow> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = widget.product;
+  Widget _buildStatsHeader(List<Product> products) {
     final colorScheme = Theme.of(context).colorScheme;
-    final Color statusColor = p.stock <= 0 ? colorScheme.error : p.isLowStock ? colorScheme.secondary : const Color(0xFF2ECC71);
+    final totalSku = products.length;
+    final lowStock = products.where((p) => p.isLowStock && p.stock > 0).length;
+    final outOfStock = products.where((p) => p.stock <= 0).length;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _expanded ? colorScheme.primary : colorScheme.outline),
-      ),
-      child: Material(
-        color: _expanded ? colorScheme.primary.withValues(alpha: 0.05) : colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          children: [
-            ListTile(
-              onTap: () => setState(() => _expanded = !_expanded),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-              leading: Container(
-                width: 40, height: 40,
-                decoration: BoxDecoration(color: colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(8)),
-                child: Icon(Icons.inventory_2_rounded, color: colorScheme.onSurface.withValues(alpha: 0.5), size: 20),
-              ),
-              title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(p.category, style: const TextStyle(fontSize: 12)),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text('${Formatters.decimal(p.stock)} ${p.baseUnit}', 
-                        style: TextStyle(fontWeight: FontWeight.w900, color: statusColor, fontSize: 16)),
-                      Text(p.stock <= 0 ? 'HABIS' : p.isLowStock ? 'MENIPIS' : 'AMAN', 
-                        style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: statusColor, letterSpacing: 1)),
-                    ],
-                  ),
-                  const SizedBox(width: 20),
-                  Icon(_expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded),
-                ],
-              ),
-            ),
-            if (_expanded) ...[
-              const Divider(indent: 20, endIndent: 20),
-              _RestockDetailSection(product: p),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _RestockDetailSection extends ConsumerWidget {
-  final Product product;
-  const _RestockDetailSection({required this.product});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
+      padding: const EdgeInsets.all(24),
+      color: colorScheme.surface,
+      child: Row(
         children: [
-          Row(
-            children: [
-              _detailItem(context, 'Harga Modal', Formatters.currency(product.costPrice)),
-              const SizedBox(width: 32),
-              _detailItem(context, 'Harga Jual', Formatters.currency(product.basePrice)),
-              const Spacer(),
-              _QuickAddStockField(product: product),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: () => RestockDialog.show(context, product),
-                icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
-                label: const Text('RESTOCK RINCIAN'),
-              ),
-            ],
-          ),
+          Expanded(child: StatCard(label: 'Total SKU', value: totalSku.toString(), icon: Icons.inventory_2_rounded, accentColor: colorScheme.primary)),
+          const SizedBox(width: 16),
+          Expanded(child: StatCard(label: 'Stok Rendah', value: lowStock.toString(), icon: Icons.warning_amber_rounded, accentColor: const Color(0xFFF39C12))),
+          const SizedBox(width: 16),
+          Expanded(child: StatCard(label: 'Habis', value: outOfStock.toString(), icon: Icons.cancel_presentation_rounded, accentColor: colorScheme.error)),
         ],
       ),
     );
   }
 
-  Widget _detailItem(BuildContext context, String label, String value) {
+  Widget _buildTableHeader(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: TextStyle(fontSize: 11, color: colorScheme.onSurface.withValues(alpha: 0.5))),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-      ],
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Row(
+        children: [
+          Expanded(flex: 3, child: Text('Produk', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+          Expanded(flex: 2, child: Text('Kategori', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+          Expanded(flex: 1, child: Text('Satuan Dasar', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+          Expanded(flex: 1, child: Text('Stok', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+          Expanded(flex: 1, child: Text('Status', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+          Expanded(flex: 2, child: Text('Aksi / Penyesuaian', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+        ],
+      ),
     );
   }
 }
 
-class _QuickAddStockField extends ConsumerStatefulWidget {
+class _InventoryRow extends ConsumerStatefulWidget {
   final Product product;
-  const _QuickAddStockField({required this.product});
+  const _InventoryRow({required this.product});
 
   @override
-  ConsumerState<_QuickAddStockField> createState() => _QuickAddStockFieldState();
+  ConsumerState<_InventoryRow> createState() => _InventoryRowState();
 }
 
-class _QuickAddStockFieldState extends ConsumerState<_QuickAddStockField> {
-  final _qtyCtrl = TextEditingController();
+class _InventoryRowState extends ConsumerState<_InventoryRow> {
+  final _quickAddCtrl = TextEditingController();
   bool _saving = false;
 
-  Future<void> _submit() async {
-    final qty = double.tryParse(_qtyCtrl.text) ?? 0;
+  Future<void> _submitQuickAdd() async {
+    final qty = double.tryParse(_quickAddCtrl.text) ?? 0;
     if (qty <= 0) return;
 
     setState(() => _saving = true);
     try {
       await ref.read(productsActionProvider).adjustStock(widget.product.id, qty);
-      _qtyCtrl.clear();
+      _quickAddCtrl.clear();
       if (mounted) showSuccess(context, 'Stok ${widget.product.name} bertambah $qty');
     } catch (e) {
-      if (mounted) showError(context, 'Gagal update: $e');
+      if (mounted) showError(context, 'Gagal: $e');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -264,36 +187,202 @@ class _QuickAddStockFieldState extends ConsumerState<_QuickAddStockField> {
 
   @override
   Widget build(BuildContext context) {
+    final p = widget.product;
     final colorScheme = Theme.of(context).colorScheme;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          width: 120,
-          child: TextField(
-            controller: _qtyCtrl,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-            decoration: InputDecoration(
-              hintText: 'Qty +',
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+    final isOut = p.stock <= 0;
+    final isLow = p.isLowStock;
+    final statusColor = isOut ? colorScheme.error : isLow ? const Color(0xFFF39C12) : const Color(0xFF2ECC71);
+    final statusText = isOut ? 'Habis' : isLow ? 'Rendah' : 'Aman';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border(bottom: BorderSide(color: colorScheme.outline.withValues(alpha: 0.5))),
+      ),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+        shape: const RoundedRectangleBorder(),
+        title: Row(
+          children: [
+            Expanded(flex: 3, child: Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+            Expanded(flex: 2, child: Text(p.category, style: TextStyle(fontSize: 12, color: colorScheme.onSurface.withValues(alpha: 0.6)))),
+            Expanded(flex: 1, child: Text(p.baseUnit, style: TextStyle(fontSize: 12, color: colorScheme.onSurface.withValues(alpha: 0.6)))),
+            Expanded(flex: 1, child: Text(Formatters.decimal(p.stock), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14), textAlign: TextAlign.right)),
+            Expanded(flex: 1, child: Center(child: StatusChip(label: statusText.toUpperCase(), color: statusColor))),
+            
+            // Actions Column
+            Expanded(flex: 2, child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                // 1. Restock Button
+                SizedBox(
+                  height: 32,
+                  child: ElevatedButton.icon(
+                    onPressed: () => RestockDialog.show(context, p),
+                    icon: const Icon(Icons.shopping_cart_rounded, size: 14),
+                    label: const Text('Restock', style: TextStyle(fontSize: 11)),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      backgroundColor: colorScheme.primary,
+                      foregroundColor: colorScheme.onPrimary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+
+                // 2. Quick Qty Input
+                SizedBox(
+                  width: 60,
+                  height: 32,
+                  child: TextField(
+                    controller: _quickAddCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    decoration: InputDecoration(
+                      hintText: '+Qty',
+                      contentPadding: EdgeInsets.zero,
+                      isDense: true,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+
+                // 3. Confirm Quick Add
+                IconButton(
+                  onPressed: _saving ? null : _submitQuickAdd,
+                  icon: _saving 
+                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                    : Icon(Icons.check_circle_outline_rounded, color: const Color(0xFF2ECC71), size: 22),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            )),
+          ],
+        ),
+        children: [
+          _buildRestockHistory(context, p),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRestockHistory(BuildContext context, Product product) {
+    final restocksAsync = ref.watch(restockHistoryProvider);
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('RIWAYAT RESTOCK PRODUK INI', 
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: colorScheme.primary, letterSpacing: 1)),
+              const Spacer(),
+              Text('Urut: Teranyar', style: TextStyle(fontSize: 9, color: colorScheme.onSurface.withValues(alpha: 0.5))),
+            ],
+          ),
+          const SizedBox(height: 12),
+          restocksAsync.when(
+            data: (allRestocks) {
+              final records = allRestocks.where((r) => r.productId == product.id).toList();
+              if (records.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text('Belum ada data restock tercatat.', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: colorScheme.onSurface.withValues(alpha: 0.4))),
+                );
+              }
+
+              return Column(
+                children: records.map((r) => _RestockHistoryRow(record: r, product: product)).toList(),
+              );
+            },
+            loading: () => const LinearProgressIndicator(),
+            error: (_, __) => const Text('Gagal memuat riwayat'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RestockHistoryRow extends ConsumerWidget {
+  final RestockRecord record;
+  final Product product;
+  const _RestockHistoryRow({required this.record, required this.product});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: colorScheme.outline.withValues(alpha: 0.3))),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text('${Formatters.decimal(record.quantityAdded)} ${record.unitName}', 
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(width: 8),
+                    Text('•  ${record.supplierName ?? 'Supplier Umum'}', 
+                      style: TextStyle(fontSize: 11, color: colorScheme.onSurface.withValues(alpha: 0.7))),
+                  ],
+                ),
+                Text(Formatters.dateTime(record.createdAt), 
+                  style: TextStyle(fontSize: 10, color: colorScheme.onSurface.withValues(alpha: 0.5))),
+              ],
             ),
           ),
-        ),
-        const SizedBox(width: 8),
-        IconButton.filled(
-          onPressed: _saving ? null : _submit,
-          icon: _saving 
-            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-            : const Icon(Icons.add_rounded),
-          style: IconButton.styleFrom(
-            backgroundColor: const Color(0xFF2ECC71),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(Formatters.currency(record.supplierPrice + record.shippingCost), 
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              Text('Modal: ${Formatters.currency(record.totalCostPerUnit)} / unit', 
+                style: TextStyle(fontSize: 10, color: colorScheme.onSurface.withValues(alpha: 0.6))),
+            ],
           ),
-        ),
-      ],
+          const SizedBox(width: 16),
+          IconButton(
+            onPressed: () => RestockDialog.show(context, product, record: record),
+            icon: Icon(Icons.edit_rounded, size: 16, color: colorScheme.primary),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            tooltip: 'Edit Record',
+          ),
+          const SizedBox(width: 12),
+          IconButton(
+            onPressed: () async {
+              final ok = await showConfirmDialog(context, 
+                title: 'Hapus Riwayat', 
+                content: 'Data ini akan dihapus and stok akan dikurangi kembali. Lanjutkan?',
+                confirmColor: colorScheme.error
+              );
+              if (ok) {
+                await ref.read(restockNotifierProvider.notifier).deleteRestock(record);
+                if (context.mounted) showSuccess(context, 'Riwayat dihapus');
+              }
+            },
+            icon: Icon(Icons.delete_outline_rounded, size: 16, color: colorScheme.error),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            tooltip: 'Hapus Record',
+          ),
+        ],
+      ),
     );
   }
 }
