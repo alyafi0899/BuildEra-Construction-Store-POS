@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_theme.dart';
 
 class SplashScreen extends StatefulWidget {
   final String status;
@@ -40,10 +41,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: const Color(0xFF0F1117), // Deep dark background like Adobe apps
       body: Stack(
         children: [
           // Subtle background gradient
@@ -54,7 +53,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   center: Alignment.center,
                   radius: 1.2,
                   colors: [
-                    colorScheme.primary.withValues(alpha: 0.05),
+                    AppTheme.accent.withValues(alpha: 0.05),
                     Colors.transparent,
                   ],
                 ),
@@ -85,7 +84,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       borderRadius: BorderRadius.circular(40),
                       boxShadow: [
                         BoxShadow(
-                          color: colorScheme.primary.withValues(alpha: 0.2),
+                          color: AppTheme.accent.withValues(alpha: 0.2),
                           blurRadius: 60,
                           spreadRadius: 5,
                         ),
@@ -99,10 +98,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   const SizedBox(height: 48),
                   
                   // App Branding
-                  Text(
+                  const Text(
                     'BuildEra',
                     style: TextStyle(
-                      color: colorScheme.onSurface,
+                      color: Colors.white,
                       fontSize: 48,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 8,
@@ -112,7 +111,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   Text(
                     'MATERIAL & CONSTRUCTION POS',
                     style: TextStyle(
-                      color: colorScheme.primary.withValues(alpha: 0.8),
+                      color: AppTheme.accent.withValues(alpha: 0.8),
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 4,
@@ -123,7 +122,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
             ),
           ),
 
-          // Bottom loading status
+          // Bottom loading status - Adobe style
           Positioned(
             bottom: 80,
             left: 0,
@@ -135,12 +134,13 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   width: 280,
                   height: 3,
                   decoration: BoxDecoration(
-                    color: colorScheme.onSurface.withValues(alpha: 0.05),
+                    color: Colors.white.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(2),
                   ),
                   child: Stack(
                     children: [
-                      _AnimatedLoadingBar(color: colorScheme.primary),
+                      // Indeterminate loading animation
+                      const _AnimatedLoadingBar(),
                     ],
                   ),
                 ),
@@ -149,7 +149,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                 Text(
                   widget.status.toUpperCase(),
                   style: TextStyle(
-                    color: colorScheme.onSurface.withValues(alpha: 0.4),
+                    color: Colors.white.withValues(alpha: 0.4),
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 2,
@@ -166,7 +166,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
             child: Text(
               'v1.1.2-PROD',
               style: TextStyle(
-                color: colorScheme.onSurface.withValues(alpha: 0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 fontSize: 11,
                 fontFamily: 'monospace',
               ),
@@ -179,8 +179,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 }
 
 class _AnimatedLoadingBar extends StatefulWidget {
-  final Color color;
-  const _AnimatedLoadingBar({required this.color});
+  const _AnimatedLoadingBar();
 
   @override
   State<_AnimatedLoadingBar> createState() => _AnimatedLoadingBarState();
@@ -217,11 +216,11 @@ class _AnimatedLoadingBarState extends State<_AnimatedLoadingBar> with SingleTic
       child: Container(
         width: 100,
         decoration: BoxDecoration(
-          color: widget.color,
+          color: AppTheme.accent,
           borderRadius: BorderRadius.circular(2),
           boxShadow: [
             BoxShadow(
-              color: widget.color.withValues(alpha: 0.5),
+              color: AppTheme.accent.withValues(alpha: 0.5),
               blurRadius: 8,
             ),
           ],

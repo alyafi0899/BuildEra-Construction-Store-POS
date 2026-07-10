@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:buildera/shared/widgets/common_widgets.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/common_widgets.dart';
 import '../../providers/auth_provider.dart';
 
 class ForgotPasswordPage extends ConsumerStatefulWidget {
@@ -32,6 +33,7 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
       final email = _emailCtrl.text.trim();
       final phone = _phoneCtrl.text.trim();
 
+      // SECURITY CHECK: Verify if email and phone match in Firestore
       final userQuery = await FirebaseFirestore.instance
           .collection('users')
           .where('loginEmail', isEqualTo: email)
@@ -40,6 +42,7 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
           .get();
 
       if (userQuery.docs.isEmpty) {
+        // Generic error message for security
         throw 'Data tidak ditemukan atau tidak cocok dengan sistem kami.';
       }
 
@@ -58,32 +61,31 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: AppTheme.bg,
       appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
       body: Center(
         child: Container(
           width: 400,
           padding: const EdgeInsets.all(32),
           decoration: BoxDecoration(
-            color: colorScheme.surface,
+            color: AppTheme.surface,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: colorScheme.outline),
+            border: Border.all(color: AppTheme.border),
           ),
           child: Form(
             key: _formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.lock_reset_rounded, size: 64, color: colorScheme.primary),
+                const Icon(Icons.lock_reset_rounded, size: 64, color: AppTheme.accent),
                 const SizedBox(height: 16),
                 Text('Lupa Password', style: Theme.of(context).textTheme.headlineMedium),
                 const SizedBox(height: 16),
-                Text(
+                const Text(
                   'Untuk keamanan, masukkan Email Login dan Nomor HP Pemilik yang terdaftar.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6)),
+                  style: TextStyle(color: AppTheme.textSecondary),
                 ),
                 const SizedBox(height: 32),
                 TextFormField(

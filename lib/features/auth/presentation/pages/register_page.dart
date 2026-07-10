@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:buildera/shared/widgets/common_widgets.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/common_widgets.dart';
 import '../../providers/auth_provider.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../settings/models/store_settings.dart';
@@ -18,10 +19,12 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   int _currentStep = 0;
   bool _loading = false;
 
+  // Step 1: Account
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   final _confirmPassCtrl = TextEditingController();
 
+  // Step 2: Business
   final _ownerNameCtrl = TextEditingController();
   final _storeNameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
@@ -43,24 +46,31 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     setState(() => _loading = true);
     try {
       final authRepo = ref.read(authRepositoryProvider);
+      
+      // 1. Create Account
       final user = await authRepo.register(_emailCtrl.text.trim(), _passCtrl.text);
       if (user == null) throw 'Gagal membuat akun';
       
+      // 2. Prepare business data
       final settings = StoreSettings(
         businessName: _storeNameCtrl.text.trim(),
         ownerName:    _ownerNameCtrl.text.trim(),
         phone:        _phoneCtrl.text.trim(),
         email:        _bizEmailCtrl.text.trim(),
-        loginEmail:   _emailCtrl.text.trim(), 
+        loginEmail:   _emailCtrl.text.trim(), // Save login email for security check
         address:      _addressCtrl.text.trim(),
         description:  _descCtrl.text.trim(),
       );
 
+      // 3. Save profile using the explicit UID
       await ref.read(settingsProvider.notifier).updateSettings(settings, uid: user.uid);
 
       if (mounted) {
+        // Pop back to the LoginPage, which is the child of AuthGate.
+        // AuthGate will then detect the new auth state and switch to VerifyEmailPage.
         Navigator.of(context).pop();
       }
+
     } catch (e) {
       if (mounted) showError(context, 'Gagal mendaftar: $e');
     } finally {
@@ -70,9 +80,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: AppTheme.bg,
       appBar: AppBar(
         title: const Text('Daftar Akun Baru'),
         backgroundColor: Colors.transparent,
@@ -84,9 +93,9 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
           margin: const EdgeInsets.symmetric(vertical: 40),
           padding: const EdgeInsets.all(32),
           decoration: BoxDecoration(
-            color: colorScheme.surface,
+            color: AppTheme.surface,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: colorScheme.outline),
+            border: Border.all(color: AppTheme.border),
           ),
           child: Stepper(
             type: StepperType.horizontal,

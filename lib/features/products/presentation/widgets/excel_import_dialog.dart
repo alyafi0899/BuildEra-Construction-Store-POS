@@ -1,22 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
-import 'dart:io';
 import 'package:excel/excel.dart' hide Border;
-import 'package:buildera/shared/widgets/common_widgets.dart';
-import 'package:buildera/features/products/providers/product_provider.dart';
-import 'package:buildera/features/products/providers/barcode_history_provider.dart';
-import 'package:buildera/shared/models/product.dart';
 import 'package:uuid/uuid.dart';
-import 'package:buildera/core/utils/formatters.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/models/product.dart';
+import '../../../../shared/widgets/common_widgets.dart';
+import '../../providers/product_provider.dart';
 
 class ExcelImportDialog extends ConsumerStatefulWidget {
   const ExcelImportDialog({super.key});
 
-  static void show(BuildContext context) {
-    showDialog(
+  static Future<void> show(BuildContext context) {
+    return showDialog(
       context: context,
-      barrierDismissible: false,
       builder: (_) => const ExcelImportDialog(),
     );
   }
@@ -26,172 +23,155 @@ class ExcelImportDialog extends ConsumerStatefulWidget {
 }
 
 class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
-  PlatformFile? _file;
-  bool _isImporting = false;
-  List<Product>? _previewData;
+  bool _importing = false;
+  String? _status;
+  final _uuid = const Uuid();
 
-  Future<void> _pickFile() async {
+  Future<void> _pickAndImport() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['xlsx', 'xls'],
+      withData: true,
     );
 
-    if (result != null) {
-      setState(() => _file = result.files.first);
-      _processPreview();
-    }
-  }
+    if (result == null || result.files.isEmpty) return;
 
-  Future<void> _processPreview() async {
-    if (_file == null || _file!.path == null) return;
-    
-    setState(() => _isImporting = true);
+    setState(() {
+      _importing = true;
+      _status = 'Membaca file...';
+    });
+
     try {
-      final bytes = File(_file!.path!).readAsBytesSync();
+      final bytes = result.files.first.bytes!;
       final excel = Excel.decodeBytes(bytes);
-      final List<Product> products = [];
-      final uuid = const Uuid();
+      final productsToImport = <Map<Product, List<ProductUnit>>>[];
 
       for (var table in excel.tables.keys) {
         final sheet = excel.tables[table]!;
+        // Skip header row
         for (var i = 1; i < sheet.maxRows; i++) {
-          final row = sheet.row(i);
-          if (row.isEmpty || row[0] == null) continue;
+          final row = sheet.rows[i];
+          if (row.isEmpty) continue;
 
-          final name = row[0]?.value?.toString() ?? '';
+          // Robust value extraction helper
+          String val(int idx) {
+            if (idx >= row.length || row[idx] == null) return '';
+            final cellValue = row[idx]!.value;
+            if (cellValue == null) return '';
+            return cellValue.toString().trim();
+          }
+
+          final name = val(0);
           if (name.isEmpty) continue;
 
-          products.add(Product(
-            id: uuid.v4(),
+          final barcode   = val(1).isEmpty ? null : val(1);
+          final category  = val(2).isEmpty ? 'Lainnya' : val(2);
+          final baseUnit  = val(3).isEmpty ? 'pcs' : val(3);
+          final stock     = double.tryParse(val(4)) ?? 0.0;
+          final costPrice = double.tryParse(val(5)) ?? 0.0;
+          final basePrice = double.tryParse(val(6)) ?? 0.0;
+          
+          final productId = _uuid.v4();
+          final product = Product(
+            id: productId,
             name: name,
-            barcode: row[1]?.value?.toString(),
-            category: row[2]?.value?.toString() ?? 'Umum',
-            baseUnit: row[3]?.value?.toString() ?? 'pcs',
-            stock: double.tryParse(row[4]?.value?.toString() ?? '0') ?? 0,
-            costPrice: double.tryParse(row[5]?.value?.toString() ?? '0') ?? 0,
-            basePrice: double.tryParse(row[6]?.value?.toString() ?? '0') ?? 0,
+            category: category,
+            barcode: barcode,
+            costPrice: costPrice,
+            basePrice: basePrice,
+            baseUnit: baseUnit,
+            stock: stock,
             createdAt: DateTime.now(),
             updatedAt: DateTime.now(),
-          ));
+          );
+
+          productsToImport.add({product: []});
         }
       }
-      setState(() => _previewData = products);
-    } catch (e) {
-      if (mounted) showError(context, 'Gagal membaca file: $e');
-    } finally {
-      if (mounted) setState(() => _isImporting = false);
-    }
-  }
 
-  Future<void> _import() async {
-    if (_previewData == null || _previewData!.isEmpty) return;
-
-    setState(() => _isImporting = true);
-    try {
-      final productsAction = ref.read(productsActionProvider);
-      final barcodeHistory = ref.read(barcodeHistoryRepositoryProvider);
-
-      final List<Map<Product, List<ProductUnit>>> batchData = _previewData!
-          .map((p) => {p: <ProductUnit>[]})
-          .toList();
-
-      await productsAction.importProducts(batchData);
-
-      final barcodes = _previewData!
-          .where((p) => p.barcode != null && p.barcode!.isNotEmpty)
-          .map((p) => (barcode: p.barcode!, name: p.name, id: p.id))
-          .toList();
-      
-      if (barcodes.isNotEmpty) {
-        await barcodeHistory.logBarcodesBatch(barcodes);
+      if (productsToImport.isEmpty) {
+        throw 'Tidak ada data produk yang valid ditemukan.';
       }
+
+      setState(() => _status = 'Mengunggah ${productsToImport.length} produk...');
+      await ref.read(productsActionProvider).importProducts(productsToImport);
 
       if (mounted) {
         Navigator.pop(context);
-        showSuccess(context, 'Berhasil mengimpor ${_previewData!.length} produk');
+        showSuccess(context, 'Berhasil mengimpor ${productsToImport.length} produk');
       }
     } catch (e) {
-      if (mounted) showError(context, 'Gagal impor: $e');
-    } finally {
-      if (mounted) setState(() => _isImporting = false);
+      if (mounted) {
+        setState(() {
+          _importing = false;
+          _status = 'Error: $e';
+        });
+        showError(context, 'Gagal impor: $e');
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Dialog(
       child: Container(
-        width: 600,
+        width: 500,
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
-              Icon(Icons.file_upload_outlined, color: colorScheme.primary),
+              const Icon(Icons.file_upload_outlined, color: AppTheme.accent),
               const SizedBox(width: 12),
-              Text('Import Produk dari Excel', style: Theme.of(context).textTheme.headlineSmall),
-              const Spacer(),
-              IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+              Text('Import Produk dari Excel', style: Theme.of(context).textTheme.headlineMedium),
             ]),
-            const Divider(height: 32),
-            
-            if (_previewData == null) ...[
-              const Text('Pilih file Excel (.xlsx) dengan format kolom:', textAlign: TextAlign.center),
-              const SizedBox(height: 8),
-              const Text('Nama, Barcode, Kategori, Satuan, Stok, Harga Modal, Harga Jual', 
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: _isImporting ? null : _pickFile,
-                icon: const Icon(Icons.search_rounded),
-                label: const Text('CARI FILE EXCEL'),
+            const SizedBox(height: 20),
+            const Text('Gunakan format kolom berikut di Excel Anda:'),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceAlt,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.border),
               ),
-            ] else ...[
-              Text('Pratinjau Data: ${_previewData!.length} Produk Terdeteksi', 
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              Container(
-                height: 200,
-                decoration: BoxDecoration(
-                  border: Border.all(color: colorScheme.outline),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: ListView.separated(
-                  itemCount: _previewData!.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, i) {
-                    final p = _previewData![i];
-                    return ListTile(
-                      title: Text(p.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                      subtitle: Text('${p.category} • ${p.baseUnit} • Stok: ${p.stock}', style: const TextStyle(fontSize: 11)),
-                      trailing: Text(Formatters.currency(p.basePrice), style: TextStyle(color: colorScheme.primary, fontWeight: FontWeight.bold)),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => setState(() => _previewData = null),
-                      child: const Text('GANTI FILE'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _isImporting ? null : _import,
-                      child: _isImporting 
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Text('MULAI IMPORT'),
-                    ),
-                  ),
+                  Text('A: Nama Produk (Wajib)', style: TextStyle(fontSize: 12)),
+                  Text('B: Barcode', style: TextStyle(fontSize: 12)),
+                  Text('C: Kategori', style: TextStyle(fontSize: 12)),
+                  Text('D: Satuan Dasar (e.g. kg, pcs)', style: TextStyle(fontSize: 12)),
+                  Text('E: Stok Awal', style: TextStyle(fontSize: 12)),
+                  Text('F: Harga Modal (Rp)', style: TextStyle(fontSize: 12, color: AppTheme.accent)),
+                  Text('G: Harga Jual Dasar (Rp)', style: TextStyle(fontSize: 12)),
                 ],
               ),
-            ],
-            const SizedBox(height: 12),
+            ),
+            const SizedBox(height: 24),
+            if (_status != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Text(_status!, style: TextStyle(color: _status!.startsWith('Error') ? AppTheme.danger : AppTheme.accent)),
+              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: _importing ? null : () => Navigator.pop(context),
+                  child: const Text('Batal'),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: _importing ? null : _pickAndImport,
+                  icon: _importing 
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.upload_file_rounded, size: 18),
+                  label: Text(_importing ? 'Memproses...' : 'Pilih File & Import'),
+                ),
+              ],
+            ),
           ],
         ),
       ),

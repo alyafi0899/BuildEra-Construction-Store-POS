@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_theme.dart';
 
 // ── PageHeader ───────────────────────────────────────────────────────────
 
@@ -18,13 +19,12 @@ class PageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        border: Border(bottom: BorderSide(color: colorScheme.outline)),
+      decoration: const BoxDecoration(
+        color: AppTheme.surface,
+        border: Border(bottom: BorderSide(color: AppTheme.border)),
       ),
       child: Row(
         children: [
@@ -32,10 +32,10 @@ class PageHeader extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: colorScheme.primary.withValues(alpha: 0.1),
+                color: AppTheme.accent.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: colorScheme.primary, size: 24),
+              child: Icon(icon, color: AppTheme.accent, size: 24),
             ),
             const SizedBox(width: 16),
           ],
@@ -126,8 +126,7 @@ class StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final color = accentColor ?? colorScheme.primary;
+    final color = accentColor ?? AppTheme.accent;
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -148,7 +147,7 @@ class StatCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(value,
               style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                    color:      colorScheme.onSurface,
+                    color:      AppTheme.textPrimary,
                     fontSize:   22,
                     fontWeight: FontWeight.w700,
                   )),
@@ -172,14 +171,12 @@ class SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final finalColor = color ?? colorScheme.primary;
     return Row(children: [
       if (icon != null) ...[
-        Icon(icon, color: finalColor, size: 18),
+        Icon(icon, color: color ?? AppTheme.accent, size: 18),
         const SizedBox(width: 8),
       ],
-      Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: finalColor)),
+      Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: color)),
       const Spacer(),
       if (trailing != null) trailing!,
     ]);
@@ -228,20 +225,19 @@ class AppSearchField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return TextField(
       controller: controller,
       focusNode:  focusNode, // Use FocusNode
       onChanged:  onChanged,
-      style: TextStyle(color: colorScheme.onSurface),
+      style: const TextStyle(color: AppTheme.textPrimary),
       decoration: InputDecoration(
         hintText:    hintText,
-        prefixIcon:  Icon(Icons.search, color: colorScheme.onSurface.withValues(alpha: 0.5), size: 20),
+        prefixIcon:  const Icon(Icons.search, color: AppTheme.textMuted, size: 20),
         suffixIcon:  controller.text.isNotEmpty
             ? IconButton(
                 icon:    const Icon(Icons.clear, size: 18),
                 onPressed: onClear,
-                color:   colorScheme.onSurface.withValues(alpha: 0.5),
+                color:   AppTheme.textMuted,
               )
             : null,
       ),
@@ -267,14 +263,13 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 64, color: colorScheme.onSurface.withValues(alpha: 0.3)),
+          Icon(icon, size: 64, color: AppTheme.textMuted),
           const SizedBox(height: 16),
-          Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: colorScheme.onSurface.withValues(alpha: 0.7))),
+          Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: AppTheme.textSecondary)),
           if (subtitle != null) ...[
             const SizedBox(height: 8),
             Text(subtitle!, style: Theme.of(context).textTheme.bodyMedium, textAlign: TextAlign.center),
@@ -295,7 +290,7 @@ class AppDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Divider(
-      color:  Theme.of(context).colorScheme.outline,
+      color:  AppTheme.border,
       height: 1,
       thickness: 1,
     );
@@ -309,8 +304,8 @@ class AppLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary),
+    return const Center(
+      child: CircularProgressIndicator(color: AppTheme.accent),
     );
   }
 }
@@ -322,9 +317,8 @@ Future<bool> showConfirmDialog(
   required String title,
   required String content,
   String confirmLabel = 'Hapus',
-  Color? confirmColor,
+  Color confirmColor = AppTheme.danger,
 }) async {
-  final color = confirmColor ?? Theme.of(context).colorScheme.error;
   return await showDialog<bool>(
         context:  context,
         builder:  (_) => AlertDialog(
@@ -336,7 +330,7 @@ Future<bool> showConfirmDialog(
               child: const Text('Batal'),
             ),
             ElevatedButton(
-              style:     ElevatedButton.styleFrom(backgroundColor: color),
+              style:     ElevatedButton.styleFrom(backgroundColor: confirmColor),
               onPressed: () => Navigator.of(context).pop(true),
               child: Text(confirmLabel),
             ),
@@ -349,26 +343,22 @@ Future<bool> showConfirmDialog(
 // ── Snack helpers ─────────────────────────────────────────────────────────
 
 void showSuccess(BuildContext context, String msg) {
-  final colorScheme = Theme.of(context).colorScheme;
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    backgroundColor: colorScheme.primaryContainer,
     content: Row(children: [
-      Icon(Icons.check_circle_outline, color: colorScheme.onPrimaryContainer, size: 18),
+      const Icon(Icons.check_circle_outline, color: AppTheme.success, size: 18),
       const SizedBox(width: 8),
-      Text(msg, style: TextStyle(color: colorScheme.onPrimaryContainer)),
+      Text(msg),
     ]),
     duration: const Duration(seconds: 2),
   ));
 }
 
 void showError(BuildContext context, String msg) {
-  final colorScheme = Theme.of(context).colorScheme;
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    backgroundColor: colorScheme.errorContainer,
     content: Row(children: [
-      Icon(Icons.error_outline, color: colorScheme.onErrorContainer, size: 18),
+      const Icon(Icons.error_outline, color: AppTheme.danger, size: 18),
       const SizedBox(width: 8),
-      Text(msg, style: TextStyle(color: colorScheme.onErrorContainer)),
+      Text(msg),
     ]),
     duration: const Duration(seconds: 3),
   ));

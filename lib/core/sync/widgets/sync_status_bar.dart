@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../providers/sync_provider.dart';
 import '../providers/connectivity_provider.dart';
@@ -11,7 +12,6 @@ class SyncStatusBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isOnline = ref.watch(isOnlineProvider);
     final syncState = ref.watch(syncProvider);
-    final colorScheme = Theme.of(context).colorScheme;
 
     Color color;
     IconData icon;
@@ -19,22 +19,22 @@ class SyncStatusBar extends ConsumerWidget {
     String? subLabel;
 
     if (!isOnline) {
-      color = colorScheme.onSurface.withValues(alpha: 0.5);
+      color = AppTheme.textMuted;
       icon = Icons.cloud_off_rounded;
       label = 'Offline';
       subLabel = 'Bekerja secara lokal';
     } else if (syncState.lastError != null) {
-      color = colorScheme.error;
+      color = AppTheme.danger;
       icon = Icons.sync_problem_rounded;
       label = 'Error Sinkronisasi';
       subLabel = 'Akan dicoba lagi otomatis';
     } else if (syncState.pendingCount > 0) {
-      color = const Color(0xFFF39C12); // Warning color
+      color = AppTheme.warning;
       icon = Icons.sync_rounded;
       label = 'Sedang Sinkronisasi';
       subLabel = '${syncState.pendingCount} data tersisa';
     } else {
-      color = const Color(0xFF2ECC71); // Success color
+      color = AppTheme.success;
       icon = Icons.cloud_done_rounded;
       label = 'Tersinkronisasi';
       if (syncState.lastSyncAt != null) {

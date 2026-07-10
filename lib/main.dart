@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
-import 'core/theme/theme_provider.dart';
+import 'core/theme/app_theme.dart';
 import 'shared/widgets/sidebar.dart';
 import 'features/cashier/presentation/pages/cashier_page.dart';
 import 'features/products/presentation/pages/products_page.dart';
@@ -53,6 +53,7 @@ Future<void> main(List<String> args) async {
       WindowOptions windowOptions = const WindowOptions(
         size: Size(1024, 768),
         center: true,
+        backgroundColor: Color(0xFF0F1117),
         title: 'Tampilan Pelanggan - BuildEra',
       );
       windowManager.waitUntilReadyToShow(windowOptions, () async {
@@ -62,15 +63,10 @@ Future<void> main(List<String> args) async {
     }
 
     runApp(ProviderScope(
-      child: Consumer(
-        builder: (context, ref, child) {
-          final themeMode = ref.watch(themeProvider);
-          return MaterialApp(
-            debugShowCheckedModeBanner: false,
-            theme: AppThemes.getTheme(themeMode),
-            home: const CustomerDisplayPage(),
-          );
-        },
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.dark,
+        home: const CustomerDisplayPage(),
       ),
     ));
     return;
@@ -84,6 +80,7 @@ Future<void> main(List<String> args) async {
     WindowOptions windowOptions = const WindowOptions(
       size: Size(1280, 800),
       center: true,
+      backgroundColor: Color(0xFF0F1117),
       skipTaskbar: false,
       title: 'BuildEra',
       titleBarStyle: TitleBarStyle.normal,
@@ -99,7 +96,7 @@ Future<void> main(List<String> args) async {
   // Show splash screen immediately
   runApp(MaterialApp(
     debugShowCheckedModeBanner: false,
-    theme: AppThemes.getTheme(AppThemeMode.darkOrange),
+    theme: AppTheme.dark,
     home: const SplashScreen(status: 'Menginisialisasi Sistem...'),
   ));
 
@@ -147,12 +144,10 @@ class KonstruksiPosApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final themeMode = ref.watch(themeProvider);
-    
     return MaterialApp(
       title: 'BuildEra',
       debugShowCheckedModeBanner: false,
-      theme: AppThemes.getTheme(themeMode),
+      theme: AppTheme.dark,
       home: const AuthGate(), 
     );
   }
@@ -210,7 +205,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     ]);
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: AppTheme.bg,
       body: BarcodeListener(
         autoAdd: autoAdd,
         child: shell,

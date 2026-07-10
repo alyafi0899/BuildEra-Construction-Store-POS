@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/models/product.dart';
 import '../../../../shared/widgets/common_widgets.dart';
@@ -10,6 +11,7 @@ import '../../providers/cart_provider.dart';
 import '../../providers/scan_mode_provider.dart';
 import '../../providers/barcode_event_provider.dart';
 import '../widgets/payment_dialog.dart';
+
 import '../../../../shared/widgets/product_detail_dialog.dart';
 
 class CashierPage extends ConsumerStatefulWidget {
@@ -57,93 +59,90 @@ class _CashierPageState extends ConsumerState<CashierPage> {
       // ── Left: Product Search & Grid ──────────────────────────────────
       Expanded(
         flex: 6,
-        child: ColoredBox(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          child: Column(
-            children: [
-              // Header
-              PageHeader(
-              title: 'Kasir',
-              icon: Icons.point_of_sale_rounded,
-              actions: [
-                // Scan Mode Toggle
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: autoAdd
-                        ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
-                        : Theme.of(context).colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: autoAdd ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outline),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(autoAdd ? Icons.bolt_rounded : Icons.search_rounded,
-                          size: 16,
-                          color: autoAdd ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(autoAdd ? 'Jual Langsung' : 'Cari Produk',
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: autoAdd
-                                    ? Theme.of(context).colorScheme.primary
-                                    : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
-                      ),
-                      const SizedBox(width: 8),
-                      Switch.adaptive(
-                        value: autoAdd,
-                        onChanged: (v) =>
-                            ref.read(scanModeProvider.notifier).setEnabled(v),
-                        activeTrackColor: Theme.of(context).colorScheme.primary,
-                      ),
-                    ],
-                  ),
+        child: Column(
+          children: [
+            // Header
+            PageHeader(
+            title: 'Kasir',
+            icon: Icons.point_of_sale_rounded,
+            actions: [
+              // Scan Mode Toggle
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: autoAdd
+                      ? AppTheme.accent.withValues(alpha: 0.1)
+                      : AppTheme.surfaceAlt,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                      color: autoAdd ? AppTheme.accent : AppTheme.border),
                 ),
-                const SizedBox(width: 16),
-                Text(Formatters.date(DateTime.now()),
-                    style: Theme.of(context).textTheme.bodyMedium),
-              ],
-            ),
-            
-            // Search Field (Separated from Header for consistency)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              color: Theme.of(context).colorScheme.surface,
-              child: AppSearchField(
-                controller: _searchCtrl,
-                hintText: 'Cari produk atau scan barcode...',
-                onChanged: (v) => ref.read(productSearchQueryProvider.notifier).set(v),
-                onClear: () {
-                  _searchCtrl.clear();
-                  ref.read(productSearchQueryProvider.notifier).set('');
-                },
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(autoAdd ? Icons.bolt_rounded : Icons.search_rounded,
+                        size: 16,
+                        color: autoAdd ? AppTheme.accent : AppTheme.textSecondary),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(autoAdd ? 'Jual Langsung' : 'Cari Produk',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: autoAdd
+                                  ? AppTheme.accent
+                                  : AppTheme.textSecondary)),
+                    ),
+                    const SizedBox(width: 8),
+                    Switch.adaptive(
+                      value: autoAdd,
+                      onChanged: (v) =>
+                          ref.read(scanModeProvider.notifier).setEnabled(v),
+                      activeTrackColor: AppTheme.accent,
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 16),
+              Text(Formatters.date(DateTime.now()),
+                  style: Theme.of(context).textTheme.bodyMedium),
+            ],
+          ),
+          
+          // Search Field (Separated from Header for consistency)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            color: AppTheme.surface,
+            child: AppSearchField(
+              controller: _searchCtrl,
+              hintText: 'Cari produk atau scan barcode...',
+              onChanged: (v) => ref.read(productSearchQueryProvider.notifier).set(v),
+              onClear: () {
+                _searchCtrl.clear();
+                ref.read(productSearchQueryProvider.notifier).set('');
+              },
             ),
+          ),
 
-            // Category filter chips
-            _CategoryFilter(
-              selected: category,
-              onSelected: (c) => ref.read(productCategoryFilterProvider.notifier).set(c),
-            ),
+          // Category filter chips
+          _CategoryFilter(
+            selected: category,
+            onSelected: (c) => ref.read(productCategoryFilterProvider.notifier).set(c),
+          ),
 
-            // Product grid
-            const Expanded(
-                child: _ProductGrid()),
-          ]),
-        ),
+          // Product grid
+          const Expanded(
+              child: _ProductGrid()),
+        ]),
       ),
 
       // ── Right: Cart Panel ────────────────────────────────────────────
       Container(
         width: 380,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          border: Border(left: BorderSide(color: Theme.of(context).colorScheme.outline)),
+        decoration: const BoxDecoration(
+          color: AppTheme.surface,
+          border: Border(left: BorderSide(color: AppTheme.border)),
         ),
         child: const _CartPanel(),
       ),
@@ -167,7 +166,7 @@ class _CategoryFilter extends ConsumerWidget {
 
     return Container(
       height: 48,
-      color: Theme.of(context).colorScheme.surface,
+      color: AppTheme.surface,
       child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -193,7 +192,6 @@ class _Chip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: GestureDetector(
@@ -202,17 +200,17 @@ class _Chip extends StatelessWidget {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
           decoration: BoxDecoration(
-            color: selected ? colorScheme.primary : colorScheme.surfaceContainerHighest,
+            color: selected ? AppTheme.accent : AppTheme.surfaceAlt,
             borderRadius: BorderRadius.circular(20),
             border:
-                Border.all(color: selected ? colorScheme.primary : colorScheme.outline),
+                Border.all(color: selected ? AppTheme.accent : AppTheme.border),
           ),
           child: Text(
             label,
             style: TextStyle(
-              color: selected ? colorScheme.onPrimary : colorScheme.onSurface.withValues(alpha: 0.7),
+              color: selected ? Colors.white : AppTheme.textSecondary,
               fontSize: 12,
-              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
             ),
           ),
         ),
@@ -276,10 +274,9 @@ class _ProductListTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isLow = product.isLowStock;
-    final colorScheme = Theme.of(context).colorScheme;
     
     return Material(
-      color: colorScheme.surface,
+      color: AppTheme.card,
       borderRadius: BorderRadius.circular(12),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -290,8 +287,8 @@ class _ProductListTile extends ConsumerWidget {
           decoration: BoxDecoration(
             border: Border.all(
                 color: isLow
-                    ? colorScheme.secondary.withValues(alpha: 0.4)
-                    : colorScheme.outline),
+                    ? AppTheme.warning.withValues(alpha: 0.4)
+                    : AppTheme.border),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -318,22 +315,22 @@ class _ProductListTile extends ConsumerWidget {
                   children: [
                     Text(
                       product.name,
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: colorScheme.onSurface),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (product.barcode != null)
-                      Text(product.barcode!, style: TextStyle(fontSize: 12, color: colorScheme.onSurface.withValues(alpha: 0.7))),
+                      Text(product.barcode!, style: const TextStyle(fontSize: 12, color: Colors.white70)),
                     const SizedBox(height: 4),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).scaffoldBackgroundColor,
+                        color: AppTheme.bg,
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
                         product.category,
-                        style: TextStyle(fontSize: 10, color: colorScheme.onSurface.withValues(alpha: 0.6)),
+                        style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
                       ),
                     ),
                   ],
@@ -346,13 +343,13 @@ class _ProductListTile extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('STOK', style: TextStyle(fontSize: 9, color: colorScheme.onSurface.withValues(alpha: 0.5), fontWeight: FontWeight.bold)),
+                    const Text('STOK', style: TextStyle(fontSize: 9, color: AppTheme.textMuted, fontWeight: FontWeight.bold)),
                     Text(
                       '${Formatters.decimal(product.stock)} ${product.baseUnit}',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
-                        color: isLow ? colorScheme.secondary : colorScheme.onSurface,
+                        color: isLow ? AppTheme.warning : AppTheme.textPrimary,
                       ),
                     ),
                   ],
@@ -366,19 +363,19 @@ class _ProductListTile extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('HARGA JUAL', style: TextStyle(fontSize: 9, color: colorScheme.onSurface.withValues(alpha: 0.5), fontWeight: FontWeight.bold)),
+                    const Text('HARGA JUAL', style: TextStyle(fontSize: 9, color: AppTheme.textMuted, fontWeight: FontWeight.bold)),
                     Text(
                       Formatters.currency(product.basePrice),
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: colorScheme.primary),
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: AppTheme.accent),
                     ),
                     if (product.units.isNotEmpty)
-                      Text('+${product.units.length} Satuan', style: TextStyle(fontSize: 9, color: colorScheme.primary)),
+                      Text('+${product.units.length} Satuan', style: const TextStyle(fontSize: 9, color: AppTheme.accent)),
                   ],
                 ),
               ),
 
               const SizedBox(width: 16),
-              Icon(Icons.add_circle_outline_rounded, color: colorScheme.primary, size: 24),
+              const Icon(Icons.add_circle_outline_rounded, color: AppTheme.accent, size: 24),
             ],
           ),
         ),
@@ -421,18 +418,17 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
   @override
   Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider);
-    final colorScheme = Theme.of(context).colorScheme;
 
     return Column(children: [
       // Header
       Container(
         padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: colorScheme.outline)),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: AppTheme.border)),
         ),
         child: Row(children: [
-          Icon(Icons.shopping_cart_rounded,
-              color: colorScheme.primary, size: 20),
+          const Icon(Icons.shopping_cart_rounded,
+              color: AppTheme.accent, size: 20),
           const SizedBox(width: 10),
           Text('Keranjang', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(width: 8),
@@ -440,12 +436,12 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: colorScheme.primary,
+                color: AppTheme.accent,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text('${cart.itemCount}',
-                  style: TextStyle(
-                      color: colorScheme.onPrimary,
+                  style: const TextStyle(
+                      color: Colors.white,
                       fontSize: 12,
                       fontWeight: FontWeight.w700)),
             ),
@@ -457,7 +453,7 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
                     title: 'Kosongkan Keranjang',
                     content: 'Yakin kosongkan semua item?',
                     confirmLabel: 'Kosongkan',
-                    confirmColor: colorScheme.error);
+                    confirmColor: AppTheme.warning);
                 if (ok) ref.read(cartProvider.notifier).clear();
               },
               icon: const Icon(Icons.clear_all_rounded, size: 16),
@@ -494,10 +490,13 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
       ),
 
       // Totals & checkout
+      // ...
+
+      // Totals & checkout
       Container(
         padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: colorScheme.outline)),
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: AppTheme.border)),
         ),
         child: Column(children: [
           // Customer Name (Optional)
@@ -523,14 +522,14 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
             _TotalRow(
                 label: 'Potongan Item',
                 value: -cart.itemDiscountTotal,
-                valueColor: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF2ECC71) : const Color(0xFF1E8449)),
+                valueColor: AppTheme.success),
 
           const SizedBox(height: 8),
 
           // Transaction Discount
           Row(children: [
-            Text('Diskon Transaksi',
-                style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.7), fontSize: 13)),
+            const Text('Diskon Transaksi',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
             const Spacer(),
             SizedBox(
               width: 50,
@@ -539,7 +538,7 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
                 isDense: true,
                 isExpanded: true,
                 underline: const SizedBox(),
-                style: TextStyle(fontSize: 12, color: colorScheme.primary),
+                style: const TextStyle(fontSize: 12, color: AppTheme.accent),
                 items: [
                   DropdownMenuItem(value: DiscountType.fixed, child: Text('Rp')),
                   DropdownMenuItem(
@@ -558,17 +557,14 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
                 focusNode: _discountFocus,
                 keyboardType: TextInputType.number,
                 textAlign: TextAlign.right,
-                style: TextStyle(
-                    color: colorScheme.onSurface,
+                style: const TextStyle(
+                    color: AppTheme.textPrimary,
                     fontSize: 13,
                     fontWeight: FontWeight.bold),
                 decoration: const InputDecoration(
                   isDense: true,
                   contentPadding:
                       EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  fillColor: Colors.transparent,
                 ),
                 onChanged: (v) => ref
                     .read(cartProvider.notifier)
@@ -582,13 +578,13 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
 
           // PPN
           Row(children: [
-            Text('PPN (11%)',
-                style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.7), fontSize: 13)),
+            const Text('PPN (11%)',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
             const Spacer(),
             Switch.adaptive(
               value: cart.taxEnabled,
               onChanged: (_) => ref.read(cartProvider.notifier).toggleTax(),
-              activeTrackColor: colorScheme.primary,
+              activeTrackColor: AppTheme.accent,
             ),
             const SizedBox(width: 8),
             SizedBox(
@@ -596,13 +592,13 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
               child: Text(
                 Formatters.currency(cart.taxAmount),
                 textAlign: TextAlign.right,
-                style: TextStyle(
-                    color: colorScheme.onSurface.withValues(alpha: 0.7), fontSize: 13),
+                style: const TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 13),
               ),
             ),
           ]),
 
-          const Divider(height: 24),
+          const Divider(height: 24, color: AppTheme.border),
 
           Row(children: [
             Text('TOTAL',
@@ -613,7 +609,7 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
             const Spacer(),
             Text(Formatters.currency(cart.total),
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      color: colorScheme.primary,
+                      color: AppTheme.accent,
                       fontSize: 24,
                     )),
           ]),
@@ -629,8 +625,8 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
               style: ElevatedButton.styleFrom(
                 textStyle:
                     const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-                backgroundColor: colorScheme.primary,
-                foregroundColor: colorScheme.onPrimary,
+                backgroundColor: AppTheme.accent,
+                foregroundColor: Colors.white,
               ),
             ),
           ),
@@ -653,11 +649,11 @@ class _TotalRow extends StatelessWidget {
       child: Row(children: [
         Text(label,
             style:
-                TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7), fontSize: 13)),
+                const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
         const Spacer(),
         Text(Formatters.currency(value),
             style: TextStyle(
-                color: valueColor ?? Theme.of(context).colorScheme.onSurface,
+                color: valueColor ?? AppTheme.textPrimary,
                 fontSize: 14,
                 fontWeight: FontWeight.w600)),
       ]),
@@ -708,14 +704,13 @@ class _CartItemTileState extends ConsumerState<_CartItemTile> {
   Widget build(BuildContext context) {
     final item = widget.item;
     final notifier = ref.read(cartProvider.notifier);
-    final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest,
+        color: AppTheme.surfaceAlt,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: colorScheme.outline),
+        border: Border.all(color: AppTheme.border),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
@@ -730,16 +725,16 @@ class _CartItemTileState extends ConsumerState<_CartItemTile> {
           ),
           IconButton(
             onPressed: () => _showItemEditDialog(context, ref, item),
-            icon: Icon(Icons.edit_note_rounded,
-                size: 18, color: colorScheme.primary),
+            icon: const Icon(Icons.edit_note_rounded,
+                size: 18, color: AppTheme.accent),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
           ),
           const SizedBox(width: 8),
           IconButton(
             onPressed: () => notifier.removeItem(item.id),
-            icon: Icon(Icons.close_rounded,
-                size: 16, color: colorScheme.onSurface.withValues(alpha: 0.5)),
+            icon: const Icon(Icons.close_rounded,
+                size: 16, color: AppTheme.textMuted),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
           ),
@@ -755,9 +750,9 @@ class _CartItemTileState extends ConsumerState<_CartItemTile> {
                 isDense: true,
                 isExpanded: true,
                 underline: const SizedBox(),
-                dropdownColor: colorScheme.surface,
-                style: TextStyle(
-                    color: colorScheme.primary,
+                dropdownColor: AppTheme.surfaceAlt,
+                style: const TextStyle(
+                    color: AppTheme.accent,
                     fontSize: 12,
                     fontWeight: FontWeight.w600),
                 items: item.product.allUnits
@@ -775,8 +770,8 @@ class _CartItemTileState extends ConsumerState<_CartItemTile> {
             )
           else
             Text(item.selectedUnit.unitName,
-                style: TextStyle(
-                    color: colorScheme.primary,
+                style: const TextStyle(
+                    color: AppTheme.accent,
                     fontSize: 12,
                     fontWeight: FontWeight.w600)),
           const Spacer(),
@@ -786,6 +781,7 @@ class _CartItemTileState extends ConsumerState<_CartItemTile> {
               onTap: () {
                 final q = item.quantity - 1;
                 notifier.updateQuantity(item.id, q);
+                _qtyCtrl.text = q <= 0 ? '0' : q.toString();
               }),
           SizedBox(
             width: 50,
@@ -795,17 +791,14 @@ class _CartItemTileState extends ConsumerState<_CartItemTile> {
               textAlign: TextAlign.center,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
-              style: TextStyle(
-                  color: colorScheme.onSurface,
+              style: const TextStyle(
+                  color: AppTheme.textPrimary,
                   fontSize: 13,
                   fontWeight: FontWeight.w600),
               decoration: const InputDecoration(
                 isDense: true,
                 contentPadding: EdgeInsets.symmetric(vertical: 6),
                 border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                fillColor: Colors.transparent,
               ),
               onChanged: (v) {
                 final qty = double.tryParse(v) ?? 0;
@@ -822,6 +815,7 @@ class _CartItemTileState extends ConsumerState<_CartItemTile> {
               onTap: () {
                 final q = item.quantity + 1;
                 notifier.updateQuantity(item.id, q);
+                _qtyCtrl.text = q.toString();
               }),
         ]),
         const SizedBox(height: 6),
@@ -831,15 +825,15 @@ class _CartItemTileState extends ConsumerState<_CartItemTile> {
             children: [
               if (item.isOverridden)
                 Text(Formatters.currency(item.originalPrice),
-                    style: TextStyle(
-                        color: colorScheme.onSurface.withValues(alpha: 0.5),
+                    style: const TextStyle(
+                        color: AppTheme.textMuted,
                         fontSize: 11,
                         decoration: TextDecoration.lineThrough)),
               Text(Formatters.currency(item.soldPrice),
                   style: TextStyle(
                     color: item.isOverridden
-                        ? colorScheme.secondary
-                        : colorScheme.onSurface.withValues(alpha: 0.7),
+                        ? AppTheme.warning
+                        : AppTheme.textSecondary,
                     fontSize: 12,
                     fontWeight:
                         item.isOverridden ? FontWeight.w600 : FontWeight.w400,
@@ -852,13 +846,13 @@ class _CartItemTileState extends ConsumerState<_CartItemTile> {
             children: [
               if (item.totalDiscount > 0)
                 Text('-${Formatters.currency(item.totalDiscount)}',
-                    style: TextStyle(
-                        color: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF2ECC71) : const Color(0xFF1E8449),
+                    style: const TextStyle(
+                        color: AppTheme.success,
                         fontSize: 11,
                         fontWeight: FontWeight.w600)),
               Text(Formatters.currency(item.subtotal),
-                  style: TextStyle(
-                      color: colorScheme.onSurface,
+                  style: const TextStyle(
+                      color: AppTheme.textPrimary,
                       fontWeight: FontWeight.w700,
                       fontSize: 13)),
             ],
@@ -994,26 +988,17 @@ class _QtyButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         width: 26,
         height: 26,
         decoration: BoxDecoration(
-          color: colorScheme.outline.withValues(alpha: 0.1),
+          color: AppTheme.border,
           borderRadius: BorderRadius.circular(6),
         ),
-        child: Icon(icon, size: 14, color: colorScheme.onSurface),
+        child: Icon(icon, size: 14, color: AppTheme.textPrimary),
       ),
     );
   }
-}
-
-Map<K, List<V>> groupBy<V, K>(Iterable<V> values, K Function(V) key) {
-  var map = <K, List<V>>{};
-  for (var element in values) {
-    (map[key(element)] ??= []).add(element);
-  }
-  return map;
 }

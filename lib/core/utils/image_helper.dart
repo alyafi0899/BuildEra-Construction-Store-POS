@@ -7,10 +7,11 @@ import 'package:flutter/material.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import '../../core/theme/app_theme.dart';
 
 class ImageHelper {
   /// Picks an image, crops it (if supported), and returns the bytes
-  static Future<Uint8List?> pickAndCropImage(BuildContext context, {Color? accentColor}) async {
+  static Future<Uint8List?> pickAndCropImage(BuildContext context) async {
     // 1. Pick Image using FilePicker (more stable on Windows/Desktop)
     final result = await FilePicker.platform.pickFiles(
       type: FileType.image,
@@ -28,7 +29,7 @@ class ImageHelper {
         uiSettings: [
           AndroidUiSettings(
             toolbarTitle: 'Potong Gambar Produk',
-            toolbarColor: accentColor ?? Theme.of(context).colorScheme.primary,
+            toolbarColor: AppTheme.accent,
             toolbarWidgetColor: Colors.white,
             initAspectRatio: CropAspectRatioPreset.square,
             lockAspectRatio: true,

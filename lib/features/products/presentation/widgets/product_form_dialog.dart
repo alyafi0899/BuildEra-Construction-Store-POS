@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/image_helper.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/models/product.dart';
@@ -14,11 +15,13 @@ import '../../providers/entity_provider.dart';
 import '../../models/supplier.dart';
 import '../../models/shipping_service.dart';
 import '../../../auth/providers/auth_provider.dart';
+
 import '../../../../core/utils/barcode_helper.dart';
 import '../../providers/barcode_history_provider.dart';
+
 import '../../models/product_financials.dart';
 
-final _uuid = const Uuid();
+final _uuid = Uuid();
 
 class ProductFormDialog extends ConsumerStatefulWidget {
   final Product? product;
@@ -47,6 +50,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   bool _saving = false;
   bool _generatingBarcode = false;
 
+  // Financial state
   bool _isManualCost = false;
   PaymentStatus _supplierPaymentStatus = PaymentStatus.notApplicable;
   PaymentStatus _shippingPaymentStatus = PaymentStatus.notApplicable;
@@ -132,7 +136,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   }
 
   Future<void> _pickImage() async {
-    final bytes = await ImageHelper.pickAndCropImage(context, accentColor: Theme.of(context).colorScheme.primary);
+    final bytes = await ImageHelper.pickAndCropImage(context);
     if (bytes != null) {
       setState(() => _imageBytes = bytes);
     }
@@ -258,8 +262,6 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Dialog(
       insetPadding: const EdgeInsets.all(40),
       child: SizedBox(
@@ -270,11 +272,11 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
             // ── Header ──────────────────────────────────────────────────
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: colorScheme.outline)),
+              decoration: const BoxDecoration(
+                border: Border(bottom: BorderSide(color: AppTheme.border)),
               ),
               child: Row(children: [
-                Icon(Icons.inventory_2_rounded, color: colorScheme.primary, size: 22),
+                const Icon(Icons.inventory_2_rounded, color: AppTheme.accent, size: 22),
                 const SizedBox(width: 12),
                 Text(
                   widget.product == null ? 'Tambah Produk Baru' : 'Edit Produk',
@@ -283,7 +285,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                 const Spacer(),
                 IconButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: Icon(Icons.close, color: colorScheme.onSurface.withValues(alpha: 0.5)),
+                  icon: const Icon(Icons.close, color: AppTheme.textMuted),
                 ),
               ]),
             ),
@@ -297,6 +299,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Image & Basic Info
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -305,6 +308,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                           Expanded(
                             child: Column(
                               children: [
+                                // Row 1: name + barcode
                                 Row(children: [
                                   Expanded(
                                     flex: 3,
@@ -326,7 +330,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                         suffixIcon: _generatingBarcode 
                                           ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                                           : IconButton(
-                                              icon: Icon(Icons.auto_fix_high_rounded, size: 18, color: colorScheme.primary),
+                                              icon: const Icon(Icons.auto_fix_high_rounded, size: 18, color: AppTheme.accent),
                                               tooltip: 'Generate Barcode',
                                               onPressed: _generateBarcode,
                                             ),
@@ -352,79 +356,89 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text('Kategori Produk *', style: TextStyle(fontSize: 12, color: colorScheme.onSurface.withValues(alpha: 0.6))),
+                                        const Text('Kategori Produk *', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
                                         const SizedBox(height: 8),
                                         Autocomplete<String>(
                                           optionsBuilder: (TextEditingValue textEditingValue) {
                                             final list = ref.read(productsProvider).asData?.value.map((p) => p.category).toSet().toList() ?? [];
                                             final combined = {...AppConstants.categories, ...list}.toList();
-                                            if (textEditingValue.text.isEmpty) return combined;
+                                            if (textEditingValue.text.isEmpty) {
+                                              return combined;
+                                            }
                                             return combined.where((String option) {
                                               return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
                                             });
                                           },
-                                          onSelected: (String selection) => _categoryCtrl.text = selection,
+                                          onSelected: (String selection) {
+                                            _categoryCtrl.text = selection;
+                                          },
                                           fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
                                             if (controller.text.isEmpty && _categoryCtrl.text.isNotEmpty) {
                                               controller.text = _categoryCtrl.text;
                                             }
                                             return TextFormField(
-                                              controller: controller,
-                                              focusNode: focusNode,
-                                              onChanged: (v) => _categoryCtrl.text = v,
-                                              decoration: const InputDecoration(
-                                                labelText: 'Kategori Produk *',
-                                                hintText: 'Pilih atau ketik baru...',
-                                                suffixIcon: Icon(Icons.arrow_drop_down, size: 20),
-                                              ),
-                                              validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
-                                            );
-                                          },
-                                        ),
-                                      ],
+                                    controller: controller,
+                                    focusNode: focusNode,
+                                    onChanged: (v) => _categoryCtrl.text = v,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Kategori Produk *',
+                                      hintText: 'Pilih atau ketik baru...',
+                                      suffixIcon: Icon(Icons.arrow_drop_down, size: 20),
                                     ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Autocomplete<String>(
-                                      optionsBuilder: (TextEditingValue textEditingValue) {
-                                        final list = ref.read(productsProvider).asData?.value.map((p) => p.baseUnit).toSet().toList() ?? [];
-                                        final combined = {...AppConstants.baseUnits, ...list}.toList();
-                                        if (textEditingValue.text.isEmpty) return combined;
-                                        return combined.where((String option) {
-                                          return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
-                                        });
-                                      },
-                                      onSelected: (String selection) => setState(() => _baseUnitCtrl.text = selection),
-                                      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                                        if (controller.text.isEmpty && _baseUnitCtrl.text.isNotEmpty) {
-                                          controller.text = _baseUnitCtrl.text;
-                                        }
-                                        return TextFormField(
-                                          controller: controller,
-                                          focusNode: focusNode,
-                                          onChanged: (v) => setState(() => _baseUnitCtrl.text = v),
-                                          decoration: const InputDecoration(
-                                            labelText: 'Satuan Dasar *',
-                                            hintText: 'e.g. pcs, kg, m',
-                                            suffixIcon: Icon(Icons.arrow_drop_down, size: 20),
-                                          ),
-                                          validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: TextFormField(
-                                      controller:   _stock,
-                                      decoration:   const InputDecoration(labelText: 'Jumlah Barang *'),
-                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                      onChanged: (_) => _updateCalculatedCost(),
-                                      validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
-                                    ),
-                                  ),
-                                ]),
+                                    validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Autocomplete<String>(
+                            optionsBuilder: (TextEditingValue textEditingValue) {
+                              final list = ref.read(productsProvider).asData?.value.map((p) => p.baseUnit).toSet().toList() ?? [];
+                              final combined = {...AppConstants.baseUnits, ...list}.toList();
+                              if (textEditingValue.text.isEmpty) {
+                                return combined;
+                              }
+                              return combined.where((String option) {
+                                return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                              });
+                            },
+                            onSelected: (String selection) {
+                              setState(() {
+                                _baseUnitCtrl.text = selection;
+                              });
+                            },
+                            fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                              if (controller.text.isEmpty && _baseUnitCtrl.text.isNotEmpty) {
+                                controller.text = _baseUnitCtrl.text;
+                              }
+                              return TextFormField(
+                                controller: controller,
+                                focusNode: focusNode,
+                                onChanged: (v) => setState(() => _baseUnitCtrl.text = v),
+                                decoration: const InputDecoration(
+                                  labelText: 'Satuan Dasar *',
+                                  hintText: 'e.g. pcs, kg, m',
+                                  suffixIcon: Icon(Icons.arrow_drop_down, size: 20),
+                                ),
+                                validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextFormField(
+                            controller:   _stock,
+                            decoration:   const InputDecoration(labelText: 'Jumlah Barang *'),
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            onChanged: (_) => _updateCalculatedCost(),
+                            validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+                          ),
+                        ),
+                      ]),
                               ],
                             ),
                           ),
@@ -432,45 +446,45 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                       ),
                       const SizedBox(height: 24),
 
+                      // ── Section: Biaya & Supplier ──────────────────
                       _sectionLabel(context, 'Biaya & Supplier'),
                       const SizedBox(height: 16),
 
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                          color: AppTheme.surfaceAlt.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: colorScheme.outline),
+                          border: Border.all(color: AppTheme.border),
                         ),
                         child: Column(
                           children: [
                             Row(
                               children: [
-                                Expanded(
+                                const Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      const Text('Metode Perhitungan Modal', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                      Text('Pilih Otomatis jika ingin menghitung modal dari total beli + ongkir', 
-                                        style: TextStyle(fontSize: 11, color: colorScheme.onSurface.withValues(alpha: 0.6))),
+                                      Text('Metode Perhitungan Modal', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                      Text('Pilih Otomatis jika ingin menghitung modal dari total beli + ongkir', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
                                     ],
                                   ),
                                 ),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(
-                                    color: Theme.of(context).scaffoldBackgroundColor,
+                                    color: AppTheme.bg,
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: Row(
                                     children: [
-                                      Text('Otomatis', style: TextStyle(fontSize: 11, fontWeight: !_isManualCost ? FontWeight.bold : FontWeight.normal, color: !_isManualCost ? colorScheme.primary : colorScheme.onSurface.withValues(alpha: 0.4))),
+                                      Text('Otomatis', style: TextStyle(fontSize: 11, fontWeight: !_isManualCost ? FontWeight.bold : FontWeight.normal, color: !_isManualCost ? AppTheme.accent : AppTheme.textMuted)),
                                       Switch(
                                         value: _isManualCost,
                                         onChanged: (v) => setState(() => _isManualCost = v),
-                                        activeThumbColor: colorScheme.primary,
+                                        activeThumbColor: AppTheme.accent,
                                       ),
-                                      Text('Manual', style: TextStyle(fontSize: 11, fontWeight: _isManualCost ? FontWeight.bold : FontWeight.normal, color: _isManualCost ? colorScheme.primary : colorScheme.onSurface.withValues(alpha: 0.4))),
+                                      Text('Manual', style: TextStyle(fontSize: 11, fontWeight: _isManualCost ? FontWeight.bold : FontWeight.normal, color: _isManualCost ? AppTheme.accent : AppTheme.textMuted)),
                                     ],
                                   ),
                                 ),
@@ -521,12 +535,12 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                     decoration: InputDecoration(
                                       labelText: 'Total Modal per Unit (Rp) *',
                                       prefixText: 'Rp ',
-                                      fillColor: !_isManualCost ? Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.5) : null,
+                                      fillColor: !_isManualCost ? AppTheme.bg.withValues(alpha: 0.5) : null,
                                       filled: !_isManualCost,
                                       helperText: !_isManualCost ? 'Dihitung otomatis: (Beli+Ongkir)/Qty' : 'Input harga modal akhir per unit',
                                     ),
                                     keyboardType: TextInputType.number,
-                                    onChanged: (_) => setState(() {}),
+                                    onChanged: (_) => setState(() {}), // Trigger profit update
                                     validator: (v) => double.tryParse(v ?? '') == null ? 'Wajib diisi' : null,
                                   ),
                                 ),
@@ -541,7 +555,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                           labelText: 'Harga Jual per Unit (Rp) *',
                                           prefixText: 'Rp ',
                                           suffixIcon: IconButton(
-                                            icon: const Icon(Icons.lightbulb_outline_rounded, color: Colors.orange, size: 20),
+                                            icon: const Icon(Icons.lightbulb_outline_rounded, color: AppTheme.warning, size: 20),
                                             tooltip: 'Saran Harga (+10%)',
                                             onPressed: _suggestPrice,
                                           ),
@@ -566,20 +580,20 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                               decoration: BoxDecoration(
-                                color: _netProfit >= 0 ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
+                                color: _netProfit >= 0 ? AppTheme.success.withValues(alpha: 0.1) : AppTheme.danger.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: (_netProfit >= 0 ? Colors.green : Colors.red).withValues(alpha: 0.3)),
+                                border: Border.all(color: (_netProfit >= 0 ? AppTheme.success : AppTheme.danger).withValues(alpha: 0.3)),
                               ),
                               child: Row(
                                 children: [
                                   Icon(_netProfit >= 0 ? Icons.trending_up_rounded : Icons.trending_down_rounded, 
-                                    color: _netProfit >= 0 ? Colors.green : Colors.red, size: 20),
+                                    color: _netProfit >= 0 ? AppTheme.success : AppTheme.danger, size: 20),
                                   const SizedBox(width: 12),
                                   const Text('Estimasi Profit Bersih:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
                                   const Spacer(),
                                   Text(Formatters.currency(_netProfit), 
-                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: _netProfit >= 0 ? Colors.green : Colors.red)),
-                                  Text(' / unit', style: TextStyle(fontSize: 11, color: colorScheme.onSurface.withValues(alpha: 0.5))),
+                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: _netProfit >= 0 ? AppTheme.success : AppTheme.danger)),
+                                  Text(' / unit', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
                                 ],
                               ),
                             ),
@@ -588,6 +602,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                       ),
                       const SizedBox(height: 24),
 
+                      // ── Section: Pengiriman & Supplier (Detail) ─────
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -601,7 +616,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                     const Spacer(),
                                     IconButton(
                                       onPressed: () => _showQuickAddSupplier(context),
-                                      icon: Icon(Icons.add_business_rounded, size: 16, color: colorScheme.primary),
+                                      icon: const Icon(Icons.add_business_rounded, size: 16, color: AppTheme.accent),
                                       tooltip: 'Supplier Baru',
                                       padding: EdgeInsets.zero,
                                       constraints: const BoxConstraints(),
@@ -613,10 +628,10 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                   data: (list) => SizedBox(
                                     height: 48,
                                     child: DropdownButtonFormField<String?>(
-                                      value: list.any((s) => s.id == _selectedSupplierId) ? _selectedSupplierId : (widget.product?.financials.supplierName != null ? list.firstWhereOrNull((s) => s.name == widget.product?.financials.supplierName)?.id : null),
+                                      initialValue: list.any((s) => s.id == _selectedSupplierId) ? _selectedSupplierId : (widget.product?.financials.supplierName != null ? list.firstWhereOrNull((s) => s.name == widget.product?.financials.supplierName)?.id : null),
                                       isExpanded: true,
                                       decoration: const InputDecoration(labelText: 'Pilih Supplier', isDense: true),
-                                      dropdownColor: colorScheme.surface,
+                                      dropdownColor: AppTheme.surfaceAlt,
                                       items: [
                                         const DropdownMenuItem(value: null, child: Text('Input Manual / Umum', style: TextStyle(fontSize: 12))),
                                         ...list.map((s) => DropdownMenuItem(
@@ -625,14 +640,14 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                             children: [
                                               Expanded(child: Text(s.name, style: const TextStyle(fontSize: 12))),
                                               IconButton(
-                                                icon: Icon(Icons.edit_rounded, size: 14, color: colorScheme.onSurface.withValues(alpha: 0.5)),
+                                                icon: const Icon(Icons.edit_rounded, size: 14, color: AppTheme.textMuted),
                                                 onPressed: () => _showQuickAddSupplier(context, supplier: s),
                                                 padding: EdgeInsets.zero,
                                                 constraints: const BoxConstraints(),
                                               ),
                                               const SizedBox(width: 8),
                                               IconButton(
-                                                icon: Icon(Icons.delete_outline_rounded, size: 14, color: colorScheme.error),
+                                                icon: const Icon(Icons.delete_outline_rounded, size: 14, color: AppTheme.danger),
                                                 onPressed: () async {
                                                   final ok = await showConfirmDialog(context, 
                                                     title: 'Hapus Supplier', 
@@ -682,7 +697,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                     const Spacer(),
                                     IconButton(
                                       onPressed: () => _showQuickAddShipping(context),
-                                      icon: Icon(Icons.local_shipping_rounded, size: 16, color: colorScheme.primary),
+                                      icon: const Icon(Icons.local_shipping_rounded, size: 16, color: AppTheme.accent),
                                       tooltip: 'Ekspedisi Baru',
                                       padding: EdgeInsets.zero,
                                       constraints: const BoxConstraints(),
@@ -694,10 +709,10 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                   data: (list) => SizedBox(
                                     height: 48,
                                     child: DropdownButtonFormField<String?>(
-                                      value: list.any((s) => s.id == _selectedShippingId) ? _selectedShippingId : (widget.product?.financials.shippingServiceName != null ? list.firstWhereOrNull((s) => s.name == widget.product?.financials.shippingServiceName)?.id : null),
+                                      initialValue: list.any((s) => s.id == _selectedShippingId) ? _selectedShippingId : (widget.product?.financials.shippingServiceName != null ? list.firstWhereOrNull((s) => s.name == widget.product?.financials.shippingServiceName)?.id : null),
                                       isExpanded: true,
                                       decoration: const InputDecoration(labelText: 'Pilih Ekspedisi', isDense: true),
-                                      dropdownColor: colorScheme.surface,
+                                      dropdownColor: AppTheme.surfaceAlt,
                                       items: [
                                         const DropdownMenuItem(value: null, child: Text('Input Manual / Umum', style: TextStyle(fontSize: 12))),
                                         ...list.map((s) => DropdownMenuItem(
@@ -706,14 +721,14 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                             children: [
                                               Expanded(child: Text(s.name, style: const TextStyle(fontSize: 12))),
                                               IconButton(
-                                                icon: Icon(Icons.edit_rounded, size: 14, color: colorScheme.onSurface.withValues(alpha: 0.5)),
+                                                icon: const Icon(Icons.edit_rounded, size: 14, color: AppTheme.textMuted),
                                                 onPressed: () => _showQuickAddShipping(context, shipping: s),
                                                 padding: EdgeInsets.zero,
                                                 constraints: const BoxConstraints(),
                                               ),
                                               const SizedBox(width: 8),
                                               IconButton(
-                                                icon: Icon(Icons.delete_outline_rounded, size: 14, color: colorScheme.error),
+                                                icon: const Icon(Icons.delete_outline_rounded, size: 14, color: AppTheme.danger),
                                                 onPressed: () async {
                                                   final ok = await showConfirmDialog(context, 
                                                     title: 'Hapus Ekspedisi', 
@@ -772,27 +787,27 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                           width: double.infinity,
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                            color: AppTheme.surfaceAlt.withValues(alpha: 0.3),
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: colorScheme.outline.withValues(alpha: 0.5)),
+                            border: Border.all(color: AppTheme.border.withValues(alpha: 0.5)),
                           ),
-                          child: Text(
+                          child: const Text(
                             'Hanya gunakan Satuan Dasar untuk penjualan ini. Klik "Tambah Satuan" jika ingin menjual dalam satuan lain (seperti Box, Dus, dll).',
-                            style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.5), fontSize: 12, fontStyle: FontStyle.italic),
+                            style: TextStyle(color: AppTheme.textMuted, fontSize: 12, fontStyle: FontStyle.italic),
                           ),
                         )
                       else
                         Container(
                           decoration: BoxDecoration(
-                            border:       Border.all(color: colorScheme.outline),
+                            border:       Border.all(color: AppTheme.border),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Column(children: [
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                              decoration: BoxDecoration(
-                                color:        colorScheme.surfaceContainerHighest,
-                                borderRadius: const BorderRadius.vertical(top: Radius.circular(9)),
+                              decoration: const BoxDecoration(
+                                color:        AppTheme.surfaceAlt,
+                                borderRadius: BorderRadius.vertical(top: Radius.circular(9)),
                               ),
                               child: Row(children: [
                                 Expanded(flex: 2, child: _th('Satuan Jual')),
@@ -829,8 +844,8 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
             // ── Footer ──────────────────────────────────────────────────
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: colorScheme.outline)),
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: AppTheme.border)),
               ),
               child: Row(children: [
                 OutlinedButton(
@@ -856,7 +871,6 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   }
 
   Widget _buildImagePicker() {
-    final colorScheme = Theme.of(context).colorScheme;
     return InkWell(
       onTap: _pickImage,
       borderRadius: BorderRadius.circular(12),
@@ -864,9 +878,9 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
         width:  160,
         height: 160,
         decoration: BoxDecoration(
-          color:        colorScheme.surfaceContainerHighest,
+          color:        AppTheme.surfaceAlt,
           borderRadius: BorderRadius.circular(12),
-          border:       Border.all(color: colorScheme.outline),
+          border:       Border.all(color: AppTheme.border),
         ),
         child: _imageBytes != null
             ? ClipRRect(
@@ -878,12 +892,12 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                     borderRadius: BorderRadius.circular(12),
                     child: Image.file(File(widget.product!.imagePath!), fit: BoxFit.cover),
                   )
-                : Column(
+                : const Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.add_a_photo_rounded, color: colorScheme.onSurface.withValues(alpha: 0.4), size: 32),
-                      const SizedBox(height: 8),
-                      Text('Foto Produk', style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.4), fontSize: 12)),
+                      Icon(Icons.add_a_photo_rounded, color: AppTheme.textMuted, size: 32),
+                      SizedBox(height: 8),
+                      Text('Foto Produk', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
                     ],
                   ),
       ),
@@ -895,23 +909,22 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
     required PaymentStatus value,
     required ValueChanged<PaymentStatus?> onChanged,
   }) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Row(
       children: [
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: TextStyle(fontSize: 10, color: colorScheme.onSurface.withValues(alpha: 0.5))),
+              Text(label, style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
               const SizedBox(height: 4),
               SizedBox(
                 height: 42,
                 child: DropdownButtonFormField<PaymentStatus>(
-                  value: value,
+                  initialValue: value,
                   isExpanded: true,
                   decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-                  dropdownColor: colorScheme.surface,
-                  style: TextStyle(fontSize: 12, color: colorScheme.onSurface),
+                  dropdownColor: AppTheme.surfaceAlt,
+                  style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
                   items: PaymentStatus.values.map((s) => DropdownMenuItem(
                     value: s,
                     child: Text(s.name.toUpperCase(), style: TextStyle(color: _statusColor(s), fontWeight: FontWeight.bold, fontSize: 11)),
@@ -1032,37 +1045,37 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
 
   Color _statusColor(PaymentStatus s) {
     switch (s) {
-      case PaymentStatus.paid: return Colors.green;
-      case PaymentStatus.unpaid: return Colors.orange;
-      case PaymentStatus.partial: return Colors.blue;
-      case PaymentStatus.notApplicable: return Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4);
+      case PaymentStatus.paid: return AppTheme.success;
+      case PaymentStatus.unpaid: return AppTheme.warning;
+      case PaymentStatus.partial: return AppTheme.info;
+      case PaymentStatus.notApplicable: return AppTheme.textMuted;
     }
   }
 
   Widget _sectionLabel(BuildContext context, String text) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Row(children: [
       Container(
         width: 3,
         height: 16,
         decoration: BoxDecoration(
-          color: colorScheme.primary,
+          color: AppTheme.accent,
           borderRadius: BorderRadius.circular(2),
         ),
       ),
       const SizedBox(width: 8),
-      Text(text, style: Theme.of(context).textTheme.titleMedium?.copyWith(color: colorScheme.primary)),
+      Text(text, style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppTheme.accent)),
     ]);
   }
 
   Widget _th(String label) => Text(
         label,
-        style: TextStyle(
-          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6), 
-          fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.3,
+        style: const TextStyle(
+          color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.3,
         ),
       );
 }
+
+// ── Unit entry data ────────────────────────────────────────────────────────
 
 class _UnitEntry {
   final String id;
@@ -1095,6 +1108,8 @@ class _UnitEntry {
         sellPrice:      double.tryParse(sellPrice) ?? 0,
       );
 }
+
+// ── Unit Row Widget ────────────────────────────────────────────────────────
 
 class _UnitRowWidget extends StatefulWidget {
   final _UnitEntry   entry;
@@ -1149,12 +1164,11 @@ class _UnitRowWidgetState extends State<_UnitRowWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
         border: Border(
-          top:    BorderSide(color: colorScheme.outline),
+          top:    const BorderSide(color: AppTheme.border),
           bottom: widget.isLast ? BorderSide.none : BorderSide.none,
         ),
         borderRadius: widget.isLast
@@ -1162,22 +1176,25 @@ class _UnitRowWidgetState extends State<_UnitRowWidget> {
             : BorderRadius.zero,
       ),
       child: Row(children: [
+        // Unit name
         Expanded(
           flex: 2,
           child: TextFormField(
             controller:  _unitCtrl,
             onChanged:   (_) => _notify(),
-            decoration:  const InputDecoration(
+            decoration:  InputDecoration(
               hintText:   'e.g. roll, sack, box',
               isDense:    true,
+              suffixText: _unitCtrl.text.isNotEmpty ? '' : null,
             ),
           ),
         ),
         const SizedBox(width: 12),
+        // Conversion
         Expanded(
           flex: 3,
           child: Row(children: [
-            Text('1 ', style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 13)),
+            const Text('1 ', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
             Expanded(
               child: TextFormField(
                 controller:  _unitCtrl,
@@ -1185,13 +1202,13 @@ class _UnitRowWidgetState extends State<_UnitRowWidget> {
                 decoration:  InputDecoration(
                   isDense:     true,
                   hintText:    _unitCtrl.text.isEmpty ? 'satuan' : null,
-                  fillColor:   Theme.of(context).scaffoldBackgroundColor,
+                  fillColor:   AppTheme.bg,
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child:   Text('=', style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6))),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child:   Text('=', style: TextStyle(color: AppTheme.textSecondary)),
             ),
             Expanded(
               child: TextFormField(
@@ -1201,13 +1218,14 @@ class _UnitRowWidgetState extends State<_UnitRowWidget> {
                 decoration:   InputDecoration(
                   isDense:      true,
                   suffixText:   widget.baseUnit,
-                  suffixStyle:  TextStyle(color: colorScheme.primary, fontSize: 12),
+                  suffixStyle:  const TextStyle(color: AppTheme.accent, fontSize: 12),
                 ),
               ),
             ),
           ]),
         ),
         const SizedBox(width: 12),
+        // Sell price
         Expanded(
           flex: 2,
           child: TextFormField(
@@ -1224,7 +1242,7 @@ class _UnitRowWidgetState extends State<_UnitRowWidget> {
         if (widget.canDelete)
           IconButton(
             onPressed: widget.onDelete,
-            icon: Icon(Icons.delete_outline_rounded, color: colorScheme.error, size: 20),
+            icon:      const Icon(Icons.delete_outline_rounded, color: AppTheme.danger, size: 20),
             padding:   EdgeInsets.zero,
             constraints: const BoxConstraints(),
           ),
