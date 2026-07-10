@@ -71,26 +71,42 @@ class BillPaymentRepository {
       final products = await repo.getAllProducts();
       final p = products.where((item) => item.id == billId).firstOrNull;
       if (p != null) {
+        final f = p.financials;
+
         // --- 1. Supplier Status Calculation ---
-        final sDue = p.financials.supplierPrice;
+        final sDue = f.supplierPrice;
         PaymentStatus sStatus;
         if (sDue <= 0) {
           sStatus = PaymentStatus.notApplicable;
+        } else if (totalSupplierPaid >= (sDue - epsilon)) {
+          sStatus = PaymentStatus.paid;
+        } else if (totalSupplierPaid > epsilon) {
+          sStatus = PaymentStatus.partial;
         } else {
-          sStatus = totalSupplierPaid >= (sDue - epsilon) ? PaymentStatus.paid : (totalSupplierPaid > epsilon ? PaymentStatus.partial : PaymentStatus.unpaid);
+          // If no payments yet, only set to unpaid if it wasn't already dismissed (notApplicable)
+          sStatus = f.supplierPaymentStatus == PaymentStatus.notApplicable 
+              ? PaymentStatus.notApplicable 
+              : PaymentStatus.unpaid;
         }
         
         // --- 2. Shipping Status Calculation ---
-        final shDue = p.financials.supplierShippingCost;
+        final shDue = f.supplierShippingCost;
         PaymentStatus shStatus;
         if (shDue <= 0) {
           shStatus = PaymentStatus.notApplicable;
+        } else if (totalShippingPaid >= (shDue - epsilon)) {
+          shStatus = PaymentStatus.paid;
+        } else if (totalShippingPaid > epsilon) {
+          shStatus = PaymentStatus.partial;
         } else {
-          shStatus = totalShippingPaid >= (shDue - epsilon) ? PaymentStatus.paid : (totalShippingPaid > epsilon ? PaymentStatus.partial : PaymentStatus.unpaid);
+          // If no payments yet, only set to unpaid if it wasn't already dismissed (notApplicable)
+          shStatus = f.shippingPaymentStatus == PaymentStatus.notApplicable 
+              ? PaymentStatus.notApplicable 
+              : PaymentStatus.unpaid;
         }
 
         final updated = p.copyWith(
-          financials: p.financials.copyWith(
+          financials: f.copyWith(
             supplierPaidAmount: totalSupplierPaid,
             shippingPaidAmount: totalShippingPaid,
             supplierPaymentStatus: sStatus,
@@ -113,8 +129,14 @@ class BillPaymentRepository {
         PaymentStatus sStatus;
         if (sDue <= 0) {
           sStatus = PaymentStatus.notApplicable;
+        } else if (totalSupplierPaid >= (sDue - epsilon)) {
+          sStatus = PaymentStatus.paid;
+        } else if (totalSupplierPaid > epsilon) {
+          sStatus = PaymentStatus.partial;
         } else {
-          sStatus = totalSupplierPaid >= (sDue - epsilon) ? PaymentStatus.paid : (totalSupplierPaid > epsilon ? PaymentStatus.partial : PaymentStatus.unpaid);
+          sStatus = r.supplierPaymentStatus == PaymentStatus.notApplicable 
+              ? PaymentStatus.notApplicable 
+              : PaymentStatus.unpaid;
         }
         
         // --- 2. Shipping Status Calculation ---
@@ -122,8 +144,14 @@ class BillPaymentRepository {
         PaymentStatus shStatus;
         if (shDue <= 0) {
           shStatus = PaymentStatus.notApplicable;
+        } else if (totalShippingPaid >= (shDue - epsilon)) {
+          shStatus = PaymentStatus.paid;
+        } else if (totalShippingPaid > epsilon) {
+          shStatus = PaymentStatus.partial;
         } else {
-          shStatus = totalShippingPaid >= (shDue - epsilon) ? PaymentStatus.paid : (totalShippingPaid > epsilon ? PaymentStatus.partial : PaymentStatus.unpaid);
+          shStatus = r.shippingPaymentStatus == PaymentStatus.notApplicable 
+              ? PaymentStatus.notApplicable 
+              : PaymentStatus.unpaid;
         }
         
         final updated = r.copyWith(
