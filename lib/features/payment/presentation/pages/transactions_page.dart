@@ -55,7 +55,7 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
                   icon: Icons.receipt_long_rounded,
                   actions: [
                     IconButton(
-                      onPressed: () => ref.read(transactionsProvider.notifier).refresh(),
+                      onPressed: () => ref.refresh(transactionsProvider),
                       icon: const Icon(Icons.refresh_rounded, color: AppTheme.accent),
                     ),
                   ],
@@ -368,12 +368,11 @@ class _TxDetailState extends State<_TxDetail> {
                         onPressed: () async {
                           final ok = await showConfirmDialog(context,
                               title: 'Hapus Transaksi',
-                              content: 'Yakin ingin menghapus transaksi ini? Data stok tidak akan kembali otomatis.',
+                              content: 'Yakin ingin menghapus transaksi ini? Stok produk akan dikembalikan secara otomatis.',
                               confirmLabel: 'HAPUS',
                               confirmColor: AppTheme.danger);
                           if (ok) {
-                            await ref.read(transactionRepositoryProvider).deleteTransaction(tx.id);
-                            await ref.read(transactionsProvider.notifier).refresh();
+                            await ref.read(transactionsActionProvider.notifier).deleteTransaction(tx.id);
                             if (context.mounted) showSuccess(context, 'Transaksi berhasil dihapus');
                           }
                         },

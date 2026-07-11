@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -431,42 +434,142 @@ final transactionRepositoryProvider = Provider<TransactionRepository>((ref) {
   return TransactionRepository(user?.uid ?? 'unknown', ref);
 });
 
-final transactionsProvider = AsyncNotifierProvider<TransactionsNotifier, List<Transaction>>(TransactionsNotifier.new);
+final transactionsProvider = StreamProvider<List<Transaction>>((ref) {
+  final repo = ref.watch(transactionRepositoryProvider);
+  if (repo._uid == 'unknown') return Stream.value([]);
+  
+  // Create a stream that emits the current transactions and then watches for changes
+  final controller = StreamController<List<Transaction>>();
+  
+  void update() async {
+    final list = await repo.getAllTransactions();
+    if (!controller.isClosed) controller.add(list);
+  }
 
-class TransactionsNotifier extends AsyncNotifier<List<Transaction>> {
+  // Initial fetch
+  update();
+
+  // Watch the Hive box for changes
+  final boxFuture = repo._getBox();
+  boxFuture.then((box) {
+    final subscription = box.watch().listen((_) => update());
+    ref.onDispose(() => subscription.cancel());
+  });
+
+  ref.onDispose(() => controller.close());
+  return controller.stream;
+});
+
+class TransactionsNotifier extends Notifier<void> {
   TransactionRepository get _repo => ref.read(transactionRepositoryProvider);
+
   @override
-  Future<List<Transaction>> build() async {
-    if (_repo._uid == 'unknown') return [];
-    return _repo.getAllTransactions();
-  }
+  void build() {}
+
   Future<void> refresh() async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(_repo.getAllTransactions);
+    // With StreamProvider, refresh is usually automatic, but we can invalidate if needed
+    ref.invalidate(transactionsProvider);
   }
-  Future<String> checkout({required String paymentMethod, required double amountPaid, double shippingFee = 0, DateTime? dueDate, String? notes}) async {
+
+  Future<String> checkout({
+    required String paymentMethod,
+    required double amountPaid,
+    double shippingFee = 0,
+    DateTime? dueDate,
+    String? notes,
+  }) async {
     final cart = ref.read(cartProvider);
     final settings = ref.read(settingsProvider);
     final prodRepo = ref.read(productRepositoryProvider);
     final debtRepo = ref.read(debtRepositoryProvider);
+
+    // 1. Update Product Stock
     for (final item in cart.items) {
       final baseQty = item.quantity * item.selectedUnit.conversionRate;
       await prodRepo.updateStock(item.product.id, -baseQty);
     }
-    final tx = await _repo.saveTransaction(cart: cart, paymentMethod: paymentMethod, amountPaid: amountPaid, shippingFee: shippingFee, cashierName: settings.ownerName.isEmpty ? 'Admin' : settings.ownerName, notes: notes);
+
+    // 2. Save Transaction
+    final tx = await _repo.saveTransaction(
+      cart: cart,
+      paymentMethod: paymentMethod,
+      amountPaid: amountPaid,
+      shippingFee: shippingFee,
+      cashierName: settings.ownerName.isEmpty ? 'Admin' : settings.ownerName,
+      notes: notes,
+    );
+
+    // 3. Handle Piutang
     if (paymentMethod == AppConstants.paymentPiutang && cart.customerId != null) {
       final remaining = tx.total - amountPaid;
       if (remaining > 0) {
         final debtId = _uuid.v4();
-        final debt = Debt(id: debtId, transactionId: tx.id, customerId: cart.customerId!, customerName: cart.customerName ?? 'Pelanggan', invoiceNumber: tx.invoiceNumber, totalAmount: tx.total, paidAmount: amountPaid, remainingBalance: remaining, dueDate: dueDate ?? DateTime.now().add(const Duration(days: 30)), createdAt: DateTime.now(), status: amountPaid > 0 ? DebtStatus.partiallyPaid : DebtStatus.unpaid, notes: notes);
+        final debt = Debt(
+          id: debtId,
+          transactionId: tx.id,
+          customerId: cart.customerId!,
+          customerName: cart.customerName ?? 'Pelanggan',
+          invoiceNumber: tx.invoiceNumber,
+          totalAmount: tx.total,
+          paidAmount: amountPaid,
+          remainingBalance: remaining,
+          dueDate: dueDate ?? DateTime.now().add(const Duration(days: 30)),
+          createdAt: DateTime.now(),
+          status: amountPaid > 0 ? DebtStatus.partiallyPaid : DebtStatus.unpaid,
+          notes: notes,
+        );
         await debtRepo.createDebt(debt);
       }
     }
+
+    // 4. Clear Cart and Notify Related Providers
     ref.read(cartProvider.notifier).clear();
-    await refresh();
+    
+    // Explicitly invalidate to ensure UI sync
+    ref.invalidate(productsProvider);
+    ref.invalidate(customersProvider);
+    ref.invalidate(salesSummaryProvider);
+    
     return tx.id;
   }
+
+  Future<void> deleteTransaction(String id) async {
+    try {
+      final prodRepo = ref.read(productRepositoryProvider);
+      final debtRepo = ref.read(debtRepositoryProvider);
+      
+      // 1. Get transaction to restore stock
+      final tx = await _repo.getTransactionById(id);
+      if (tx != null) {
+        for (final item in tx.items) {
+          final baseQty = item.quantity * item.conversionRate;
+          await prodRepo.updateStock(item.productId, baseQty);
+        }
+      }
+
+      // 2. Delete linked debt if exists
+      final debts = await ref.read(debtsProvider(null).future);
+      final debt = debts.firstWhereOrNull((d) => d.transactionId == id);
+      if (debt != null) {
+        await debtRepo.deleteDebt(debt.id);
+      }
+
+      // 3. Delete transaction record
+      await _repo.deleteTransaction(id);
+
+      // 4. Invalidate related providers to ensure sync
+      ref.invalidate(productsProvider);
+      ref.invalidate(customersProvider);
+      ref.invalidate(salesSummaryProvider);
+    } catch (e) {
+      debugPrint('Error deleting transaction: $e');
+      rethrow;
+    }
+  }
 }
+
+// Re-expose the notifier
+final transactionsActionProvider = NotifierProvider<TransactionsNotifier, void>(TransactionsNotifier.new);
 
 final transactionByIdProvider = FutureProvider.family<Transaction?, String>((ref, id) async {
   return ref.watch(transactionRepositoryProvider).getTransactionById(id);

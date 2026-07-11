@@ -77,7 +77,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
 
     setState(() => _processing = true);
     try {
-      final txId = await ref.read(transactionsProvider.notifier).checkout(
+      final txId = await ref.read(transactionsActionProvider.notifier).checkout(
         paymentMethod: _method,
         amountPaid:    (_method == AppConstants.paymentCash || _method == AppConstants.paymentPiutang) ? _paid : finalTotal,
         shippingFee:   _shippingFee, // New
