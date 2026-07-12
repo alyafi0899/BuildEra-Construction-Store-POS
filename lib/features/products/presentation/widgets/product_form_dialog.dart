@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/constants/app_constants.dart';
@@ -262,33 +263,48 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding: const EdgeInsets.all(40),
-      child: SizedBox(
-        width: 740,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // ── Header ──────────────────────────────────────────────────
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: AppTheme.border)),
-              ),
-              child: Row(children: [
-                const Icon(Icons.inventory_2_rounded, color: AppTheme.accent, size: 22),
-                const SizedBox(width: 12),
-                Text(
-                  widget.product == null ? 'Tambah Produk Baru' : 'Edit Produk',
-                  style: Theme.of(context).textTheme.headlineMedium,
+    return Shortcuts(
+      shortcuts: {
+        LogicalKeySet(LogicalKeyboardKey.enter): const ActivateIntent(),
+        LogicalKeySet(LogicalKeyboardKey.numpadEnter): const ActivateIntent(),
+      },
+      child: Actions(
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (intent) => _save(),
+          ),
+        },
+        child: Dialog(
+          insetPadding: const EdgeInsets.all(40),
+          child: SizedBox(
+            width: 740,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ── Header ──────────────────────────────────────────────────
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  decoration: const BoxDecoration(
+                    border: Border(bottom: BorderSide(color: AppTheme.border)),
+                  ),
+                  child: Row(children: [
+                    const Icon(Icons.inventory_2_rounded,
+                        color: AppTheme.accent, size: 22),
+                    const SizedBox(width: 12),
+                    Text(
+                      widget.product == null
+                          ? 'Tambah Produk Baru'
+                          : 'Edit Produk',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close, color: AppTheme.textMuted),
+                    ),
+                  ]),
                 ),
-                const Spacer(),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close, color: AppTheme.textMuted),
-                ),
-              ]),
-            ),
 
             // ── Body ────────────────────────────────────────────────────
             Flexible(
@@ -867,6 +883,8 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
           ],
         ),
       ),
+    ),
+    ),
     );
   }
 

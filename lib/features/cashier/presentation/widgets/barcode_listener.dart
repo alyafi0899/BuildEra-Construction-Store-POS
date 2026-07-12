@@ -56,17 +56,28 @@ class _BarcodeListenerState extends ConsumerState<BarcodeListener> {
       focusNode: _focusNode,
       autofocus: true,
       onKeyEvent: (event) {
+        // 1. Better Typing Detection
         final primaryFocus = FocusManager.instance.primaryFocus;
-        final isTyping = primaryFocus != null && 
-            (primaryFocus.context?.widget is EditableText || 
-             primaryFocus.debugLabel?.contains('EditableText') == true ||
-             primaryFocus.debugLabel?.contains('TextField') == true);
+        
+        // If focus is on an input field, we MUST NOT process as barcode
+        bool isTyping = false;
+        if (primaryFocus != null) {
+          final widget = primaryFocus.context?.widget;
+          final label = primaryFocus.debugLabel ?? '';
+          
+          isTyping = widget is EditableText || 
+                     label.contains('EditableText') || 
+                     label.contains('TextField') ||
+                     label.contains('TextFormField');
+        }
         
         if (isTyping) {
+          // Immediately clear any accidental buffer to avoid "Barcode not found" later
           ref.read(barcodeScannerProvider.notifier).clearBuffer();
           return;
         }
 
+        // 2. Process Barcode
         ref.read(barcodeScannerProvider.notifier).onKeyEvent(
           event,
           onComplete: (barcode) {
@@ -77,15 +88,37 @@ class _BarcodeListenerState extends ConsumerState<BarcodeListener> {
       child: Focus(
         onFocusChange: (hasFocus) {
           if (!hasFocus) {
-            Future.delayed(const Duration(seconds: 2), () {
+            // When we lose focus, we check if the new focus is on a text field.
+            // If it IS a text field, we stay there indefinitely (no refocused to scanner).
+            // We only request focus back if the user clicks on "nothing" or an inert area.
+            
+            // Short delay to let the focus system settle and identify the new target
+            Future.delayed(const Duration(milliseconds: 100), () {
               if (mounted) {
                 final primaryFocus = FocusManager.instance.primaryFocus;
-                final isTyping = primaryFocus != null && 
-                    (primaryFocus.context?.widget is EditableText || 
-                     primaryFocus.debugLabel?.contains('EditableText') == true);
                 
-                if (!isTyping) {
-                  _focusNode.requestFocus();
+                bool isUserInField = false;
+                if (primaryFocus != null) {
+                  final widget = primaryFocus.context?.widget;
+                  final label = primaryFocus.debugLabel ?? '';
+                  isUserInField = widget is EditableText || 
+                                 label.contains('EditableText') || 
+                                 label.contains('TextField') ||
+                                 label.contains('TextFormField');
+                }
+                
+                // If the user is NOT in a field, we eventually want the scanner back.
+                // We use a longer delay (5s) for "safety", but the important part is 
+                // that if isUserInField is TRUE, we NEVER request focus back.
+                if (!isUserInField && primaryFocus != _focusNode) {
+                  Future.delayed(const Duration(seconds: 5), () {
+                    if (mounted) {
+                      final currentFocus = FocusManager.instance.primaryFocus;
+                      if (currentFocus == null || currentFocus.debugLabel == 'Root Focus') {
+                        _focusNode.requestFocus();
+                      }
+                    }
+                  });
                 }
               }
             });

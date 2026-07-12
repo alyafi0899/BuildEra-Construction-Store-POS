@@ -209,17 +209,19 @@ class StatusChip extends StatelessWidget {
 
 class AppSearchField extends StatelessWidget {
   final TextEditingController controller;
-  final FocusNode? focusNode; // New
+  final FocusNode? focusNode;
   final String hintText;
   final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onSubmitted; // New
   final VoidCallback? onClear;
 
   const AppSearchField({
     super.key,
     required this.controller,
-    this.focusNode, // New
+    this.focusNode,
     required this.hintText,
     this.onChanged,
+    this.onSubmitted, // New
     this.onClear,
   });
 
@@ -227,8 +229,9 @@ class AppSearchField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
-      focusNode:  focusNode, // Use FocusNode
+      focusNode:  focusNode,
       onChanged:  onChanged,
+      onSubmitted: onSubmitted, // Integration
       style: const TextStyle(color: AppTheme.textPrimary),
       decoration: InputDecoration(
         hintText:    hintText,
@@ -343,13 +346,17 @@ Future<bool> showConfirmDialog(
 // ── Snack helpers ─────────────────────────────────────────────────────────
 
 void showSuccess(BuildContext context, String msg) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+  final messenger = ScaffoldMessenger.of(context);
+  messenger.clearSnackBars(); // Clear existing to prevent "stacking" lag
+  messenger.showSnackBar(SnackBar(
     content: Row(children: [
       const Icon(Icons.check_circle_outline, color: AppTheme.success, size: 18),
       const SizedBox(width: 8),
-      Text(msg),
+      Expanded(child: Text(msg)),
     ]),
-    duration: const Duration(seconds: 2),
+    duration: const Duration(milliseconds: 1500), // Reduced to 1.5s for faster scanning
+    behavior: SnackBarBehavior.floating,
+    width: 320,
   ));
 }
 

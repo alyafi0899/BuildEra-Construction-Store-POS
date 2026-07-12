@@ -91,40 +91,50 @@ class Product {
     this.units = const [],
   });
 
-  factory Product.fromMap(Map<String, dynamic> m, {List<ProductUnit> units = const []}) =>
-      Product(
-        id:        m['id'] as String? ?? '',
-        name:      m['name'] as String? ?? 'Produk Tanpa Nama',
-        category:  m['category'] as String? ?? 'Lainnya',
-        barcode:   m['barcode'] as String?,
-        description: m['description'] as String?,
-        costPrice: (m['cost_price'] as num? ?? 0).toDouble(),
-        basePrice: (m['base_price'] as num? ?? 0).toDouble(),
-        baseUnit:  m['base_unit'] as String? ?? 'pcs',
-        defaultUnitName: m['default_unit_name'] as String?,
-        stock:     (m['stock'] as num? ?? 0).toDouble(),
-        imagePath: m['image_path'] as String?,
-        financials: ProductFinancials.fromMap(Map<String, dynamic>.from(m['financials'] as Map? ?? {})),
-        createdAt: DateTime.tryParse(m['created_at'] as String? ?? '') ?? DateTime.now(),
-        updatedAt: DateTime.tryParse(m['updated_at'] as String? ?? '') ?? DateTime.now(),
-        units:     units,
-      );
+  factory Product.fromMap(Map<String, dynamic> m) {
+    final unitsData = m['units'] as List? ?? [];
+    final units = unitsData
+        .map((u) => ProductUnit.fromMap(Map<String, dynamic>.from(u as Map)))
+        .toList();
+
+    return Product(
+      id: m['id'] as String? ?? '',
+      name: m['name'] as String? ?? 'Produk Tanpa Nama',
+      category: m['category'] as String? ?? 'Lainnya',
+      barcode: m['barcode'] as String?,
+      description: m['description'] as String?,
+      costPrice: (m['cost_price'] as num? ?? 0).toDouble(),
+      basePrice: (m['base_price'] as num? ?? 0).toDouble(),
+      baseUnit: m['base_unit'] as String? ?? 'pcs',
+      defaultUnitName: m['default_unit_name'] as String?,
+      stock: (m['stock'] as num? ?? 0).toDouble(),
+      imagePath: m['image_path'] as String?,
+      financials: ProductFinancials.fromMap(
+          Map<String, dynamic>.from(m['financials'] as Map? ?? {})),
+      createdAt: DateTime.tryParse(m['created_at'] as String? ?? '') ??
+          DateTime.now(),
+      updatedAt: DateTime.tryParse(m['updated_at'] as String? ?? '') ??
+          DateTime.now(),
+      units: units,
+    );
+  }
 
   Map<String, dynamic> toMap() => {
-        'id':          id,
-        'name':        name,
-        'category':    category,
-        'barcode':     barcode,
+        'id': id,
+        'name': name,
+        'category': category,
+        'barcode': barcode,
         'description': description,
-        'cost_price':  costPrice,
-        'base_price':  basePrice,
-        'base_unit':   baseUnit,
+        'cost_price': costPrice,
+        'base_price': basePrice,
+        'base_unit': baseUnit,
         'default_unit_name': defaultUnitName,
-        'stock':       stock,
-        'image_path':  imagePath,
-        'financials':  financials.toMap(),
-        'created_at':  createdAt.toIso8601String(),
-        'updated_at':  updatedAt.toIso8601String(),
+        'stock': stock,
+        'image_path': imagePath,
+        'financials': financials.toMap(),
+        'created_at': createdAt.toIso8601String(),
+        'updated_at': updatedAt.toIso8601String(),
+        'units': units.map((u) => u.toMap()).toList(),
       };
 
   bool get isLowStock => stock <= 10;

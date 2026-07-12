@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
@@ -121,6 +122,10 @@ class _CashierPageState extends ConsumerState<CashierPage> {
               onClear: () {
                 _searchCtrl.clear();
                 ref.read(productSearchQueryProvider.notifier).set('');
+              },
+              onSubmitted: (_) {
+                final cart = ref.read(cartProvider);
+                if (!cart.isEmpty) PaymentDialog.show(context);
               },
             ),
           ),
@@ -419,220 +424,241 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
   Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider);
 
-    return Column(children: [
-      // Header
-      Container(
-        padding: const EdgeInsets.all(20),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: AppTheme.border)),
-        ),
-        child: Row(children: [
-          const Icon(Icons.shopping_cart_rounded,
-              color: AppTheme.accent, size: 20),
-          const SizedBox(width: 10),
-          Text('Keranjang', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(width: 8),
-          if (cart.itemCount > 0)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: AppTheme.accent,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text('${cart.itemCount}',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700)),
-            ),
-          const Spacer(),
-          if (!cart.isEmpty)
-            TextButton.icon(
-              onPressed: () async {
-                final ok = await showConfirmDialog(context,
-                    title: 'Kosongkan Keranjang',
-                    content: 'Yakin kosongkan semua item?',
-                    confirmLabel: 'Kosongkan',
-                    confirmColor: AppTheme.warning);
-                if (ok) ref.read(cartProvider.notifier).clear();
-              },
-              icon: const Icon(Icons.clear_all_rounded, size: 16),
-              label: const Text('Hapus Semua'),
-            ),
-        ]),
-      ),
-
-      // Cart items
-      Expanded(
-        child: cart.isEmpty
-            ? const EmptyState(
-                icon: Icons.shopping_cart_outlined,
-                title: 'Keranjang kosong',
-                subtitle: 'Pilih produk untuk ditambahkan',
-              )
-            : Scrollbar(
-                controller: _scrollController,
-                thumbVisibility: true,
-                child: ListView.separated(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: cart.items.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (_, i) {
-                    final item = cart.items[i];
-                    return _CartItemTile(
-                      key: ValueKey('cart_item_${item.id}'), // Use stable key
-                      item: item,
-                    );
-                  },
-                ),
-              ),
-      ),
-
-      // Totals & checkout
-      // ...
-
-      // Totals & checkout
-      Container(
-        padding: const EdgeInsets.all(20),
-        decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: AppTheme.border)),
-        ),
+    return Shortcuts(
+      shortcuts: {
+        LogicalKeySet(LogicalKeyboardKey.enter): const ActivateIntent(),
+        LogicalKeySet(LogicalKeyboardKey.numpadEnter): const ActivateIntent(),
+      },
+      child: Actions(
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (intent) =>
+                cart.isEmpty ? null : PaymentDialog.show(context),
+          ),
+        },
         child: Column(children: [
-          // Customer Name (Optional)
-          TextField(
-            style: const TextStyle(fontSize: 13),
-            decoration: const InputDecoration(
-              hintText: 'Nama Pelanggan (Opsional)',
-              isDense: true,
-              prefixIcon: Icon(Icons.person_outline, size: 16),
-              contentPadding: EdgeInsets.symmetric(vertical: 8),
+          // Header
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: AppTheme.border)),
             ),
-            onChanged: (v) => ref
-                .read(cartProvider.notifier)
-                .setCustomer(null, v.isEmpty ? null : v),
+            child: Row(children: [
+              const Icon(Icons.shopping_cart_rounded,
+                  color: AppTheme.accent, size: 20),
+              const SizedBox(width: 10),
+              Text('Keranjang', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(width: 8),
+              if (cart.itemCount > 0)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accent,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text('${cart.itemCount}',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700)),
+                ),
+              const Spacer(),
+              if (!cart.isEmpty)
+                TextButton.icon(
+                  onPressed: () async {
+                    final ok = await showConfirmDialog(context,
+                        title: 'Kosongkan Keranjang',
+                        content: 'Yakin kosongkan semua item?',
+                        confirmLabel: 'Kosongkan',
+                        confirmColor: AppTheme.warning);
+                    if (ok) ref.read(cartProvider.notifier).clear();
+                  },
+                  icon: const Icon(Icons.clear_all_rounded, size: 16),
+                  label: const Text('Hapus Semua'),
+                ),
+            ]),
           ),
-          const SizedBox(height: 12),
 
-          // Subtotal
-          _TotalRow(label: 'Subtotal', value: cart.grossSubtotal),
+          // Cart items
+          Expanded(
+            child: cart.isEmpty
+                ? const EmptyState(
+                    icon: Icons.shopping_cart_outlined,
+                    title: 'Keranjang kosong',
+                    subtitle: 'Pilih produk untuk ditambahkan',
+                  )
+                : Scrollbar(
+                    controller: _scrollController,
+                    thumbVisibility: true,
+                    child: ListView.separated(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: cart.items.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (_, i) {
+                        final item = cart.items[i];
+                        return _CartItemTile(
+                          key: ValueKey('cart_item_${item.id}'), // Use stable key
+                          item: item,
+                        );
+                      },
+                    ),
+                  ),
+          ),
 
-          // Item Discounts
-          if (cart.itemDiscountTotal > 0)
-            _TotalRow(
-                label: 'Potongan Item',
-                value: -cart.itemDiscountTotal,
-                valueColor: AppTheme.success),
-
-          const SizedBox(height: 8),
-
-          // Transaction Discount
-          Row(children: [
-            const Text('Diskon Transaksi',
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-            const Spacer(),
-            SizedBox(
-              width: 50,
-              child: DropdownButton<DiscountType>(
-                value: cart.transDiscountType,
-                isDense: true,
-                isExpanded: true,
-                underline: const SizedBox(),
-                style: const TextStyle(fontSize: 12, color: AppTheme.accent),
-                items: [
-                  DropdownMenuItem(value: DiscountType.fixed, child: Text('Rp')),
-                  DropdownMenuItem(
-                      value: DiscountType.percentage, child: Text('%')),
-                ],
-                onChanged: (v) => ref
-                    .read(cartProvider.notifier)
-                    .setTransDiscount(cart.transDiscountValue, v!),
-              ),
+          // Totals & checkout
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: AppTheme.border)),
             ),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 80,
-              child: TextField(
-                controller: _discountCtrl,
-                focusNode: _discountFocus,
-                keyboardType: TextInputType.number,
-                textAlign: TextAlign.right,
-                style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold),
+            child: Column(children: [
+              // Customer Name (Optional)
+              TextField(
+                style: const TextStyle(fontSize: 13),
                 decoration: const InputDecoration(
+                  hintText: 'Nama Pelanggan (Opsional)',
                   isDense: true,
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  prefixIcon: Icon(Icons.person_outline, size: 16),
+                  contentPadding: EdgeInsets.symmetric(vertical: 8),
                 ),
                 onChanged: (v) => ref
                     .read(cartProvider.notifier)
-                    .setTransDiscount(
-                        double.tryParse(v) ?? 0, cart.transDiscountType),
+                    .setCustomer(null, v.isEmpty ? null : v),
+                onSubmitted: (_) =>
+                    cart.isEmpty ? null : PaymentDialog.show(context),
               ),
-            ),
-          ]),
+              const SizedBox(height: 12),
 
-          const SizedBox(height: 8),
+              // Subtotal
+              _TotalRow(label: 'Subtotal', value: cart.grossSubtotal),
 
-          // PPN
-          Row(children: [
-            const Text('PPN (11%)',
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-            const Spacer(),
-            Switch.adaptive(
-              value: cart.taxEnabled,
-              onChanged: (_) => ref.read(cartProvider.notifier).toggleTax(),
-              activeTrackColor: AppTheme.accent,
-            ),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 80,
-              child: Text(
-                Formatters.currency(cart.taxAmount),
-                textAlign: TextAlign.right,
-                style: const TextStyle(
-                    color: AppTheme.textSecondary, fontSize: 13),
+              // Item Discounts
+              if (cart.itemDiscountTotal > 0)
+                _TotalRow(
+                    label: 'Potongan Item',
+                    value: -cart.itemDiscountTotal,
+                    valueColor: AppTheme.success),
+
+              const SizedBox(height: 8),
+
+              // Transaction Discount
+              Row(children: [
+                const Text('Diskon Transaksi',
+                    style:
+                        TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                const Spacer(),
+                SizedBox(
+                  width: 50,
+                  child: DropdownButton<DiscountType>(
+                    value: cart.transDiscountType,
+                    isDense: true,
+                    isExpanded: true,
+                    underline: const SizedBox(),
+                    style: const TextStyle(fontSize: 12, color: AppTheme.accent),
+                    items: const [
+                      DropdownMenuItem(
+                          value: DiscountType.fixed, child: Text('Rp')),
+                      DropdownMenuItem(
+                          value: DiscountType.percentage, child: Text('%')),
+                    ],
+                    onChanged: (v) => ref
+                        .read(cartProvider.notifier)
+                        .setTransDiscount(cart.transDiscountValue, v!),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 80,
+                  child: TextField(
+                    controller: _discountCtrl,
+                    focusNode: _discountFocus,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    ),
+                    onChanged: (v) => ref
+                        .read(cartProvider.notifier)
+                        .setTransDiscount(
+                            double.tryParse(v) ?? 0, cart.transDiscountType),
+                    onSubmitted: (_) =>
+                        cart.isEmpty ? null : PaymentDialog.show(context),
+                  ),
+                ),
+              ]),
+
+              const SizedBox(height: 8),
+
+              // PPN
+              Row(children: [
+                const Text('PPN (11%)',
+                    style:
+                        TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                const Spacer(),
+                Switch.adaptive(
+                  value: cart.taxEnabled,
+                  onChanged: (_) => ref.read(cartProvider.notifier).toggleTax(),
+                  activeTrackColor: AppTheme.accent,
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 80,
+                  child: Text(
+                    Formatters.currency(cart.taxAmount),
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                        color: AppTheme.textSecondary, fontSize: 13),
+                  ),
+                ),
+              ]),
+
+              const Divider(height: 24, color: AppTheme.border),
+
+              const Divider(height: 24, color: AppTheme.border),
+
+              Row(children: [
+                Text('TOTAL',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontSize: 18)),
+                const Spacer(),
+                Text(Formatters.currency(cart.total),
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          color: AppTheme.accent,
+                          fontSize: 24,
+                        )),
+              ]),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                height: 54,
+                child: ElevatedButton.icon(
+                  onPressed:
+                      cart.isEmpty ? null : () => PaymentDialog.show(context),
+                  icon: const Icon(Icons.payments_rounded),
+                  label: const Text('BAYAR SEKARANG'),
+                  style: ElevatedButton.styleFrom(
+                    textStyle: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w800),
+                    backgroundColor: AppTheme.accent,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
               ),
-            ),
-          ]),
-
-          const Divider(height: 24, color: AppTheme.border),
-
-          Row(children: [
-            Text('TOTAL',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontSize: 18)),
-            const Spacer(),
-            Text(Formatters.currency(cart.total),
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      color: AppTheme.accent,
-                      fontSize: 24,
-                    )),
-          ]),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            height: 54,
-            child: ElevatedButton.icon(
-              onPressed:
-                  cart.isEmpty ? null : () => PaymentDialog.show(context),
-              icon: const Icon(Icons.payments_rounded),
-              label: const Text('BAYAR SEKARANG'),
-              style: ElevatedButton.styleFrom(
-                textStyle:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-                backgroundColor: AppTheme.accent,
-                foregroundColor: Colors.white,
-              ),
-            ),
+            ]),
           ),
         ]),
       ),
-    ]);
+    );
   }
 }
 

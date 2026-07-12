@@ -1,5 +1,6 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -211,43 +212,58 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding: const EdgeInsets.all(40),
-      child: SizedBox(
-        width: 740,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // ── Header ──────────────────────────────────────────────────
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: AppTheme.border)),
-              ),
-              child: Row(children: [
-                const Icon(Icons.add_shopping_cart_rounded, color: AppTheme.accent, size: 22),
-                const SizedBox(width: 12),
-                Text(
-                  widget.record == null ? 'Restock Barang' : 'Edit Data Restock',
-                  style: Theme.of(context).textTheme.headlineMedium,
+    return Shortcuts(
+      shortcuts: {
+        LogicalKeySet(LogicalKeyboardKey.enter): const ActivateIntent(),
+        LogicalKeySet(LogicalKeyboardKey.numpadEnter): const ActivateIntent(),
+      },
+      child: Actions(
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (intent) => _save(),
+          ),
+        },
+        child: Dialog(
+          insetPadding: const EdgeInsets.all(40),
+          child: SizedBox(
+            width: 740,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ── Header ──────────────────────────────────────────────────
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  decoration: const BoxDecoration(
+                    border: Border(bottom: BorderSide(color: AppTheme.border)),
+                  ),
+                  child: Row(children: [
+                    const Icon(Icons.add_shopping_cart_rounded,
+                        color: AppTheme.accent, size: 22),
+                    const SizedBox(width: 12),
+                    Text(
+                      widget.record == null
+                          ? 'Restock Barang'
+                          : 'Edit Data Restock',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close, color: AppTheme.textMuted),
+                    ),
+                  ]),
                 ),
-                const Spacer(),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close, color: AppTheme.textMuted),
-                ),
-              ]),
-            ),
 
-            // ── Body ────────────────────────────────────────────────────
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                // ── Body ────────────────────────────────────────────────────
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                       _productSummary(),
                       const SizedBox(height: 24),
 
@@ -704,6 +720,8 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
           ],
         ),
       ),
+    ),
+    ),
     );
   }
 

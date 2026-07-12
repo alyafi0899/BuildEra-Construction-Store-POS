@@ -3,14 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/providers/auth_provider.dart';
 import 'cart_provider.dart';
 
+/// Global variable to store the UID when launched as a secondary process.
+String? forcedUidForDisplay;
+
 /// This provider is used by the customer display to listen to the "live" cart from Firestore.
 final customerDisplayCartProvider = StreamProvider<CartState?>((ref) {
   final user = ref.watch(authStateProvider).value;
-  if (user == null) return Stream.value(null);
+  final uid = forcedUidForDisplay ?? user?.uid;
+  
+  if (uid == null) return Stream.value(null);
 
   return FirebaseFirestore.instance
       .collection('users')
-      .doc(user.uid)
+      .doc(uid)
       .collection('metadata')
       .doc('customer_display')
       .snapshots()

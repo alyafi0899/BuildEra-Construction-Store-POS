@@ -74,8 +74,9 @@ class ProductRepository {
   Future<void> saveProduct(Product product, List<ProductUnit> units) async {
     final box = await _getBox();
     
-    final data = product.toMap();
-    data['units'] = units.map((u) => u.toMap()).toList();
+    // Create the final product object with units attached
+    final finalProduct = product.copyWith(units: units);
+    final data = finalProduct.toMap();
 
     await box.put(product.id, data);
 

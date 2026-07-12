@@ -41,7 +41,16 @@ Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // 1. Handle Secondary Windows (Customer Display) ASAP
-  if (args.isNotEmpty && args.contains('multi_window')) {
+  // Use more flexible check for arguments
+  final isMultiWindow = args.any((a) => a.contains('multi_window'));
+  
+  if (isMultiWindow) {
+    // Extract UID if provided (e.g., uid=ABC123XYZ or multi_window=ABC123XYZ)
+    final uidArg = args.firstWhere((a) => a.contains('uid='), orElse: () => '');
+    if (uidArg.isNotEmpty) {
+      forcedUidForDisplay = uidArg.split('=')[1];
+    }
+
     await LocalDatabase.init();
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -52,12 +61,13 @@ Future<void> main(List<String> args) async {
     if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
       await windowManager.ensureInitialized();
       WindowOptions windowOptions = const WindowOptions(
-        size: Size(1024, 768),
+        size: const Size(1024, 768),
         center: true,
-        backgroundColor: Color(0xFF0F1117),
+        backgroundColor: Colors.transparent,
+        skipTaskbar: false,
         title: 'Tampilan Pelanggan - BuildEra',
       );
-      windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.waitUntilReadyToShow(windowOptions, () async {
         await windowManager.show();
         await windowManager.focus();
       });

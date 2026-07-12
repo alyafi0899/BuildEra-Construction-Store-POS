@@ -581,7 +581,29 @@ class _BillTile extends ConsumerWidget {
     final remaining = item.amount - item.paidAmount;
     final amountCtrl = TextEditingController(text: remaining.toStringAsFixed(0));
     final notesCtrl = TextEditingController();
-    
+
+    Future<void> submit() async {
+      final val = double.tryParse(amountCtrl.text) ?? 0;
+      if (val <= 0) return;
+
+      final payment = BillPayment(
+        id: const Uuid().v4(),
+        billId: item.id,
+        amount: val,
+        notes: notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim(),
+        createdAt: DateTime.now(),
+        isInitialBill: item.isInitial,
+        isForSupplier: isSupplier,
+      );
+
+      await ref.read(billPaymentRepositoryProvider).savePayment(payment);
+
+      if (context.mounted) {
+        Navigator.pop(context);
+        showSuccess(context, 'Pembayaran berhasil dicatat');
+      }
+    }
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -590,8 +612,10 @@ class _BillTile extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Tagihan: ${item.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
-            Text('Sisa Hutang: ${Formatters.currency(remaining)}', style: const TextStyle(fontSize: 12, color: AppTheme.warning)),
+            Text('Tagihan: ${item.name}',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text('Sisa Hutang: ${Formatters.currency(remaining)}',
+                style: const TextStyle(fontSize: 12, color: AppTheme.warning)),
             const SizedBox(height: 20),
             TextFormField(
               controller: amountCtrl,
@@ -601,6 +625,7 @@ class _BillTile extends ConsumerWidget {
                 prefixText: 'Rp ',
               ),
               keyboardType: TextInputType.number,
+              onFieldSubmitted: (_) => submit(),
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -609,33 +634,16 @@ class _BillTile extends ConsumerWidget {
                 labelText: 'Keterangan / Catatan',
                 hintText: 'Contoh: Titip ke Supir, Transfer Bank, dll',
               ),
+              onFieldSubmitted: (_) => submit(),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Batal')),
           ElevatedButton(
-            onPressed: () async {
-              final val = double.tryParse(amountCtrl.text) ?? 0;
-              if (val <= 0) return;
-              
-              final payment = BillPayment(
-                id: const Uuid().v4(),
-                billId: item.id,
-                amount: val,
-                notes: notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim(),
-                createdAt: DateTime.now(),
-                isInitialBill: item.isInitial,
-                isForSupplier: isSupplier,
-              );
-
-              await ref.read(billPaymentRepositoryProvider).savePayment(payment);
-
-              if (context.mounted) {
-                Navigator.pop(context);
-                showSuccess(context, 'Pembayaran berhasil dicatat');
-              }
-            },
+            onPressed: () => submit(),
             child: const Text('Simpan Pembayaran'),
           ),
         ],

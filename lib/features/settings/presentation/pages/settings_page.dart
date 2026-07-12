@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/theme/theme_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/app_settings_provider.dart';
 import '../../models/store_settings.dart';
@@ -217,7 +218,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         ),
 
                         const SizedBox(height: 40),
-                        const _SectionTitle(title: 'Pengaturan Tampilan & Jendela'),
+                        const _SectionTitle(title: 'Pengaturan Tampilan & Tema'),
+                        const SizedBox(height: 16),
+                        //_buildThemeSelector(ref),
                         const SizedBox(height: 16),
                         _buildAppSettings(ref),
 
@@ -273,6 +276,112 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       ],
     );
   }
+
+  // Widget _buildThemeSelector(WidgetRef ref) {
+  //   final currentMode = ref.watch(themeProvider);
+  //   final notifier = ref.read(themeProvider.notifier);
+  //   final colorScheme = Theme.of(context).colorScheme;
+  //
+  //   return Container(
+  //     padding: const EdgeInsets.all(20),
+  //     decoration: BoxDecoration(
+  //       color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+  //       borderRadius: BorderRadius.circular(16),
+  //       border: Border.all(color: colorScheme.outline),
+  //     ),
+  //     child: Column(
+  //       crossAxisAlignment: CrossAxisAlignment.start,
+  //       children: [
+  //         Row(
+  //           children: [
+  //             Icon(Icons.palette_rounded, size: 20, color: colorScheme.primary),
+  //             const SizedBox(width: 12),
+  //             const Text('Tema Warna Aplikasi', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+  //           ],
+  //         ),
+  //         const SizedBox(height: 20),
+  //         GridView.count(
+  //           shrinkWrap: true,
+  //           physics: const NeverScrollableScrollPhysics(),
+  //           crossAxisCount: 3,
+  //           mainAxisSpacing: 12,
+  //           crossAxisSpacing: 12,
+  //           childAspectRatio: 2.2,
+  //           children: AppThemeMode.values.map((mode) {
+  //             final isSelected = currentMode == mode;
+  //             final themeData = AppThemes.getTheme(mode);
+  //
+  //             return InkWell(
+  //               onTap: () => notifier.setTheme(mode),
+  //               borderRadius: BorderRadius.circular(12),
+  //               child: AnimatedContainer(
+  //                 duration: const Duration(milliseconds: 200),
+  //                 decoration: BoxDecoration(
+  //                   color: themeData.scaffoldBackgroundColor,
+  //                   borderRadius: BorderRadius.circular(12),
+  //                   border: Border.all(
+  //                     color: isSelected ? colorScheme.primary : colorScheme.outline,
+  //                     width: isSelected ? 2 : 1,
+  //                   ),
+  //                   boxShadow: isSelected ? [
+  //                     BoxShadow(color: colorScheme.primary.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))
+  //                   ] : [],
+  //                 ),
+  //                 child: Stack(
+  //                   children: [
+  //                     Padding(
+  //                       padding: const EdgeInsets.symmetric(horizontal: 16),
+  //                       child: Row(
+  //                         children: [
+  //                           Container(
+  //                             width: 24,
+  //                             height: 24,
+  //                             decoration: BoxDecoration(
+  //                               color: themeData.colorScheme.primary,
+  //                               shape: BoxShape.circle,
+  //                               border: Border.all(color: Colors.white.withValues(alpha: 0.5), width: 2),
+  //                             ),
+  //                           ),
+  //                           const SizedBox(width: 12),
+  //                           Expanded(
+  //                             child: Text(
+  //                               _getThemeLabel(mode),
+  //                               style: TextStyle(
+  //                                 fontSize: 12,
+  //                                 fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
+  //                                 color: themeData.colorScheme.onSurface,
+  //                               ),
+  //                             ),
+  //                           ),
+  //                         ],
+  //                       ),
+  //                     ),
+  //                     if (isSelected)
+  //                       Positioned(
+  //                         top: 8, right: 8,
+  //                         child: Icon(Icons.check_circle_rounded, size: 16, color: colorScheme.primary),
+  //                       ),
+  //                   ],
+  //                 ),
+  //               ),
+  //             );
+  //           }).toList(),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
+  //
+  // String _getThemeLabel(AppThemeMode mode) {
+  //   switch (mode) {
+  //     case AppThemeMode.darkOrange: return 'Dark Orange';
+  //     case AppThemeMode.lightBlue: return 'Light Blue';
+  //     case AppThemeMode.lightBlueOrange: return 'Blue + Orange';
+  //     case AppThemeMode.lightOrangeBlue: return 'Orange + Blue';
+  //     case AppThemeMode.lightOrangeGreen: return 'Orange + Green';
+  //     case AppThemeMode.lightOrange: return 'Light Orange';
+  //   }
+  // }
 
   Widget _buildAppSettings(WidgetRef ref) {
     final appSettings = ref.watch(appSettingsProvider);
@@ -398,9 +507,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   void _openCustomerDisplayUrl(BuildContext context) async {
     try {
-      // Launch a second instance of the current executable with the 'multi_window' argument
-      // This will trigger the dedicated boot path in main.dart
-      await Process.start(Platform.resolvedExecutable, ['multi_window', '1']);
+      final user = ref.read(authStateProvider).value;
+      final args = ['multi_window', 'uid=${user?.uid ?? 'unknown'}'];
+      
+      // Use detached mode to ensure process independence on Windows
+      await Process.start(
+        Platform.resolvedExecutable, 
+        args,
+        mode: ProcessStartMode.detached,
+      );
       
       if (context.mounted) {
         showSuccess(context, 'Membuka jendela pelanggan...');

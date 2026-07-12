@@ -1,5 +1,6 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -102,11 +103,24 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   @override
   Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider);
-    return Dialog(
-      insetPadding: const EdgeInsets.all(60),
-      child: SizedBox(
-        width: 640,
-        child: _success ? _successPanel(context) : _formPanel(context, cart),
+    return Shortcuts(
+      shortcuts: {
+        LogicalKeySet(LogicalKeyboardKey.enter): const ActivateIntent(),
+        LogicalKeySet(LogicalKeyboardKey.numpadEnter): const ActivateIntent(),
+      },
+      child: Actions(
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (intent) => _confirm(),
+          ),
+        },
+        child: Dialog(
+          insetPadding: const EdgeInsets.all(60),
+          child: SizedBox(
+            width: 640,
+            child: _success ? _successPanel(context) : _formPanel(context, cart),
+          ),
+        ),
       ),
     );
   }
@@ -267,6 +281,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
           isDense: true,
         ),
         onChanged: (_) => setState(() {}),
+        onSubmitted: (_) => _confirm(), // Enable enter key to confirm
       ),
       const SizedBox(height: 12),
       if (cart.itemDiscountTotal > 0)
@@ -385,9 +400,10 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
           const SizedBox(height: 16),
         ],
         
-        TextField(
+        TextFormField(
           controller:   _amountCtrl,
           keyboardType: TextInputType.number,
+          autofocus: true, // Auto focus for instant typing
           style: const TextStyle(
               color: AppTheme.textPrimary,
               fontSize:   18,
@@ -398,6 +414,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
             prefixText: 'Rp ',
           ),
           onChanged: (_) => setState(() {}),
+          onFieldSubmitted: (_) => _confirm(), // Enable enter key to confirm
         ),
         
         if (_method == AppConstants.paymentCash && _paid > 0) ...[
@@ -453,7 +470,26 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
 
         // Quick cash buttons
         if (_paid == 0 || _method == AppConstants.paymentCash) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 16),
+          const Text('Pecahan Uang', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textMuted)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _denomBtn(1000),
+              _denomBtn(2000),
+              _denomBtn(5000),
+              _denomBtn(10000),
+              _denomBtn(20000),
+              _denomBtn(50000),
+              _denomBtn(100000),
+              _exactAmountBtn(cart.total + _shippingFee),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Text('Saran Nominal', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textMuted)),
+          const SizedBox(height: 8),
           Wrap(
             spacing: 6,
             runSpacing: 6,
@@ -689,6 +725,40 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _denomBtn(double amt) {
+    return OutlinedButton(
+      onPressed: () {
+        setState(() {
+          final current = double.tryParse(_amountCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+          _amountCtrl.text = (current + amt).toStringAsFixed(0);
+        });
+      },
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        side: const BorderSide(color: AppTheme.accent, width: 1),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      child: Text(Formatters.currency(amt), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  Widget _exactAmountBtn(double total) {
+    return ElevatedButton(
+      onPressed: () {
+        setState(() {
+          _amountCtrl.text = total.toStringAsFixed(0);
+        });
+      },
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppTheme.success,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      child: const Text('Uang Pas', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
     );
   }
 }
