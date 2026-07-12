@@ -1,8 +1,7 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:excel/excel.dart';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:path/path.dart' as p;
+import 'package:printing/printing.dart';
 import '../../../shared/models/product.dart';
 import '../../../shared/models/transaction.dart';
 import '../../features/inventory/models/restock_record.dart';
@@ -29,22 +28,8 @@ class BackupHelper {
   }) async {
     debugPrint('BackupHelper: Starting consolidated backup...');
     
-    // 1. Pick Directory
-    String? selectedDirectory;
-    try {
-      selectedDirectory = await FilePicker.platform.getDirectoryPath(
-        dialogTitle: 'Pilih Folder untuk Menyimpan File Backup Utama',
-      );
-    } catch (e) {
-      if (context.mounted) showError(context, 'Folder Picker Error: $e');
-      return;
-    }
-
-    if (selectedDirectory == null) return;
-
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final fileName = 'BuildEra_MASTER_BACKUP_$timestamp.xlsx';
-    final filePath = p.join(selectedDirectory, fileName);
 
     try {
       if (context.mounted) {
@@ -237,13 +222,11 @@ class BackupHelper {
       // Save and finish
       final bytes = excel.save();
       if (bytes != null) {
-        final outputFile = File(filePath);
-        // Ensure parent directory exists (though it should if picked from folder picker)
-        if (!outputFile.parent.existsSync()) {
-          await outputFile.parent.create(recursive: true);
-        }
-        await outputFile.writeAsBytes(bytes);
-        debugPrint('Consolidated backup successfully saved to: $filePath');
+        await Printing.sharePdf(
+          bytes: Uint8List.fromList(bytes),
+          filename: fileName,
+        );
+        debugPrint('Consolidated backup successfully generated and shared.');
       }
 
     } catch (e, stack) {
