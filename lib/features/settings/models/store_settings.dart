@@ -38,6 +38,7 @@ class StoreSettings {
   final String description;
   final List<BankAccount> bankAccounts;
   final String? logoUrl;
+  final String? qrisImagePath; // New: Local path for QRIS barcode
 
   const StoreSettings({
     this.businessName = '',
@@ -49,6 +50,7 @@ class StoreSettings {
     this.description = '',
     this.bankAccounts = const [],
     this.logoUrl,
+    this.qrisImagePath,
   });
 
   Map<String, dynamic> toMap() {
@@ -62,6 +64,7 @@ class StoreSettings {
       'description': description,
       'bankAccounts': bankAccounts.map((x) => x.toMap()).toList(),
       'logoUrl': logoUrl,
+      'qrisImagePath': qrisImagePath,
     };
   }
 
@@ -79,6 +82,7 @@ class StoreSettings {
               .toList() ??
           [],
       logoUrl: map['logoUrl'],
+      qrisImagePath: map['qrisImagePath'],
     );
   }
 
@@ -96,6 +100,7 @@ class StoreSettings {
     String? description,
     List<BankAccount>? bankAccounts,
     String? logoUrl,
+    String? qrisImagePath,
   }) {
     return StoreSettings(
       businessName: businessName ?? this.businessName,
@@ -107,6 +112,7 @@ class StoreSettings {
       description: description ?? this.description,
       bankAccounts: bankAccounts ?? this.bankAccounts,
       logoUrl: logoUrl ?? this.logoUrl,
+      qrisImagePath: qrisImagePath ?? this.qrisImagePath,
     );
   }
 }

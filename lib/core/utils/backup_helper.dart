@@ -213,13 +213,16 @@ class BackupHelper {
         TextCellValue('JENIS BATCH')
       ]);
 
+      // Optimization: Create lookup maps to avoid O(N^2) search in large datasets
+      final prodMap = {for (var p in products) p.id: p.name};
+      final restockMap = {for (var r in restocks) r.id: r.productName};
+
       for (var p in billPayments) {
-        // Try to find the name from products or restocks
         String targetName = 'ID: ${p.billId}';
         if (p.isInitialBill) {
-          targetName = products.where((item) => item.id == p.billId).firstOrNull?.name ?? targetName;
+          targetName = prodMap[p.billId] ?? targetName;
         } else {
-          targetName = restocks.where((item) => item.id == p.billId).firstOrNull?.productName ?? targetName;
+          targetName = restockMap[p.billId] ?? targetName;
         }
 
         sPay.appendRow([
@@ -234,8 +237,13 @@ class BackupHelper {
       // Save and finish
       final bytes = excel.save();
       if (bytes != null) {
-        await File(filePath).writeAsBytes(bytes);
-        debugPrint('Consolidated backup saved to: $filePath');
+        final outputFile = File(filePath);
+        // Ensure parent directory exists (though it should if picked from folder picker)
+        if (!outputFile.parent.existsSync()) {
+          await outputFile.parent.create(recursive: true);
+        }
+        await outputFile.writeAsBytes(bytes);
+        debugPrint('Consolidated backup successfully saved to: $filePath');
       }
 
     } catch (e, stack) {

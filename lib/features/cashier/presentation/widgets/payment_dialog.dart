@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -564,13 +565,28 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
               border:       Border.all(color: AppTheme.border),
             ),
             child: Column(children: [
-              Icon(
-                _method == AppConstants.paymentQris
-                    ? Icons.qr_code_rounded
-                    : Icons.credit_card_rounded,
-                size:  72,
-                color: AppTheme.textSecondary,
-              ),
+              if (_method == AppConstants.paymentQris && settings.qrisImagePath != null)
+                AspectRatio(
+                  aspectRatio: 5 / 8,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.border),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(7),
+                      child: Image.file(File(settings.qrisImagePath!), fit: BoxFit.cover),
+                    ),
+                  ),
+                )
+              else
+                Icon(
+                  _method == AppConstants.paymentQris
+                      ? Icons.qr_code_rounded
+                      : Icons.credit_card_rounded,
+                  size:  72,
+                  color: AppTheme.textSecondary,
+                ),
               const SizedBox(height: 10),
               Text(_method == AppConstants.paymentQris
                   ? 'Scan QR untuk membayar'

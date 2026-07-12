@@ -1,8 +1,10 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../providers/customer_display_provider.dart';
+import '../../../settings/providers/settings_provider.dart';
 
 class CustomerDisplayPage extends ConsumerWidget {
   const CustomerDisplayPage({super.key});
@@ -116,27 +118,54 @@ class CustomerDisplayPage extends ConsumerWidget {
   }
 
   Widget _buildTotals(dynamic cart) {
-    return Container(
-      padding: const EdgeInsets.all(40),
-      color: AppTheme.surfaceAlt,
-      child: Column(
-        children: [
-          _row('Subtotal', Formatters.currency(cart.grossSubtotal)),
-          if (cart.totalDiscount > 0)
-            _row('Potongan', '- ${Formatters.currency(cart.totalDiscount)}', color: AppTheme.success),
-          if (cart.taxEnabled)
-            _row('PPN (11%)', Formatters.currency(cart.taxAmount)),
-          const Divider(height: 48, thickness: 2),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Consumer(
+      builder: (context, ref, child) {
+        final settings = ref.watch(settingsProvider);
+        
+        return Container(
+          padding: const EdgeInsets.all(32),
+          color: AppTheme.surfaceAlt,
+          child: Column(
             children: [
-              const Text('TOTAL', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24)),
-              Text(Formatters.currency(cart.total), 
-                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 42, color: AppTheme.accent)),
+              if (settings.qrisImagePath != null) ...[
+                const Text('BAYAR VIA QRIS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.accent)),
+                const SizedBox(height: 16),
+                Center(
+                  child: Container(
+                    width: 140,
+                    height: 224, // 140 * 8 / 5
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white, width: 4),
+                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10)],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(File(settings.qrisImagePath!), fit: BoxFit.cover),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
+              _row('Subtotal', Formatters.currency(cart.grossSubtotal)),
+              if (cart.totalDiscount > 0)
+                _row('Potongan', '- ${Formatters.currency(cart.totalDiscount)}', color: AppTheme.success),
+              if (cart.taxEnabled)
+                _row('PPN (11%)', Formatters.currency(cart.taxAmount)),
+              const Divider(height: 32, thickness: 1, color: AppTheme.border),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('TOTAL', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22)),
+                  Text(Formatters.currency(cart.total), 
+                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 36, color: AppTheme.accent)),
+                ],
+              ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 

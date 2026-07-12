@@ -67,16 +67,15 @@ class ImageHelper {
   }
 
   /// Saves image to local Documents directory under user-specific folder
-  static Future<String?> saveLocally(String uid, String productId, Uint8List bytes) async {
+  static Future<String?> saveLocally(String uid, String fileName, Uint8List bytes, {String subFolder = 'product_images'}) async {
     try {
       final docDir = await getApplicationDocumentsDirectory();
-      final userDir = Directory(path.join(docDir.path, 'KonstruksiPOS', uid, 'product_images'));
+      final userDir = Directory(path.join(docDir.path, 'KonstruksiPOS', uid, subFolder));
       
       if (!await userDir.exists()) {
         await userDir.create(recursive: true);
       }
 
-      final fileName = '$productId.jpg';
       final file = File(path.join(userDir.path, fileName));
       
       await file.writeAsBytes(bytes);

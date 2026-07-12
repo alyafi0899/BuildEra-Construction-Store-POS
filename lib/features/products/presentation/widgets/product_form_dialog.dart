@@ -206,7 +206,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
       String? imagePath = _existingImagePath;
       if (_imageBytes != null) {
         final processed = await ImageHelper.processImage(_imageBytes!);
-        imagePath = await ImageHelper.saveLocally(user.uid, productId, processed);
+        imagePath = await ImageHelper.saveLocally(user.uid, '$productId.jpg', processed);
       }
 
       final product = Product(

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/theme_provider.dart';
+import '../../../../core/utils/image_helper.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/app_settings_provider.dart';
 import '../../models/store_settings.dart';
@@ -201,6 +202,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         _buildInput('Deskripsi Toko', _descriptionCtrl, Icons.description_rounded, maxLines: 3),
                         
                         const SizedBox(height: 40),
+                        const _SectionTitle(title: 'Metode Pembayaran Digital'),
+                        const SizedBox(height: 16),
+                        _buildQrisSetting(ref),
+
+                        const SizedBox(height: 40),
                         const _SectionTitle(title: 'Data & Backup'),
                         const SizedBox(height: 16),
                         AppCard(
@@ -382,6 +388,114 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   //     case AppThemeMode.lightOrange: return 'Light Orange';
   //   }
   // }
+
+  Widget _buildQrisSetting(WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.outline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.qr_code_2_rounded, size: 20, color: colorScheme.primary),
+              const SizedBox(width: 12),
+              const Text('Barcode QRIS Toko', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Preview Box (5:8 Aspect Ratio)
+              Container(
+                width: 120,
+                height: 192, // 120 * 8 / 5
+                decoration: BoxDecoration(
+                  color: colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: colorScheme.outline),
+                ),
+                child: settings.qrisImagePath != null
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(11),
+                        child: Image.file(File(settings.qrisImagePath!), fit: BoxFit.cover),
+                      )
+                    : Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.qr_code_scanner_rounded, size: 32, color: colorScheme.onSurface.withValues(alpha: 0.2)),
+                          const SizedBox(height: 8),
+                          Text('Belum ada', style: TextStyle(fontSize: 10, color: colorScheme.onSurface.withValues(alpha: 0.4))),
+                        ],
+                      ),
+              ),
+              const SizedBox(width: 24),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Upload Barcode QRIS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(height: 4),
+                    const Text('Gambar ini akan ditampilkan di layar kasir dan layar pelanggan saat memilih metode pembayaran QRIS.',
+                      style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            final bytes = await ImageHelper.pickAndCropImage(context);
+                            if (bytes != null) {
+                              final user = ref.read(authStateProvider).value;
+                              if (user == null) return;
+                              final processed = await ImageHelper.processImage(bytes);
+                              final path = await ImageHelper.saveLocally(user.uid, 'qris_barcode.jpg', processed, subFolder: 'store_assets');
+                              if (path != null) {
+                                final updated = settings.copyWith(qrisImagePath: path);
+                                ref.read(settingsProvider.notifier).updateSettings(updated);
+                                if (mounted) {
+                                  showSuccess(context, 'Barcode QRIS berhasil diperbarui');
+                                }
+                              }
+                            }
+                          },
+                          icon: const Icon(Icons.upload_rounded, size: 18),
+                          label: const Text('Pilih Gambar'),
+                        ),
+                        if (settings.qrisImagePath != null) ...[
+                          const SizedBox(width: 12),
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              final updated = settings.copyWith(qrisImagePath: null);
+                              ref.read(settingsProvider.notifier).updateSettings(updated);
+                              showSuccess(context, 'Barcode QRIS dihapus');
+                            },
+                            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                            label: const Text('Hapus'),
+                            style: OutlinedButton.styleFrom(foregroundColor: AppTheme.danger, side: const BorderSide(color: AppTheme.danger)),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text('Rekomendasi: Gambar vertikal dengan perbandingan 5:8 untuk hasil terbaik.',
+                      style: TextStyle(fontSize: 11, color: colorScheme.onSurface.withValues(alpha: 0.4), fontStyle: FontStyle.italic)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildAppSettings(WidgetRef ref) {
     final appSettings = ref.watch(appSettingsProvider);
