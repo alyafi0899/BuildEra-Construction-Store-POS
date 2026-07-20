@@ -45,10 +45,11 @@ class _CashierPageState extends ConsumerState<CashierPage> {
       // the barcode into the field. We clear it to prevent the scanner's 'Enter' 
       // from triggering the payment dialog.
       if (next.wasFocused) {
-        _searchCtrl.clear();
-        ref.read(productSearchQueryProvider.notifier).set('');
-        // Optional: Ensure the field stays focused but empty
-        // _searchFocus.requestFocus(); 
+        _searchCtrl.text = next.barcode;
+        _searchCtrl.selection = TextSelection.fromPosition(
+          TextPosition(offset: next.barcode.length),
+        );
+        ref.read(productSearchQueryProvider.notifier).set(next.barcode);
         return;
       }
 
@@ -137,6 +138,7 @@ class _CashierPageState extends ConsumerState<CashierPage> {
                   _searchCtrl.clear();
                   ref.read(productSearchQueryProvider.notifier).set('');
                 },
+                onSubmitted: (v) => ref.read(productSearchQueryProvider.notifier).set(v),
               ),
             ),
   

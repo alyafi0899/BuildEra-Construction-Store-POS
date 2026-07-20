@@ -184,7 +184,7 @@ class _BarcodeListenerState extends ConsumerState<BarcodeListener> {
       return;
     }
 
-    if (widget.autoAdd) {
+    if (widget.autoAdd && !isUserInField) {
       ref.read(cartProvider.notifier).addProduct(matching);
       showSuccess(context, '${matching.name} masuk keranjang');
     }
