@@ -5,8 +5,13 @@ class BarcodeEvent {
   final String barcode;
   final Product? product;
   final DateTime timestamp;
+  final bool wasFocused;
 
-  BarcodeEvent({required this.barcode, this.product}) : timestamp = DateTime.now();
+  BarcodeEvent({
+    required this.barcode, 
+    this.product,
+    this.wasFocused = false,
+  }) : timestamp = DateTime.now();
 }
 
 /// Use Notifier instead of StateProvider for better compatibility on Windows

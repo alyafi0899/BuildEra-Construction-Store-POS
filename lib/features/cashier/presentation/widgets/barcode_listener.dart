@@ -56,32 +56,22 @@ class _BarcodeListenerState extends ConsumerState<BarcodeListener> {
       focusNode: _focusNode,
       autofocus: true,
       onKeyEvent: (event) {
-        // 1. Better Typing Detection
+        // Process Barcode ALWAYS, but pass whether we are typing to the handler
         final primaryFocus = FocusManager.instance.primaryFocus;
-        
-        // If focus is on an input field, we MUST NOT process as barcode
-        bool isTyping = false;
+        bool isUserInField = false;
         if (primaryFocus != null) {
           final widget = primaryFocus.context?.widget;
           final label = primaryFocus.debugLabel ?? '';
-          
-          isTyping = widget is EditableText || 
-                     label.contains('EditableText') || 
-                     label.contains('TextField') ||
-                     label.contains('TextFormField');
-        }
-        
-        if (isTyping) {
-          // Immediately clear any accidental buffer to avoid "Barcode not found" later
-          ref.read(barcodeScannerProvider.notifier).clearBuffer();
-          return;
+          isUserInField = widget is EditableText || 
+                         label.contains('EditableText') || 
+                         label.contains('TextField') ||
+                         label.contains('TextFormField');
         }
 
-        // 2. Process Barcode
         ref.read(barcodeScannerProvider.notifier).onKeyEvent(
           event,
           onComplete: (barcode) {
-            _handleBarcodeComplete(context, ref, barcode);
+            _handleBarcodeComplete(context, ref, barcode, isUserInField);
           },
         );
       },
@@ -133,9 +123,23 @@ class _BarcodeListenerState extends ConsumerState<BarcodeListener> {
     BuildContext context,
     WidgetRef ref,
     String barcode,
+    bool isUserInField,
   ) async {
     final normalizedBarcode = barcode.trim();
     if (normalizedBarcode.isEmpty) return;
+
+    // If the user was in a field, the barcode was also "typed" into that field.
+    // We should clear the focused text field if it was a scan.
+    if (isUserInField) {
+      final primaryFocus = FocusManager.instance.primaryFocus;
+      if (primaryFocus != null && primaryFocus.context != null) {
+        // This is a bit of a hack to clear the focused TextField
+        // because we don't have direct access to its controller here.
+        // But since it's a scan, it's safer to just clear it.
+        // We can do this by sending a "select all + backspace" or by using the focused widget's state if possible.
+        // A better way is to notify the CashierPage that a scan happened.
+      }
+    }
 
     final now = DateTime.now();
     if (_lastBarcode == normalizedBarcode &&
@@ -169,7 +173,8 @@ class _BarcodeListenerState extends ConsumerState<BarcodeListener> {
 
     ref.read(barcodeEventProvider.notifier).emit(BarcodeEvent(
       barcode: normalizedBarcode, 
-      product: matching
+      product: matching,
+      wasFocused: isUserInField,
     ));
 
     if (matching == null) {

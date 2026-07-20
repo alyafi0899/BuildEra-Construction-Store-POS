@@ -41,6 +41,17 @@ class _CashierPageState extends ConsumerState<CashierPage> {
     ref.listen<BarcodeEvent?>(barcodeEventProvider, (prev, next) {
       if (next == null) return;
       
+      // If a barcode was scanned while the field was focused, it likely wrote 
+      // the barcode into the field. We clear it to prevent the scanner's 'Enter' 
+      // from triggering the payment dialog.
+      if (next.wasFocused) {
+        _searchCtrl.clear();
+        ref.read(productSearchQueryProvider.notifier).set('');
+        // Optional: Ensure the field stays focused but empty
+        // _searchFocus.requestFocus(); 
+        return;
+      }
+
       // Only react if NOT in auto-add mode, to show search results
       if (!autoAdd) {
         _searchCtrl.text = next.barcode;
@@ -125,10 +136,6 @@ class _CashierPageState extends ConsumerState<CashierPage> {
                 onClear: () {
                   _searchCtrl.clear();
                   ref.read(productSearchQueryProvider.notifier).set('');
-                },
-                onSubmitted: (_) {
-                  final cart = ref.read(cartProvider);
-                  if (!cart.isEmpty) PaymentDialog.show(context);
                 },
               ),
             ),
