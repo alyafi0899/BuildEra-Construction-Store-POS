@@ -88,31 +88,26 @@ class BlurGate extends ConsumerWidget {
       children: [
         child,
         Positioned.fill(
-          child: ClipRRect(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-              child: Container(
-                color: AppTheme.surface.withValues(alpha: 0.6),
-                child: Center(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.lock_rounded, color: AppTheme.accent, size: 16),
-                        const SizedBox(height: 2),
-                        TextButton(
-                          onPressed: () => _showPinDialog(context, ref),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: const Text('Unlock', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                        ),
-                      ],
+          child: Container(
+            color: AppTheme.surface.withValues(alpha: 0.98), // Solid cover is 100x faster than blur
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.lock_rounded, color: AppTheme.accent, size: 14),
+                    const SizedBox(height: 2),
+                    TextButton(
+                      onPressed: () => _showPinDialog(context, ref),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text('Unlock', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ),

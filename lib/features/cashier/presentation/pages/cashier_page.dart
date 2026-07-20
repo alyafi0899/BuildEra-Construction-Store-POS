@@ -276,9 +276,11 @@ class _ProductGridState extends ConsumerState<_ProductGrid> {
         padding: const EdgeInsets.all(20),
         itemCount: products.length,
         separatorBuilder: (_, __) => const SizedBox(height: 8),
-        itemBuilder: (_, i) => _ProductListTile(
-          key: ValueKey('cashier_prod_${products[i].id}'),
-          product: products[i],
+        itemBuilder: (_, i) => RepaintBoundary(
+          child: _ProductListTile(
+            key: ValueKey('cashier_prod_${products[i].id}'),
+            product: products[i],
+          ),
         ),
       ),
     );

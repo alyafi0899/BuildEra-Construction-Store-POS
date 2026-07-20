@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -317,9 +318,26 @@ class ProductRepository {
 // ── Providers ─────────────────────────────────────────────────────────────
 
 class ProductSearchQuery extends Notifier<String> {
+  Timer? _debounceTimer;
+
   @override
-  String build() => '';
-  void set(String query) => state = query;
+  String build() {
+    ref.onDispose(() => _debounceTimer?.cancel());
+    return '';
+  }
+
+  void set(String query) {
+    if (query.isEmpty) {
+      _debounceTimer?.cancel();
+      state = '';
+      return;
+    }
+
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      state = query;
+    });
+  }
 }
 
 final productSearchQueryProvider = NotifierProvider<ProductSearchQuery, String>(ProductSearchQuery.new);

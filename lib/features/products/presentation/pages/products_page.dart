@@ -464,12 +464,14 @@ class _ProductTableState extends State<_ProductTable> {
           }
 
           final product = widget.products[index - 1];
-          return _ProductRow(
-            key: ValueKey('prod_row_${product.id}'),
-            product: product,
-            isEven:  index.isEven,
-            isSelected: widget.selectedIds.contains(product.id),
-            onToggleSelect: () => widget.onToggleSelect(product.id),
+          return RepaintBoundary(
+            child: _ProductRow(
+              key: ValueKey('prod_row_${product.id}'),
+              product: product,
+              isEven:  index.isEven,
+              isSelected: widget.selectedIds.contains(product.id),
+              onToggleSelect: () => widget.onToggleSelect(product.id),
+            ),
           );
         },
       ),

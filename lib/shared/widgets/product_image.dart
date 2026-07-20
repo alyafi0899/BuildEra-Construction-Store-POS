@@ -32,11 +32,15 @@ class ProductImage extends StatelessWidget {
       return Icon(Icons.inventory_2_rounded, color: AppTheme.textMuted, size: size * 0.5);
     }
 
+    final int cacheSize = (size * 2).toInt(); // 2x for retina quality but still limited
+
     if (imagePath!.startsWith('http')) {
       // Legacy network images
       return Image.network(
         imagePath!,
         fit: BoxFit.cover,
+        cacheWidth: cacheSize,
+        cacheHeight: cacheSize,
         errorBuilder: (_, __, ___) => Icon(Icons.broken_image_rounded, color: AppTheme.danger, size: size * 0.5),
       );
     }
@@ -50,6 +54,8 @@ class ProductImage extends StatelessWidget {
     return Image.file(
       file,
       fit: BoxFit.cover,
+      cacheWidth: cacheSize,
+      cacheHeight: cacheSize,
       errorBuilder: (_, __, ___) => Icon(Icons.broken_image_rounded, color: AppTheme.danger, size: size * 0.5),
     );
   }
