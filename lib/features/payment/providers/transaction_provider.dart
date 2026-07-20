@@ -452,6 +452,7 @@ final transactionsProvider = StreamProvider<List<Transaction>>((ref) {
   // Watch the Hive box for changes
   final boxFuture = repo._getBox();
   boxFuture.then((box) {
+    if (!ref.mounted) return;
     final subscription = box.watch().listen((_) => update());
     ref.onDispose(() => subscription.cancel());
   });
@@ -515,6 +516,7 @@ class TransactionsNotifier extends Notifier<void> {
           remainingBalance: remaining,
           dueDate: dueDate ?? DateTime.now().add(const Duration(days: 30)),
           createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
           status: amountPaid > 0 ? DebtStatus.partiallyPaid : DebtStatus.unpaid,
           notes: notes,
         );

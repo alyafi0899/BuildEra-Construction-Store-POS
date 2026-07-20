@@ -16,6 +16,7 @@ import '../../../products/models/shipping_service.dart';
 import '../../../products/providers/entity_provider.dart';
 import '../../models/bill_payment.dart';
 import '../../providers/bill_payment_provider.dart';
+import '../../../../shared/widgets/security_gate.dart';
 
 class BillsPage extends ConsumerStatefulWidget {
   const BillsPage({super.key});
@@ -46,9 +47,10 @@ class _BillsPageState extends ConsumerState<BillsPage> with SingleTickerProvider
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      body: Column(
-        children: [
-          const PageHeader(
+      body: PinGate(
+        child: Column(
+          children: [
+            const PageHeader(
             title: 'Manajemen Tagihan',
             subtitle: 'Pantau riwayat biaya dan kelola hutang operasional',
             icon: Icons.receipt_rounded,
@@ -81,6 +83,7 @@ class _BillsPageState extends ConsumerState<BillsPage> with SingleTickerProvider
           ),
         ],
       ),
+    ),
     );
   }
 

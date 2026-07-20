@@ -12,6 +12,7 @@ import '../../../settings/providers/settings_provider.dart';
 import '../../../../shared/models/transaction.dart';
 import '../../../../shared/models/product.dart';
 import '../../../inventory/models/restock_record.dart';
+import '../../../../shared/widgets/security_gate.dart';
 
 class AnalyticsPage extends ConsumerStatefulWidget {
   const AnalyticsPage({super.key});
@@ -80,10 +81,11 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      body: Column(
-        children: [
-          // Header
-          PageHeader(
+      body: PinGate(
+        child: Column(
+          children: [
+            // Header
+            PageHeader(
             title: 'Analitik & Wawasan Bisnis',
             subtitle: 'Pemantauan performa finansial dan operasional toko',
             icon: Icons.analytics_rounded,
@@ -220,7 +222,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               ),
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -42,7 +42,7 @@ class ProductFormDialog extends ConsumerStatefulWidget {
 
 class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _name, _barcode, _description, _costPrice, _basePrice, _stock, _categoryCtrl, _baseUnitCtrl;
+  late final TextEditingController _name, _barcode, _description, _costPrice, _basePrice, _stock, _categoryCtrl, _baseUnitCtrl, _profitPercentCtrl;
   late final TextEditingController _supplierPrice, _supplierShippingCost, _supplierName, _shippingServiceName;
   String? _defaultUnitName;
   late List<_UnitEntry> _units;
@@ -74,6 +74,12 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
     _categoryCtrl = TextEditingController(text: p?.category ?? '');
     _baseUnitCtrl = TextEditingController(text: p?.baseUnit ?? 'pcs');
     
+    _profitPercentCtrl = TextEditingController();
+    if (p != null && p.costPrice > 0) {
+      final percent = ((p.basePrice - p.costPrice) / p.costPrice) * 100;
+      _profitPercentCtrl.text = percent.toStringAsFixed(0);
+    }
+    
     _supplierPrice = TextEditingController(text: f.supplierPrice > 0 ? f.supplierPrice.toStringAsFixed(0) : '');
     _supplierShippingCost = TextEditingController(text: f.supplierShippingCost > 0 ? f.supplierShippingCost.toStringAsFixed(0) : '');
     _supplierName = TextEditingController(text: f.supplierName ?? '');
@@ -98,6 +104,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
     _stock.dispose();
     _categoryCtrl.dispose();
     _baseUnitCtrl.dispose();
+    _profitPercentCtrl.dispose();
     _supplierPrice.dispose();
     _supplierShippingCost.dispose();
     _supplierName.dispose();
@@ -117,17 +124,29 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
       setState(() {
         _costPrice.text = totalCost.toStringAsFixed(0);
       });
+      _applyProfitPercentage();
     }
   }
 
-  void _suggestPrice() {
+  void _applyProfitPercentage() {
     final cost = double.tryParse(_costPrice.text) ?? 0;
-    if (cost > 0) {
-      final suggested = cost * 1.1; // +10%
+    final percent = double.tryParse(_profitPercentCtrl.text) ?? 0;
+    if (cost > 0 && percent > 0) {
+      final sell = cost + (cost * percent / 100);
       setState(() {
-        _basePrice.text = suggested.toStringAsFixed(0);
+        _basePrice.text = sell.toStringAsFixed(0);
       });
     }
+  }
+
+  void _onBasePriceChanged() {
+    final cost = double.tryParse(_costPrice.text) ?? 0;
+    final sell = double.tryParse(_basePrice.text) ?? 0;
+    if (cost > 0 && sell > 0) {
+      final percent = ((sell - cost) / cost) * 100;
+      _profitPercentCtrl.text = percent.toStringAsFixed(0);
+    }
+    setState(() {});
   }
 
   double get _netProfit {
@@ -556,35 +575,65 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                       helperText: !_isManualCost ? 'Dihitung otomatis: (Beli+Ongkir)/Qty' : 'Input harga modal akhir per unit',
                                     ),
                                     keyboardType: TextInputType.number,
-                                    onChanged: (_) => setState(() {}), // Trigger profit update
+                                    onChanged: (_) {
+                                      setState(() {});
+                                      _applyProfitPercentage();
+                                    },
                                     validator: (v) => double.tryParse(v ?? '') == null ? 'Wajib diisi' : null,
                                   ),
                                 ),
                                 const SizedBox(width: 16),
                                 Expanded(
-                                  child: Column(
+                                  child: Row(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      TextFormField(
-                                        controller: _basePrice,
-                                        decoration: InputDecoration(
-                                          labelText: 'Harga Jual per Unit (Rp) *',
-                                          prefixText: 'Rp ',
-                                          suffixIcon: IconButton(
-                                            icon: const Icon(Icons.lightbulb_outline_rounded, color: AppTheme.warning, size: 20),
-                                            tooltip: 'Saran Harga (+10%)',
-                                            onPressed: _suggestPrice,
-                                          ),
+                                      Expanded(
+                                        flex: 2,
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            TextFormField(
+                                              controller: _profitPercentCtrl,
+                                              decoration: InputDecoration(
+                                                labelText: 'Profit %',
+                                                suffixText: '%',
+                                                suffixIcon: PopupMenuButton<int>(
+                                                  icon: const Icon(Icons.arrow_drop_down, size: 20),
+                                                  tooltip: 'Shortcut %',
+                                                  onSelected: (val) {
+                                                    _profitPercentCtrl.text = val.toString();
+                                                    _applyProfitPercentage();
+                                                  },
+                                                  itemBuilder: (context) => [5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29]
+                                                      .map((v) => PopupMenuItem(value: v, child: Text('$v%')))
+                                                      .toList(),
+                                                ),
+                                              ),
+                                              keyboardType: TextInputType.number,
+                                              onChanged: (_) => _applyProfitPercentage(),
+                                            ),
+                                          ],
                                         ),
-                                        keyboardType: TextInputType.number,
-                                        onChanged: (_) => setState(() {}),
-                                        validator: (v) {
-                                          final sell = double.tryParse(v ?? '') ?? 0;
-                                          final cost = double.tryParse(_costPrice.text) ?? 0;
-                                          if (sell <= 0) return 'Wajib diisi';
-                                          if (sell < cost) return 'Harga jual di bawah modal';
-                                          return null;
-                                        },
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        flex: 3,
+                                        child: TextFormField(
+                                          controller: _basePrice,
+                                          decoration: const InputDecoration(
+                                            labelText: 'Harga Jual (Rp) *',
+                                            prefixText: 'Rp ',
+                                          ),
+                                          keyboardType: TextInputType.number,
+                                          onChanged: (_) => _onBasePriceChanged(),
+                                          validator: (v) {
+                                            final sell = double.tryParse(v ?? '') ?? 0;
+                                            final cost = double.tryParse(_costPrice.text) ?? 0;
+                                            if (sell <= 0) return 'Wajib diisi';
+                                            if (sell < cost) return 'Harga jual di bawah modal';
+                                            return null;
+                                          },
+                                        ),
                                       ),
                                     ],
                                   ),

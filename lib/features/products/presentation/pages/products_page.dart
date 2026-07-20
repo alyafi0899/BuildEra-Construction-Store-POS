@@ -11,11 +11,13 @@ import '../../../../shared/widgets/common_widgets.dart';
 import '../../../../shared/widgets/product_image.dart';
 import '../../../../core/utils/barcode_helper.dart';
 import '../../../../shared/widgets/product_detail_dialog.dart';
+import '../../../settings/providers/settings_provider.dart';
 import '../../providers/barcode_history_provider.dart';
 import '../../providers/product_provider.dart';
 import '../widgets/product_form_dialog.dart';
 import '../widgets/excel_import_dialog.dart';
 import '../../models/product_financials.dart';
+import '../../../../shared/widgets/security_gate.dart';
 
 class ProductsPage extends ConsumerStatefulWidget {
   const ProductsPage({super.key});
@@ -194,10 +196,11 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      body: Column(
-        children: [
-          // Top bar
-          PageHeader(
+      body: PinGate(
+        child: Column(
+          children: [
+            // Top bar
+            PageHeader(
           title: 'Manajemen Produk',
           subtitle: 'Kelola daftar produk dan satuan jual',
           icon: Icons.inventory_2_rounded,
@@ -227,6 +230,31 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
               onPressed: () => productsAsync.whenData((p) => _exportToExcel(p)),
               icon:  const Icon(Icons.file_download_outlined, size: 18),
               label: const Text('Export Excel'),
+            ),
+            Consumer(
+              builder: (context, ref, child) {
+                final isUnlocked = ref.watch(pinUnlockProvider);
+                final settings = ref.watch(settingsProvider);
+                if (settings.securityPin == null) return const SizedBox();
+                
+                return IconButton(
+                  onPressed: () {
+                    if (isUnlocked) {
+                      ref.read(pinUnlockProvider.notifier).lock();
+                    } else {
+                      showDialog(
+                        context: context,
+                        builder: (context) => Dialog(
+                          backgroundColor: Colors.transparent,
+                          child: PinGate(child: const SizedBox.shrink()),
+                        ),
+                      );
+                    }
+                  },
+                  icon: Icon(isUnlocked ? Icons.lock_open_rounded : Icons.lock_rounded, color: AppTheme.accent),
+                  tooltip: isUnlocked ? 'Lock Sensitive Data' : 'Unlock Sensitive Data',
+                );
+              },
             ),
             ElevatedButton.icon(
               onPressed: () => ProductFormDialog.show(context),
@@ -260,7 +288,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                   width: 160,
                   height: 48,
                   child: DropdownButtonFormField<String?>(
-                    value:          categoryFilter,
+                    initialValue:   categoryFilter,
                     isExpanded:     true,
                     decoration:     const InputDecoration(labelText: 'Kategori', isDense: true),
                     dropdownColor:  AppTheme.surfaceAlt,
@@ -276,7 +304,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                   width: 160,
                   height: 48,
                   child: DropdownButtonFormField<ProductSortField>(
-                    value:          sort.field,
+                    initialValue:   sort.field,
                     isExpanded:     true,
                     decoration:     const InputDecoration(labelText: 'Urutkan', isDense: true),
                     dropdownColor:  AppTheme.surfaceAlt,
@@ -357,7 +385,9 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                   onSelectAll: () => _toggleSelectAll(sortedProducts),
                 ),
         ),
-      ]),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -555,9 +585,9 @@ class _ProductRow extends StatelessWidget {
             ),
           ),
         ])),
-        Expanded(flex: 1, child: Text(Formatters.currency(product.costPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary))),
+        Expanded(flex: 1, child: BlurGate(child: Text(Formatters.currency(product.costPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)))),
         Expanded(flex: 1, child: Text(Formatters.currency(product.basePrice), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-        Expanded(flex: 1, child: Text(Formatters.currency(profit), textAlign: TextAlign.right, style: TextStyle(color: profit >= 0 ? AppTheme.success : AppTheme.danger, fontWeight: FontWeight.bold, fontSize: 12))),
+        Expanded(flex: 1, child: BlurGate(child: Text(Formatters.currency(profit), textAlign: TextAlign.right, style: TextStyle(color: profit >= 0 ? AppTheme.success : AppTheme.danger, fontWeight: FontWeight.bold, fontSize: 12)))),
         
         Expanded(flex: 1, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           IconButton(

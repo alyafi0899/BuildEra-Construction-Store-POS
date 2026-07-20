@@ -83,15 +83,18 @@ class DebtRepository {
     final debtBox = await _getBox('debts');
     final custBox = await _getBox('customers');
 
+    final now = DateTime.now();
+    final d = debt.updatedAt == debt.createdAt ? debt.copyWith(updatedAt: now) : debt;
+
     // 1. Update Debts Local
-    await debtBox.put(debt.id, debt.toMap());
+    await debtBox.put(d.id, d.toMap());
 
     // 2. Queue Debt Sync
     await _ref.read(syncProvider.notifier).addToQueue(
       collection: 'debts',
-      documentId: debt.id,
+      documentId: d.id,
       action:     SyncAction.create,
-      data:       debt.toMap(),
+      data:       d.toMap(),
     );
 
     // 3. Update Customer Local & Queue Sync
@@ -150,6 +153,7 @@ class DebtRepository {
       paidAmount: debt.paidAmount + amount,
       remainingBalance: newRemaining < 0 ? 0 : newRemaining,
       status: status,
+      updatedAt: now,
     );
     await debtBox.put(debtId, updatedDebt.toMap());
 
@@ -177,7 +181,12 @@ class DebtRepository {
     // 4. Queue other Syncs
     await _ref.read(syncProvider.notifier).addToQueue(
       collection: 'debts', documentId: debtId, action: SyncAction.update,
-      data: {'paid_amount': updatedDebt.paidAmount, 'remaining_balance': updatedDebt.remainingBalance, 'status': updatedDebt.status.name},
+      data: {
+        'paid_amount': updatedDebt.paidAmount, 
+        'remaining_balance': updatedDebt.remainingBalance, 
+        'status': updatedDebt.status.name,
+        'updated_at': updatedDebt.updatedAt.toIso8601String(),
+      },
     );
     await _ref.read(syncProvider.notifier).addToQueue(
       collection: 'debt_payments', documentId: payId, action: SyncAction.create,

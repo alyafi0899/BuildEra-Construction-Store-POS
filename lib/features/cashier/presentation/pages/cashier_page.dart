@@ -12,6 +12,7 @@ import '../../providers/cart_provider.dart';
 import '../../providers/scan_mode_provider.dart';
 import '../../providers/barcode_event_provider.dart';
 import '../widgets/payment_dialog.dart';
+import '../widgets/barcode_listener.dart';
 
 import '../../../../shared/widgets/product_detail_dialog.dart';
 
@@ -56,102 +57,105 @@ class _CashierPageState extends ConsumerState<CashierPage> {
       }
     });
 
-    return Row(children: [
-      // ── Left: Product Search & Grid ──────────────────────────────────
-      Expanded(
-        flex: 6,
-        child: Column(
-          children: [
-            // Header
-            PageHeader(
-            title: 'Kasir',
-            icon: Icons.point_of_sale_rounded,
-            actions: [
-              // Scan Mode Toggle
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: autoAdd
-                      ? AppTheme.accent.withValues(alpha: 0.1)
-                      : AppTheme.surfaceAlt,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                      color: autoAdd ? AppTheme.accent : AppTheme.border),
+    return BarcodeListener(
+      autoAdd: autoAdd,
+      child: Row(children: [
+        // ── Left: Product Search & Grid ──────────────────────────────────
+        Expanded(
+          flex: 6,
+          child: Column(
+            children: [
+              // Header
+              PageHeader(
+              title: 'Kasir',
+              icon: Icons.point_of_sale_rounded,
+              actions: [
+                // Scan Mode Toggle
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: autoAdd
+                        ? AppTheme.accent.withValues(alpha: 0.1)
+                        : AppTheme.surfaceAlt,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                        color: autoAdd ? AppTheme.accent : AppTheme.border),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(autoAdd ? Icons.bolt_rounded : Icons.search_rounded,
+                          size: 16,
+                          color: autoAdd ? AppTheme.accent : AppTheme.textSecondary),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(autoAdd ? 'Jual Langsung' : 'Cari Produk',
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: autoAdd
+                                    ? AppTheme.accent
+                                    : AppTheme.textSecondary)),
+                      ),
+                      const SizedBox(width: 8),
+                      Switch.adaptive(
+                        value: autoAdd,
+                        onChanged: (v) =>
+                            ref.read(scanModeProvider.notifier).setEnabled(v),
+                        activeTrackColor: AppTheme.accent,
+                      ),
+                    ],
+                  ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(autoAdd ? Icons.bolt_rounded : Icons.search_rounded,
-                        size: 16,
-                        color: autoAdd ? AppTheme.accent : AppTheme.textSecondary),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(autoAdd ? 'Jual Langsung' : 'Cari Produk',
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: autoAdd
-                                  ? AppTheme.accent
-                                  : AppTheme.textSecondary)),
-                    ),
-                    const SizedBox(width: 8),
-                    Switch.adaptive(
-                      value: autoAdd,
-                      onChanged: (v) =>
-                          ref.read(scanModeProvider.notifier).setEnabled(v),
-                      activeTrackColor: AppTheme.accent,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              Text(Formatters.date(DateTime.now()),
-                  style: Theme.of(context).textTheme.bodyMedium),
-            ],
-          ),
-          
-          // Search Field (Separated from Header for consistency)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            color: AppTheme.surface,
-            child: AppSearchField(
-              controller: _searchCtrl,
-              hintText: 'Cari produk atau scan barcode...',
-              onChanged: (v) => ref.read(productSearchQueryProvider.notifier).set(v),
-              onClear: () {
-                _searchCtrl.clear();
-                ref.read(productSearchQueryProvider.notifier).set('');
-              },
-              onSubmitted: (_) {
-                final cart = ref.read(cartProvider);
-                if (!cart.isEmpty) PaymentDialog.show(context);
-              },
+                const SizedBox(width: 16),
+                Text(Formatters.date(DateTime.now()),
+                    style: Theme.of(context).textTheme.bodyMedium),
+              ],
             ),
-          ),
-
-          // Category filter chips
-          _CategoryFilter(
-            selected: category,
-            onSelected: (c) => ref.read(productCategoryFilterProvider.notifier).set(c),
-          ),
-
-          // Product grid
-          const Expanded(
-              child: _ProductGrid()),
-        ]),
-      ),
-
-      // ── Right: Cart Panel ────────────────────────────────────────────
-      Container(
-        width: 380,
-        decoration: const BoxDecoration(
-          color: AppTheme.surface,
-          border: Border(left: BorderSide(color: AppTheme.border)),
+            
+            // Search Field (Separated from Header for consistency)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              color: AppTheme.surface,
+              child: AppSearchField(
+                controller: _searchCtrl,
+                hintText: 'Cari produk atau scan barcode...',
+                onChanged: (v) => ref.read(productSearchQueryProvider.notifier).set(v),
+                onClear: () {
+                  _searchCtrl.clear();
+                  ref.read(productSearchQueryProvider.notifier).set('');
+                },
+                onSubmitted: (_) {
+                  final cart = ref.read(cartProvider);
+                  if (!cart.isEmpty) PaymentDialog.show(context);
+                },
+              ),
+            ),
+  
+            // Category filter chips
+            _CategoryFilter(
+              selected: category,
+              onSelected: (c) => ref.read(productCategoryFilterProvider.notifier).set(c),
+            ),
+  
+            // Product grid
+            const Expanded(
+                child: _ProductGrid()),
+          ]),
         ),
-        child: const _CartPanel(),
-      ),
-    ]);
+  
+        // ── Right: Cart Panel ────────────────────────────────────────────
+        Container(
+          width: 380,
+          decoration: const BoxDecoration(
+            color: AppTheme.surface,
+            border: Border(left: BorderSide(color: AppTheme.border)),
+          ),
+          child: const _CartPanel(),
+        ),
+      ]),
+    );
   }
 }
 
@@ -424,241 +428,225 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
   Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider);
 
-    return Shortcuts(
-      shortcuts: {
-        LogicalKeySet(LogicalKeyboardKey.enter): const ActivateIntent(),
-        LogicalKeySet(LogicalKeyboardKey.numpadEnter): const ActivateIntent(),
-      },
-      child: Actions(
-        actions: {
-          ActivateIntent: CallbackAction<ActivateIntent>(
-            onInvoke: (intent) =>
+    return Column(children: [
+      // Header
+      Container(
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: AppTheme.border)),
+        ),
+        child: Row(children: [
+          const Icon(Icons.shopping_cart_rounded,
+              color: AppTheme.accent, size: 20),
+          const SizedBox(width: 10),
+          Text('Keranjang', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(width: 8),
+          if (cart.itemCount > 0)
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppTheme.accent,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text('${cart.itemCount}',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700)),
+            ),
+          const Spacer(),
+          if (!cart.isEmpty)
+            TextButton.icon(
+              onPressed: () async {
+                final ok = await showConfirmDialog(context,
+                    title: 'Kosongkan Keranjang',
+                    content: 'Yakin kosongkan semua item?',
+                    confirmLabel: 'Kosongkan',
+                    confirmColor: AppTheme.warning);
+                if (ok) ref.read(cartProvider.notifier).clear();
+              },
+              icon: const Icon(Icons.clear_all_rounded, size: 16),
+              label: const Text('Hapus Semua'),
+            ),
+        ]),
+      ),
+
+      // Cart items
+      Expanded(
+        child: cart.isEmpty
+            ? const EmptyState(
+                icon: Icons.shopping_cart_outlined,
+                title: 'Keranjang kosong',
+                subtitle: 'Pilih produk untuk ditambahkan',
+              )
+            : Scrollbar(
+                controller: _scrollController,
+                thumbVisibility: true,
+                child: ListView.separated(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: cart.items.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (_, i) {
+                    final item = cart.items[i];
+                    return _CartItemTile(
+                      key: ValueKey('cart_item_${item.id}'), // Use stable key
+                      item: item,
+                    );
+                  },
+                ),
+              ),
+      ),
+
+      // Totals & checkout
+      Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: AppTheme.border)),
+        ),
+        child: Column(children: [
+          // Customer Name (Optional)
+          TextField(
+            style: const TextStyle(fontSize: 13),
+            decoration: const InputDecoration(
+              hintText: 'Nama Pelanggan (Opsional)',
+              isDense: true,
+              prefixIcon: Icon(Icons.person_outline, size: 16),
+              contentPadding: EdgeInsets.symmetric(vertical: 8),
+            ),
+            onChanged: (v) => ref
+                .read(cartProvider.notifier)
+                .setCustomer(null, v.isEmpty ? null : v),
+            onSubmitted: (_) =>
                 cart.isEmpty ? null : PaymentDialog.show(context),
           ),
-        },
-        child: Column(children: [
-          // Header
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: AppTheme.border)),
-            ),
-            child: Row(children: [
-              const Icon(Icons.shopping_cart_rounded,
-                  color: AppTheme.accent, size: 20),
-              const SizedBox(width: 10),
-              Text('Keranjang', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(width: 8),
-              if (cart.itemCount > 0)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppTheme.accent,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text('${cart.itemCount}',
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700)),
-                ),
-              const Spacer(),
-              if (!cart.isEmpty)
-                TextButton.icon(
-                  onPressed: () async {
-                    final ok = await showConfirmDialog(context,
-                        title: 'Kosongkan Keranjang',
-                        content: 'Yakin kosongkan semua item?',
-                        confirmLabel: 'Kosongkan',
-                        confirmColor: AppTheme.warning);
-                    if (ok) ref.read(cartProvider.notifier).clear();
-                  },
-                  icon: const Icon(Icons.clear_all_rounded, size: 16),
-                  label: const Text('Hapus Semua'),
-                ),
-            ]),
-          ),
+          const SizedBox(height: 12),
 
-          // Cart items
-          Expanded(
-            child: cart.isEmpty
-                ? const EmptyState(
-                    icon: Icons.shopping_cart_outlined,
-                    title: 'Keranjang kosong',
-                    subtitle: 'Pilih produk untuk ditambahkan',
-                  )
-                : Scrollbar(
-                    controller: _scrollController,
-                    thumbVisibility: true,
-                    child: ListView.separated(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.all(16),
-                      itemCount: cart.items.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (_, i) {
-                        final item = cart.items[i];
-                        return _CartItemTile(
-                          key: ValueKey('cart_item_${item.id}'), // Use stable key
-                          item: item,
-                        );
-                      },
-                    ),
-                  ),
-          ),
+          // Subtotal
+          _TotalRow(label: 'Subtotal', value: cart.grossSubtotal),
 
-          // Totals & checkout
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: AppTheme.border)),
+          // Item Discounts
+          if (cart.itemDiscountTotal > 0)
+            _TotalRow(
+                label: 'Potongan Item',
+                value: -cart.itemDiscountTotal,
+                valueColor: AppTheme.success),
+
+          const SizedBox(height: 8),
+
+          // Transaction Discount
+          Row(children: [
+            const Text('Diskon Transaksi',
+                style:
+                    TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+            const Spacer(),
+            SizedBox(
+              width: 50,
+              child: DropdownButton<DiscountType>(
+                value: cart.transDiscountType,
+                isDense: true,
+                isExpanded: true,
+                underline: const SizedBox(),
+                style: const TextStyle(fontSize: 12, color: AppTheme.accent),
+                items: const [
+                  DropdownMenuItem(
+                      value: DiscountType.fixed, child: Text('Rp')),
+                  DropdownMenuItem(
+                      value: DiscountType.percentage, child: Text('%')),
+                ],
+                onChanged: (v) => ref
+                    .read(cartProvider.notifier)
+                    .setTransDiscount(cart.transDiscountValue, v!),
+              ),
             ),
-            child: Column(children: [
-              // Customer Name (Optional)
-              TextField(
-                style: const TextStyle(fontSize: 13),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 80,
+              child: TextField(
+                controller: _discountCtrl,
+                focusNode: _discountFocus,
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold),
                 decoration: const InputDecoration(
-                  hintText: 'Nama Pelanggan (Opsional)',
                   isDense: true,
-                  prefixIcon: Icon(Icons.person_outline, size: 16),
-                  contentPadding: EdgeInsets.symmetric(vertical: 8),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 ),
                 onChanged: (v) => ref
                     .read(cartProvider.notifier)
-                    .setCustomer(null, v.isEmpty ? null : v),
+                    .setTransDiscount(
+                        double.tryParse(v) ?? 0, cart.transDiscountType),
                 onSubmitted: (_) =>
                     cart.isEmpty ? null : PaymentDialog.show(context),
               ),
-              const SizedBox(height: 12),
+            ),
+          ]),
 
-              // Subtotal
-              _TotalRow(label: 'Subtotal', value: cart.grossSubtotal),
+          const SizedBox(height: 8),
 
-              // Item Discounts
-              if (cart.itemDiscountTotal > 0)
-                _TotalRow(
-                    label: 'Potongan Item',
-                    value: -cart.itemDiscountTotal,
-                    valueColor: AppTheme.success),
-
-              const SizedBox(height: 8),
-
-              // Transaction Discount
-              Row(children: [
-                const Text('Diskon Transaksi',
-                    style:
-                        TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-                const Spacer(),
-                SizedBox(
-                  width: 50,
-                  child: DropdownButton<DiscountType>(
-                    value: cart.transDiscountType,
-                    isDense: true,
-                    isExpanded: true,
-                    underline: const SizedBox(),
-                    style: const TextStyle(fontSize: 12, color: AppTheme.accent),
-                    items: const [
-                      DropdownMenuItem(
-                          value: DiscountType.fixed, child: Text('Rp')),
-                      DropdownMenuItem(
-                          value: DiscountType.percentage, child: Text('%')),
-                    ],
-                    onChanged: (v) => ref
-                        .read(cartProvider.notifier)
-                        .setTransDiscount(cart.transDiscountValue, v!),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 80,
-                  child: TextField(
-                    controller: _discountCtrl,
-                    focusNode: _discountFocus,
-                    keyboardType: TextInputType.number,
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold),
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    ),
-                    onChanged: (v) => ref
-                        .read(cartProvider.notifier)
-                        .setTransDiscount(
-                            double.tryParse(v) ?? 0, cart.transDiscountType),
-                    onSubmitted: (_) =>
-                        cart.isEmpty ? null : PaymentDialog.show(context),
-                  ),
-                ),
-              ]),
-
-              const SizedBox(height: 8),
-
-              // PPN
-              Row(children: [
-                const Text('PPN (11%)',
-                    style:
-                        TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-                const Spacer(),
-                Switch.adaptive(
-                  value: cart.taxEnabled,
-                  onChanged: (_) => ref.read(cartProvider.notifier).toggleTax(),
-                  activeTrackColor: AppTheme.accent,
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 80,
-                  child: Text(
-                    Formatters.currency(cart.taxAmount),
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                        color: AppTheme.textSecondary, fontSize: 13),
-                  ),
-                ),
-              ]),
-
-              const Divider(height: 24, color: AppTheme.border),
-
-              const Divider(height: 24, color: AppTheme.border),
-
-              Row(children: [
-                Text('TOTAL',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(fontSize: 18)),
-                const Spacer(),
-                Text(Formatters.currency(cart.total),
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          color: AppTheme.accent,
-                          fontSize: 24,
-                        )),
-              ]),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: ElevatedButton.icon(
-                  onPressed:
-                      cart.isEmpty ? null : () => PaymentDialog.show(context),
-                  icon: const Icon(Icons.payments_rounded),
-                  label: const Text('BAYAR SEKARANG'),
-                  style: ElevatedButton.styleFrom(
-                    textStyle: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w800),
-                    backgroundColor: AppTheme.accent,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
+          // PPN
+          Row(children: [
+            const Text('PPN (11%)',
+                style:
+                    TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+            const Spacer(),
+            Switch.adaptive(
+              value: cart.taxEnabled,
+              onChanged: (_) => ref.read(cartProvider.notifier).toggleTax(),
+              activeTrackColor: AppTheme.accent,
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 80,
+              child: Text(
+                Formatters.currency(cart.taxAmount),
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 13),
               ),
-            ]),
+            ),
+          ]),
+
+          const Divider(height: 24, color: AppTheme.border),
+
+          Row(children: [
+            Text('TOTAL',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontSize: 18)),
+            const Spacer(),
+            Text(Formatters.currency(cart.total),
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      color: AppTheme.accent,
+                      fontSize: 24,
+                    )),
+          ]),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            height: 54,
+            child: ElevatedButton.icon(
+              onPressed:
+                  cart.isEmpty ? null : () => PaymentDialog.show(context),
+              icon: const Icon(Icons.payments_rounded),
+              label: const Text('BAYAR SEKARANG'),
+              style: ElevatedButton.styleFrom(
+                textStyle: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.w800),
+                backgroundColor: AppTheme.accent,
+                foregroundColor: Colors.white,
+              ),
+            ),
           ),
         ]),
       ),
-    );
+    ]);
   }
 }
 

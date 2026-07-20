@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/theme/theme_provider.dart';
 import '../../../../core/utils/image_helper.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/app_settings_provider.dart';
@@ -205,6 +205,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         const _SectionTitle(title: 'Metode Pembayaran Digital'),
                         const SizedBox(height: 16),
                         _buildQrisSetting(ref),
+
+                        const SizedBox(height: 40),
+                        const _SectionTitle(title: 'Keamanan Data'),
+                        const SizedBox(height: 16),
+                        _buildPinSetting(ref),
 
                         const SizedBox(height: 40),
                         const _SectionTitle(title: 'Data & Backup'),
@@ -491,6 +496,194 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPinSetting(WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+    final colorScheme = Theme.of(context).colorScheme;
+    final hasPin = settings.securityPin != null;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.outline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(hasPin ? Icons.lock_rounded : Icons.lock_open_rounded, 
+                  size: 20, color: hasPin ? AppTheme.success : AppTheme.warning),
+              const SizedBox(width: 12),
+              Text(hasPin ? 'PIN Keamanan Aktif' : 'PIN Keamanan Belum Dibuat', 
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            hasPin 
+              ? 'Lindungi data laba, modal, dan laporan finansial dari akses yang tidak sah.'
+              : 'Sangat disarankan untuk membuat PIN guna melindungi informasi finansial toko Anda.',
+            style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              if (!hasPin)
+                ElevatedButton.icon(
+                  onPressed: () => _showPinEntryDialog(context, ref, isSetup: true),
+                  icon: const Icon(Icons.add_moderator_rounded, size: 18),
+                  label: const Text('Buat PIN Baru'),
+                )
+              else ...[
+                ElevatedButton.icon(
+                  onPressed: () => _requireAuth(context, ref, onSuccess: () {
+                    _showPinEntryDialog(context, ref, isSetup: true);
+                  }),
+                  icon: const Icon(Icons.edit_note_rounded, size: 18),
+                  label: const Text('Ubah PIN'),
+                ),
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: () => _requireAuth(context, ref, onSuccess: () {
+                    final updated = settings.copyWith(securityPin: null);
+                    ref.read(settingsProvider.notifier).updateSettings(updated);
+                    showSuccess(context, 'PIN Keamanan dinonaktifkan');
+                  }),
+                  icon: const Icon(Icons.no_encryption_gmailerrorred_rounded, size: 18),
+                  label: const Text('Nonaktifkan'),
+                  style: OutlinedButton.styleFrom(foregroundColor: AppTheme.danger, side: const BorderSide(color: AppTheme.danger)),
+                ),
+              ],
+              const Spacer(),
+              if (hasPin)
+                TextButton(
+                  onPressed: () => _requireAuth(context, ref, onSuccess: () {
+                    _showPinEntryDialog(context, ref, isSetup: true);
+                  }),
+                  child: const Text('Lupa PIN?', style: TextStyle(fontSize: 12)),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _requireAuth(BuildContext context, WidgetRef ref, {required VoidCallback onSuccess}) {
+    final emailCtrl = TextEditingController();
+    final passCtrl = TextEditingController();
+    bool loading = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Verifikasi Pemilik'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Masukkan email dan password akun Anda untuk melanjutkan tindakan ini.', 
+                  style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+              const SizedBox(height: 20),
+              TextField(
+                controller: emailCtrl,
+                decoration: const InputDecoration(labelText: 'Email', isDense: true),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: passCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Password', isDense: true),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+            ElevatedButton(
+              onPressed: loading ? null : () async {
+                setState(() => loading = true);
+                try {
+                  await ref.read(authRepositoryProvider).reauthenticate(emailCtrl.text.trim(), passCtrl.text);
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    onSuccess();
+                  }
+                } catch (e) {
+                  if (context.mounted) showError(context, 'Autentikasi Gagal: $e');
+                } finally {
+                  if (context.mounted) setState(() => loading = false);
+                }
+              },
+              child: loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Verifikasi'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPinEntryDialog(BuildContext context, WidgetRef ref, {required bool isSetup}) {
+    final pinCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isSetup ? 'Setel PIN Baru' : 'Masukkan PIN'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Gunakan 4-6 digit angka yang mudah diingat namun aman.', 
+                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+            const SizedBox(height: 20),
+            TextField(
+              controller: pinCtrl,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(labelText: 'PIN Baru', counterText: '', isDense: true),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: confirmCtrl,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(labelText: 'Konfirmasi PIN', counterText: '', isDense: true),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () {
+              if (pinCtrl.text.length < 4) {
+                showError(context, 'PIN minimal 4 digit');
+                return;
+              }
+              if (pinCtrl.text != confirmCtrl.text) {
+                showError(context, 'PIN konfirmasi tidak cocok');
+                return;
+              }
+              
+              final settings = ref.read(settingsProvider);
+              final updated = settings.copyWith(securityPin: pinCtrl.text);
+              ref.read(settingsProvider.notifier).updateSettings(updated);
+              
+              Navigator.pop(context);
+              showSuccess(context, 'PIN Keamanan berhasil diperbarui');
+            },
+            child: const Text('Simpan PIN'),
           ),
         ],
       ),

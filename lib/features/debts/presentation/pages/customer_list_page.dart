@@ -7,6 +7,7 @@ import '../../../../shared/widgets/common_widgets.dart';
 import '../../models/customer.dart';
 import '../../providers/debt_repository.dart';
 import '../pages/customer_debt_detail_page.dart';
+import '../../../../shared/widgets/security_gate.dart';
 
 class CustomerListPage extends ConsumerStatefulWidget {
   const CustomerListPage({super.key});
@@ -93,7 +94,11 @@ class _CustomerListPageState extends ConsumerState<CustomerListPage> {
 
                 return _CustomerTable(
                   customers: filtered,
-                  onEdit: (c) => _showCustomerForm(context, customer: c),
+                  onEdit: (c) {
+                    requirePin(context, ref, () {
+                      _showCustomerForm(context, customer: c);
+                    });
+                  },
                   onDelete: (id) => _deleteCustomer(id),
                 );
               },
@@ -116,11 +121,15 @@ class _CustomerListPageState extends ConsumerState<CustomerListPage> {
         title: 'Hapus Pelanggan',
         content: 'Yakin hapus data pelanggan ini?');
     if (ok) {
-      try {
-        await ref.read(debtRepositoryProvider).deleteCustomer(id);
-        if (mounted) showSuccess(context, 'Data pelanggan dihapus');
-      } catch (e) {
-        if (mounted) showError(context, e.toString());
+      if (mounted) {
+        requirePin(context, ref, () async {
+          try {
+            await ref.read(debtRepositoryProvider).deleteCustomer(id);
+            if (mounted) showSuccess(context, 'Data pelanggan dihapus');
+          } catch (e) {
+            if (mounted) showError(context, e.toString());
+          }
+        });
       }
     }
   }

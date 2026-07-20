@@ -10,6 +10,7 @@ import '../../providers/transaction_provider.dart';
 import '../../../debts/providers/debt_repository.dart';
 import '../../../debts/models/debt.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../shared/widgets/security_gate.dart';
 
 class TransactionsPage extends ConsumerStatefulWidget {
   const TransactionsPage({super.key});
@@ -372,8 +373,12 @@ class _TxDetailState extends State<_TxDetail> {
                               confirmLabel: 'HAPUS',
                               confirmColor: AppTheme.danger);
                           if (ok) {
-                            await ref.read(transactionsActionProvider.notifier).deleteTransaction(tx.id);
-                            if (context.mounted) showSuccess(context, 'Transaksi berhasil dihapus');
+                            if (context.mounted) {
+                              requirePin(context, ref, () async {
+                                await ref.read(transactionsActionProvider.notifier).deleteTransaction(tx.id);
+                                if (context.mounted) showSuccess(context, 'Transaksi berhasil dihapus');
+                              });
+                            }
                           }
                         },
                         icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.danger),

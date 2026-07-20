@@ -39,6 +39,7 @@ class StoreSettings {
   final List<BankAccount> bankAccounts;
   final String? logoUrl;
   final String? qrisImagePath; // New: Local path for QRIS barcode
+  final String? securityPin; // New: PIN for sensitive data
 
   const StoreSettings({
     this.businessName = '',
@@ -51,6 +52,7 @@ class StoreSettings {
     this.bankAccounts = const [],
     this.logoUrl,
     this.qrisImagePath,
+    this.securityPin,
   });
 
   Map<String, dynamic> toMap() {
@@ -65,6 +67,7 @@ class StoreSettings {
       'bankAccounts': bankAccounts.map((x) => x.toMap()).toList(),
       'logoUrl': logoUrl,
       'qrisImagePath': qrisImagePath,
+      'securityPin': securityPin,
     };
   }
 
@@ -83,6 +86,7 @@ class StoreSettings {
           [],
       logoUrl: map['logoUrl'],
       qrisImagePath: map['qrisImagePath'],
+      securityPin: map['securityPin'],
     );
   }
 
@@ -101,6 +105,7 @@ class StoreSettings {
     List<BankAccount>? bankAccounts,
     String? logoUrl,
     String? qrisImagePath,
+    String? securityPin,
   }) {
     return StoreSettings(
       businessName: businessName ?? this.businessName,
@@ -113,6 +118,7 @@ class StoreSettings {
       bankAccounts: bankAccounts ?? this.bankAccounts,
       logoUrl: logoUrl ?? this.logoUrl,
       qrisImagePath: qrisImagePath ?? this.qrisImagePath,
+      securityPin: securityPin ?? this.securityPin,
     );
   }
 }

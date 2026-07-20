@@ -8,7 +8,10 @@ import '../../models/debt.dart';
 import '../../models/debt_payment.dart';
 import '../../providers/debt_repository.dart';
 import '../../utils/debt_report_helper.dart';
+import '../../utils/debt_invoice_helper.dart';
 import '../../../payment/providers/transaction_provider.dart';
+import '../../../settings/providers/settings_provider.dart';
+import '../../../../shared/widgets/security_gate.dart';
 
 class CustomerDebtDetailPage extends ConsumerWidget {
   final Customer customer;
@@ -217,6 +220,29 @@ class _DebtTileState extends ConsumerState<_DebtTile> {
               const SizedBox(width: 16),
               IconButton(
                 onPressed: () async {
+                  final settings = ref.read(settingsProvider);
+                  final payments = ref.read(debtPaymentsProvider((customerId: d.customerId, debtId: d.id))).asData?.value ?? [];
+                  final customers = ref.read(customersProvider).asData?.value ?? [];
+                  final customer = customers.firstWhere((c) => c.id == d.customerId);
+                  await DebtInvoiceHelper.printDebtInvoice(customer, d, payments, settings);
+                },
+                icon: const Icon(Icons.print_rounded, size: 20, color: AppTheme.accent),
+                tooltip: 'Print Nota Piutang',
+              ),
+              IconButton(
+                onPressed: () async {
+                  final settings = ref.read(settingsProvider);
+                  final payments = ref.read(debtPaymentsProvider((customerId: d.customerId, debtId: d.id))).asData?.value ?? [];
+                  final customers = ref.read(customersProvider).asData?.value ?? [];
+                  final customer = customers.firstWhere((c) => c.id == d.customerId);
+                  await DebtInvoiceHelper.downloadDebtInvoice(customer, d, payments, settings);
+                },
+                icon: const Icon(Icons.download_rounded, size: 20, color: AppTheme.accent),
+                tooltip: 'Simpan Nota Piutang',
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: () async {
                   final ok = await showConfirmDialog(context, 
                     title: 'Hapus Piutang', 
                     content: 'Yakin ingin menghapus catatan piutang ini beserta riwayat pembayarannya?',
@@ -224,8 +250,12 @@ class _DebtTileState extends ConsumerState<_DebtTile> {
                     confirmColor: AppTheme.danger
                   );
                   if (ok) {
-                    await ref.read(debtRepositoryProvider).deleteDebt(d.id);
-                    if (context.mounted) showSuccess(context, 'Piutang berhasil dihapus');
+                    if (context.mounted) {
+                      requirePin(context, ref, () async {
+                        await ref.read(debtRepositoryProvider).deleteDebt(d.id);
+                        if (context.mounted) showSuccess(context, 'Piutang berhasil dihapus');
+                      });
+                    }
                   }
                 },
                 icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.danger),

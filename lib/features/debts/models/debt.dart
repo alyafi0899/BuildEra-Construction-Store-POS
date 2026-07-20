@@ -11,6 +11,7 @@ class Debt {
   final double remainingBalance;
   final DateTime dueDate;
   final DateTime createdAt;
+  final DateTime updatedAt; // New
   final DebtStatus status;
   final String? notes;
 
@@ -25,6 +26,7 @@ class Debt {
     required this.remainingBalance,
     required this.dueDate,
     required this.createdAt,
+    required this.updatedAt,
     required this.status,
     this.notes,
   });
@@ -40,6 +42,7 @@ class Debt {
         remainingBalance: (m['remaining_balance'] as num).toDouble(),
         dueDate:          DateTime.parse(m['due_date'] as String),
         createdAt:        DateTime.parse(m['created_at'] as String),
+        updatedAt:        m['updated_at'] != null ? DateTime.parse(m['updated_at'] as String) : DateTime.parse(m['created_at'] as String),
         status:           DebtStatus.values.byName(m['status'] as String),
         notes:            m['notes'] as String?,
       );
@@ -55,6 +58,7 @@ class Debt {
         'remaining_balance': remainingBalance,
         'due_date':          dueDate.toIso8601String(),
         'created_at':        createdAt.toIso8601String(),
+        'updated_at':        updatedAt.toIso8601String(),
         'status':            status.name,
         'notes':             notes,
       };
@@ -63,6 +67,7 @@ class Debt {
     double? paidAmount,
     double? remainingBalance,
     DebtStatus? status,
+    DateTime? updatedAt,
   }) =>
       Debt(
         id:               id,
@@ -75,6 +80,7 @@ class Debt {
         remainingBalance: remainingBalance ?? this.remainingBalance,
         dueDate:          dueDate,
         createdAt:        createdAt,
+        updatedAt:        updatedAt ?? this.updatedAt,
         status:           status ?? this.status,
         notes:            notes,
       );
