@@ -8,7 +8,6 @@ import '../../../../shared/widgets/product_image.dart';
 import '../../../products/providers/product_provider.dart';
 import '../../models/cart_item.dart';
 import '../../providers/cart_provider.dart';
-import '../../providers/scan_mode_provider.dart';
 import '../../providers/barcode_event_provider.dart';
 import '../widgets/payment_dialog.dart';
 import '../widgets/barcode_listener.dart';
@@ -33,7 +32,6 @@ class _CashierPageState extends ConsumerState<CashierPage> {
 
   @override
   Widget build(BuildContext context) {
-    final autoAdd = ref.watch(scanModeProvider);
     final category = ref.watch(productCategoryFilterProvider);
 
     // Listen to global barcode events to update the local search field
@@ -52,24 +50,16 @@ class _CashierPageState extends ConsumerState<CashierPage> {
         return;
       }
 
-      // Only react if NOT in auto-add mode, to show search results
-      if (!autoAdd) {
-        _searchCtrl.text = next.barcode;
-        _searchCtrl.selection = TextSelection.fromPosition(
-          TextPosition(offset: next.barcode.length),
-        );
-        ref.read(productSearchQueryProvider.notifier).set(next.barcode);
-      } else {
-        // If auto-add, clear search field after a successful scan
-        if (next.product != null) {
-          _searchCtrl.clear();
-          ref.read(productSearchQueryProvider.notifier).set('');
-        }
-      }
+      // Only react if NOT in focus, to update search results visually
+      _searchCtrl.text = next.barcode;
+      _searchCtrl.selection = TextSelection.fromPosition(
+        TextPosition(offset: next.barcode.length),
+      );
+      ref.read(productSearchQueryProvider.notifier).set(next.barcode);
     });
 
     return BarcodeListener(
-      autoAdd: autoAdd,
+      autoAdd: true,
       child: Row(children: [
         // ── Left: Product Search & Grid ──────────────────────────────────
         Expanded(
@@ -81,44 +71,6 @@ class _CashierPageState extends ConsumerState<CashierPage> {
               title: 'Kasir',
               icon: Icons.point_of_sale_rounded,
               actions: [
-                // Scan Mode Toggle
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: autoAdd
-                        ? AppTheme.accent.withValues(alpha: 0.1)
-                        : AppTheme.surfaceAlt,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: autoAdd ? AppTheme.accent : AppTheme.border),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(autoAdd ? Icons.bolt_rounded : Icons.search_rounded,
-                          size: 16,
-                          color: autoAdd ? AppTheme.accent : AppTheme.textSecondary),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(autoAdd ? 'Jual Langsung' : 'Cari Produk',
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: autoAdd
-                                    ? AppTheme.accent
-                                    : AppTheme.textSecondary)),
-                      ),
-                      const SizedBox(width: 8),
-                      Switch.adaptive(
-                        value: autoAdd,
-                        onChanged: (v) =>
-                            ref.read(scanModeProvider.notifier).setEnabled(v),
-                        activeTrackColor: AppTheme.accent,
-                      ),
-                    ],
-                  ),
-                ),
                 const SizedBox(width: 16),
                 Text(Formatters.date(DateTime.now()),
                     style: Theme.of(context).textTheme.bodyMedium),
