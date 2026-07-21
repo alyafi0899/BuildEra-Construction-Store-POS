@@ -19,53 +19,72 @@ class PageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+      padding: EdgeInsets.fromLTRB(20, isMobile ? 16 : 24, 20, isMobile ? 12 : 20),
       decoration: const BoxDecoration(
         color: AppTheme.surface,
         border: Border(bottom: BorderSide(color: AppTheme.border)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (icon != null) ...[
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppTheme.accent.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: AppTheme.accent, size: 24),
-            ),
-            const SizedBox(width: 16),
-          ],
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.headlineLarge,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle!,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    overflow: TextOverflow.ellipsis,
+          Row(
+            children: [
+              if (icon != null && !isMobile) ...[
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                ],
+                  child: Icon(icon, color: AppTheme.primary, size: 24),
+                ),
+                const SizedBox(width: 16),
               ],
-            ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: isMobile 
+                        ? Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 18)
+                        : Theme.of(context).textTheme.headlineLarge,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (subtitle != null && !isMobile) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle!,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (!isMobile && actions != null && actions!.isNotEmpty) ...[
+                const SizedBox(width: 16),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: actions!.expand((w) => [w, const SizedBox(width: 12)]).toList()
+                    ..removeLast(),
+                ),
+              ],
+            ],
           ),
-          if (actions != null && actions!.isNotEmpty) ...[
-            const SizedBox(width: 16),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: actions!.expand((w) => [w, const SizedBox(width: 12)]).toList()
-                ..removeLast(),
+          if (isMobile && actions != null && actions!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: actions!.expand((w) => [w, const SizedBox(width: 8)]).toList()
+                  ..removeLast(),
+              ),
             ),
           ],
         ],
@@ -81,6 +100,7 @@ class AppCard extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final Color? color;
   final VoidCallback? onTap;
+  final double? elevation;
 
   const AppCard({
     super.key,
@@ -88,15 +108,17 @@ class AppCard extends StatelessWidget {
     this.padding,
     this.color,
     this.onTap,
+    this.elevation,
   });
 
   @override
   Widget build(BuildContext context) {
     return Card(
       color: color,
+      elevation: elevation ?? 2,
       child: InkWell(
         onTap:        onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: padding ?? const EdgeInsets.all(16),
           child:   child,
@@ -126,7 +148,7 @@ class StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = accentColor ?? AppTheme.accent;
+    final color = accentColor ?? AppTheme.primary;
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -135,8 +157,8 @@ class StatCard extends StatelessWidget {
             Container(
               padding:     const EdgeInsets.all(8),
               decoration:  BoxDecoration(
-                color:        color.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
+                color:        color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: color, size: 20),
             ),
@@ -144,15 +166,15 @@ class StatCard extends StatelessWidget {
             if (subtitle != null)
               Text(subtitle!, style: Theme.of(context).textTheme.bodySmall),
           ]),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           Text(value,
               style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                     color:      AppTheme.textPrimary,
-                    fontSize:   22,
+                    fontSize:   20,
                     fontWeight: FontWeight.w700,
                   )),
           const SizedBox(height: 4),
-          Text(label, style: Theme.of(context).textTheme.bodyMedium),
+          Text(label, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500)),
         ],
       ),
     );
@@ -171,15 +193,22 @@ class SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(children: [
-      if (icon != null) ...[
-        Icon(icon, color: color ?? AppTheme.accent, size: 18),
-        const SizedBox(width: 8),
-      ],
-      Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: color)),
-      const Spacer(),
-      if (trailing != null) trailing!,
-    ]);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(children: [
+        if (icon != null) ...[
+          Icon(icon, color: color ?? AppTheme.primary, size: 20),
+          const SizedBox(width: 10),
+        ],
+        Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(
+          color: color,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.5,
+        )),
+        const Spacer(),
+        if (trailing != null) trailing!,
+      ]),
+    );
   }
 }
 
@@ -193,14 +222,14 @@ class StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color:        color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
-        border:       Border.all(color: color.withValues(alpha: 0.4)),
+        color:        color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border:       Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Text(label,
-          style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+          style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
     );
   }
 }
@@ -253,20 +282,19 @@ class _AppSearchFieldState extends State<AppSearchField> {
       focusNode:  widget.focusNode,
       onChanged:  widget.onChanged,
       onSubmitted: widget.onSubmitted,
-      style: const TextStyle(color: AppTheme.textPrimary),
+      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 15),
       decoration: InputDecoration(
         hintText:    widget.hintText,
-        prefixIcon:  const Icon(Icons.search, color: AppTheme.textMuted, size: 20),
+        prefixIcon:  const Icon(Icons.search_rounded, color: AppTheme.textMuted, size: 22),
         suffixIcon:  widget.controller.text.isNotEmpty
             ? IconButton(
-                icon:    const Icon(Icons.cancel_rounded, size: 18), // Use a clearer "cancel" icon
+                icon:    const Icon(Icons.cancel_rounded, size: 20),
                 onPressed: () {
                   widget.controller.clear();
                   if (widget.onClear != null) widget.onClear!();
-                  setState(() {}); // Force rebuild to hide icon
+                  setState(() {});
                 },
                 color:   AppTheme.textMuted,
-                tooltip: 'Hapus Pencarian',
               )
             : null,
       ),
@@ -293,35 +321,29 @@ class EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 64, color: AppTheme.textMuted),
-          const SizedBox(height: 16),
-          Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: AppTheme.textSecondary)),
-          if (subtitle != null) ...[
-            const SizedBox(height: 8),
-            Text(subtitle!, style: Theme.of(context).textTheme.bodyMedium, textAlign: TextAlign.center),
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceAlt,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 64, color: AppTheme.textMuted),
+            ),
+            const SizedBox(height: 24),
+            Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: AppTheme.textPrimary)),
+            if (subtitle != null) ...[
+              const SizedBox(height: 12),
+              Text(subtitle!, style: Theme.of(context).textTheme.bodyMedium, textAlign: TextAlign.center),
+            ],
+            if (action != null) ...[const SizedBox(height: 32), action!],
           ],
-          if (action != null) ...[const SizedBox(height: 20), action!],
-        ],
+        ),
       ),
-    );
-  }
-}
-
-// ── Divider ───────────────────────────────────────────────────────────────
-
-class AppDivider extends StatelessWidget {
-  final EdgeInsetsGeometry? margin;
-  const AppDivider({super.key, this.margin});
-
-  @override
-  Widget build(BuildContext context) {
-    return Divider(
-      color:  AppTheme.border,
-      height: 1,
-      thickness: 1,
     );
   }
 }
@@ -334,7 +356,7 @@ class AppLoading extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Center(
-      child: CircularProgressIndicator(color: AppTheme.accent),
+      child: CircularProgressIndicator(color: AppTheme.primary),
     );
   }
 }
@@ -345,8 +367,8 @@ Future<bool> showConfirmDialog(
   BuildContext context, {
   required String title,
   required String content,
-  String confirmLabel = 'Hapus',
-  Color confirmColor = AppTheme.danger,
+  String confirmLabel = 'Konfirmasi',
+  Color? confirmColor,
 }) async {
   return await showDialog<bool>(
         context:  context,
@@ -359,7 +381,10 @@ Future<bool> showConfirmDialog(
               child: const Text('Batal'),
             ),
             ElevatedButton(
-              style:     ElevatedButton.styleFrom(backgroundColor: confirmColor),
+              style:     ElevatedButton.styleFrom(
+                backgroundColor: confirmColor ?? AppTheme.primary,
+                minimumSize: const Size(100, 44),
+              ),
               onPressed: () => Navigator.of(context).pop(true),
               child: Text(confirmLabel),
             ),
@@ -373,26 +398,28 @@ Future<bool> showConfirmDialog(
 
 void showSuccess(BuildContext context, String msg) {
   final messenger = ScaffoldMessenger.of(context);
-  messenger.clearSnackBars(); // Clear existing to prevent "stacking" lag
+  messenger.clearSnackBars();
   messenger.showSnackBar(SnackBar(
     content: Row(children: [
-      const Icon(Icons.check_circle_outline, color: AppTheme.success, size: 18),
-      const SizedBox(width: 8),
+      const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 20),
+      const SizedBox(width: 12),
       Expanded(child: Text(msg)),
     ]),
-    duration: const Duration(milliseconds: 1500), // Reduced to 1.5s for faster scanning
+    duration: const Duration(milliseconds: 2000),
     behavior: SnackBarBehavior.floating,
-    width: 320,
+    margin: const EdgeInsets.all(16),
   ));
 }
 
 void showError(BuildContext context, String msg) {
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
     content: Row(children: [
-      const Icon(Icons.error_outline, color: AppTheme.danger, size: 18),
-      const SizedBox(width: 8),
-      Text(msg),
+      const Icon(Icons.error_outline, color: AppTheme.danger, size: 20),
+      const SizedBox(width: 12),
+      Expanded(child: Text(msg)),
     ]),
-    duration: const Duration(seconds: 3),
+    duration: const Duration(seconds: 4),
+    behavior: SnackBarBehavior.floating,
+    margin: const EdgeInsets.all(16),
   ));
 }

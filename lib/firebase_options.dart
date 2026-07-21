@@ -21,20 +21,11 @@ class DefaultFirebaseOptions {
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for android - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return android;
       case TargetPlatform.iOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for ios - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return ios;
       case TargetPlatform.macOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return macos;
       case TargetPlatform.windows:
         return windows;
       case TargetPlatform.linux:
@@ -62,13 +53,40 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions windows = FirebaseOptions(
     apiKey: 'AIzaSyB6K624WVJ3up8hBIsOhy9--pOFKJkUyXc',
-    appId: '1:312764611374:web:d495f6c6125767adcf98bf',
+    appId: '1:312764611374:web:41f086cc42295cc4cf98bf',
     messagingSenderId: '312764611374',
     projectId: 'caltax-caa38',
     authDomain: 'caltax-caa38.firebaseapp.com',
     databaseURL: 'https://caltax-caa38-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'caltax-caa38.firebasestorage.app',
-    measurementId: 'G-M7HM0HPLT8',
+    measurementId: 'G-RZ3MH46YDG',
+  );
+  static const FirebaseOptions macos = FirebaseOptions(
+    apiKey: 'AIzaSyAnSJpZcea7PO98VahlRaAgyEPjrKSiYWs',
+    appId: '1:312764611374:ios:2162319442a28246cf98bf',
+    messagingSenderId: '312764611374',
+    projectId: 'caltax-caa38',
+    databaseURL: 'https://caltax-caa38-default-rtdb.asia-southeast1.firebasedatabase.app',
+    storageBucket: 'caltax-caa38.firebasestorage.app',
+    iosBundleId: 'com.example.konstruksiPos',
   );
 
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyAnSJpZcea7PO98VahlRaAgyEPjrKSiYWs',
+    appId: '1:312764611374:ios:476a7be6f9f3a3d9cf98bf',
+    messagingSenderId: '312764611374',
+    projectId: 'caltax-caa38',
+    databaseURL: 'https://caltax-caa38-default-rtdb.asia-southeast1.firebasedatabase.app',
+    storageBucket: 'caltax-caa38.firebasestorage.app',
+    iosBundleId: 'com.example.buildera',
+  );
+
+  static const FirebaseOptions android = FirebaseOptions(
+    apiKey: 'AIzaSyDZFMsqMoQ9rjUv3Hdjq55jnX8xbC0aP_M',
+    appId: '1:312764611374:android:32b9f9c51e374493cf98bf',
+    messagingSenderId: '312764611374',
+    projectId: 'caltax-caa38',
+    databaseURL: 'https://caltax-caa38-default-rtdb.asia-southeast1.firebasedatabase.app',
+    storageBucket: 'caltax-caa38.firebasestorage.app',
+  );
 }

@@ -10,7 +10,7 @@ import 'features/cashier/presentation/pages/cashier_page.dart';
 import 'features/products/presentation/pages/products_page.dart';
 import 'features/inventory/presentation/pages/inventory_page.dart';
 import 'features/payment/presentation/pages/transactions_page.dart';
-import 'features/analytics/presentation/pages/analytics_page.dart';
+import 'features/analytics/presentation/pages/dashboard_page.dart';
 import 'features/settings/presentation/pages/settings_page.dart';
 import 'features/debts/presentation/pages/piutang_dashboard.dart';
 import 'features/debts/presentation/pages/customer_list_page.dart';
@@ -181,24 +181,51 @@ class MainShell extends ConsumerStatefulWidget {
 }
 
 class _MainShellState extends ConsumerState<MainShell> {
-  final _pages = [
-    const CashierPage(),
+  // Main Navigation Destinations for Bottom Bar
+  final _mainPages = [
+    const AnalyticsPage(), // Dashboard
     const ProductsPage(),
-    const InventoryPage(),
+    const CashierPage(),
     const TransactionsPage(),
-    const PiutangDashboard(),
-    const CustomerListPage(),
-    const AnalyticsPage(),
-    const BarcodeManagementPage(),
     const SettingsPage(),
-    const BillsPage(),
-    const CustomerDisplayPage(),
+  ];
+
+  // Secondary pages (accessible via dashboard or other links)
+  // We'll keep the IndexedStack for now but refactor how we switch
+  final _allPages = [
+    const CashierPage(),           // 0
+    const ProductsPage(),          // 1
+    const InventoryPage(),         // 2
+    const TransactionsPage(),      // 3
+    const PiutangDashboard(),      // 4
+    const CustomerListPage(),       // 5
+    const DashboardPage(),         // 6
+    const BarcodeManagementPage(), // 7
+    const SettingsPage(),          // 8
+    const BillsPage(),             // 9
+    const CustomerDisplayPage(),   // 10
   ];
 
   @override
   Widget build(BuildContext context) {
     final idx = ref.watch(navigationIndexProvider);
+    final isMobile = MediaQuery.of(context).size.width < 800;
     
+    // Mapping for Bottom Navigation Bar (if we only want 5 main tabs)
+    int getBottomIdx(int currentIdx) {
+      if (currentIdx == 6) return 0; // Analytics -> Dashboard
+      if (currentIdx == 1) return 1; // Products
+      if (currentIdx == 0) return 2; // Cashier
+      if (currentIdx == 3) return 3; // Transactions
+      if (currentIdx == 8) return 4; // Settings
+      return 0; // Default to Dashboard
+    }
+
+    void onBottomTabTapped(int index) {
+      const map = [6, 1, 0, 3, 8];
+      ref.read(navigationIndexProvider.notifier).setIndex(map[index]);
+    }
+
     // Auto-lock on navigation
     ref.listen(navigationIndexProvider, (prev, next) {
       if (prev != next) {
@@ -215,25 +242,33 @@ class _MainShellState extends ConsumerState<MainShell> {
       }
     });
 
-    // Keep essential providers warm for backup and analytics
-    ref.watch(productsProvider);
-    ref.watch(restockHistoryProvider);
-    ref.watch(transactionsProvider);
-    ref.watch(customersProvider);
-
-    final shell = Row(children: [
-      AppSidebar(
-        selectedIndex: idx,
-        onItemSelected: (i) => ref.read(navigationIndexProvider.notifier).setIndex(i),
-      ),
-      Expanded(
-        child: IndexedStack(index: idx, children: _pages),
-      ),
-    ]);
-
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      body: shell,
+      body: Row(
+        children: [
+          if (!isMobile)
+            AppSidebar(
+              selectedIndex: idx,
+              onItemSelected: (i) => ref.read(navigationIndexProvider.notifier).setIndex(i),
+            ),
+          Expanded(
+            child: IndexedStack(index: idx, children: _allPages),
+          ),
+        ],
+      ),
+      bottomNavigationBar: isMobile
+          ? BottomNavigationBar(
+              currentIndex: getBottomIdx(idx),
+              onTap: onBottomTabTapped,
+              items: const [
+                BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: 'Beranda'),
+                BottomNavigationBarItem(icon: Icon(Icons.inventory_2_rounded), label: 'Produk'),
+                BottomNavigationBarItem(icon: Icon(Icons.point_of_sale_rounded), label: 'Kasir'),
+                BottomNavigationBarItem(icon: Icon(Icons.receipt_long_rounded), label: 'Transaksi'),
+                BottomNavigationBarItem(icon: Icon(Icons.settings_rounded), label: 'Sistem'),
+              ],
+            )
+          : null,
     );
   }
 }
