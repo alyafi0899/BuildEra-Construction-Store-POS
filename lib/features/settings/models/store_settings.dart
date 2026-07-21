@@ -19,11 +19,11 @@ class BankAccount {
     };
   }
 
-  factory BankAccount.fromMap(Map<String, dynamic> map) {
+  factory BankAccount.fromMap(Map<dynamic, dynamic> map) {
     return BankAccount(
-      bankName: map['bankName'] ?? '',
-      accountNumber: map['accountNumber'] ?? '',
-      accountHolder: map['accountHolder'] ?? '',
+      bankName: map['bankName']?.toString() ?? '',
+      accountNumber: map['accountNumber']?.toString() ?? '',
+      accountHolder: map['accountHolder']?.toString() ?? '',
     );
   }
 }
@@ -71,22 +71,22 @@ class StoreSettings {
     };
   }
 
-  factory StoreSettings.fromMap(Map<String, dynamic> map) {
+  factory StoreSettings.fromMap(Map<dynamic, dynamic> map) {
     return StoreSettings(
-      businessName: map['businessName'] ?? '',
-      ownerName: map['ownerName'] ?? '',
-      phone: map['phone'] ?? '',
-      email: map['email'] ?? '',
-      loginEmail: map['loginEmail'],
-      address: map['address'] ?? '',
-      description: map['description'] ?? '',
+      businessName: map['businessName']?.toString() ?? '',
+      ownerName: map['ownerName']?.toString() ?? '',
+      phone: map['phone']?.toString() ?? '',
+      email: map['email']?.toString() ?? '',
+      loginEmail: map['loginEmail']?.toString(),
+      address: map['address']?.toString() ?? '',
+      description: map['description']?.toString() ?? '',
       bankAccounts: (map['bankAccounts'] as List?)
-              ?.map((x) => BankAccount.fromMap(x as Map<String, dynamic>))
+              ?.map((x) => BankAccount.fromMap(x as Map))
               .toList() ??
           [],
-      logoUrl: map['logoUrl'],
-      qrisImagePath: map['qrisImagePath'],
-      securityPin: map['securityPin'],
+      logoUrl: map['logoUrl']?.toString(),
+      qrisImagePath: map['qrisImagePath']?.toString(),
+      securityPin: map['securityPin']?.toString(),
     );
   }
 

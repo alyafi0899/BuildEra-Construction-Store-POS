@@ -133,16 +133,22 @@ class SyncNotifier extends Notifier<SyncState> {
     if (_isCurrentlyProcessing || _queueBox == null || _queueBox!.isEmpty || !ref.read(isOnlineProvider)) return;
 
     _isCurrentlyProcessing = true;
-    state = state.copyWith(isSyncing: true);
+    state = state.copyWith(isSyncing: true, lastError: null);
     
     final db = FirebaseFirestore.instance;
     final userDoc = db.collection('users').doc(_uid!);
 
     try {
+      // Process in smaller chunks for safety (200 is safer than 400 or 500)
+      const int chunkSize = 200;
+
       while (_queueBox!.isNotEmpty && ref.read(isOnlineProvider)) {
         final batch = db.batch();
         final processedKeys = <dynamic>[];
-        final keys = _queueBox!.keys.take(400).toList();
+        
+        // Take a snapshot of keys to avoid concurrent modification issues
+        final allKeys = _queueBox!.keys.toList();
+        final keys = allKeys.take(chunkSize).toList();
 
         for (final key in keys) {
           final raw = _queueBox!.get(key);
@@ -151,34 +157,46 @@ class SyncNotifier extends Notifier<SyncState> {
             continue;
           }
           
-          final task = SyncTask.fromMap(raw);
-          final docRef = userDoc.collection(task.collection).doc(task.documentId);
+          try {
+            final task = SyncTask.fromMap(Map<String, dynamic>.from(raw as Map));
+            final docRef = userDoc.collection(task.collection).doc(task.documentId);
 
-          switch (task.action) {
-            case SyncAction.create:
-            case SyncAction.update:
-              batch.set(docRef, task.data, SetOptions(merge: true));
-              break;
-            case SyncAction.delete:
-              batch.delete(docRef);
-              break;
+            switch (task.action) {
+              case SyncAction.create:
+              case SyncAction.update:
+                batch.set(docRef, task.data, SetOptions(merge: true));
+                break;
+              case SyncAction.delete:
+                batch.delete(docRef);
+                break;
+            }
+            processedKeys.add(key);
+          } catch (e) {
+            debugPrint('Sync Task Parse Error for key $key: $e');
+            // Remove corrupted task from queue to unblock the rest
+            processedKeys.add(key);
           }
-          processedKeys.add(key);
         }
 
         if (processedKeys.isNotEmpty) {
           await batch.commit();
+          // Delete from Hive ONLY after successful Firestore commit
           await _queueBox!.deleteAll(processedKeys);
+          
           state = state.copyWith(
             pendingCount: _queueBox!.length, 
-            lastSyncAt: DateTime.now(), 
-            lastError: null
+            lastSyncAt: DateTime.now(),
           );
+
+          // Add a small breather to prevent CPU/Network choking on very large lists
+          await Future.delayed(const Duration(milliseconds: 100));
         }
       }
     } catch (e) {
-      debugPrint('Sync Batch Error: $e');
+      debugPrint('Sync Batch FATAL Error: $e');
       state = state.copyWith(lastError: e.toString());
+      
+      // If it's a quota or temporary network issue, we stop and wait for the next timer pulse
     } finally {
       _isCurrentlyProcessing = false;
       state = state.copyWith(isSyncing: false);

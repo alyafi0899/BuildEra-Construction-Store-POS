@@ -25,14 +25,14 @@ class SettingsNotifier extends Notifier<StoreSettings> {
     final box = await _getBox(uid);
     final cached = box.get('store_settings');
     if (cached != null) {
-      state = StoreSettings.fromMap(Map<String, dynamic>.from(cached as Map));
+      state = StoreSettings.fromMap(cached as Map);
     }
 
     // 2. Load from Firestore in background or if no cache
     try {
       final doc = await _db.collection('users').doc(uid).get();
       if (doc.exists) {
-        final settings = StoreSettings.fromMap(doc.data() as Map<String, dynamic>);
+        final settings = StoreSettings.fromMap(doc.data()!);
         state = settings;
         // Update cache
         await box.put('store_settings', settings.toMap());
