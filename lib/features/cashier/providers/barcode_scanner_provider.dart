@@ -5,40 +5,57 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 class BarcodeScannerState {
   final String buffer;
   final bool isProcessing;
+  final DateTime? lastKeyTime;
+  final bool isValidSpeed;
 
   const BarcodeScannerState({
     this.buffer = '',
     this.isProcessing = false,
+    this.lastKeyTime,
+    this.isValidSpeed = true,
   });
 
   BarcodeScannerState copyWith({
     String? buffer,
     bool? isProcessing,
+    DateTime? lastKeyTime,
+    bool? isValidSpeed,
   }) =>
       BarcodeScannerState(
         buffer: buffer ?? this.buffer,
         isProcessing: isProcessing ?? this.isProcessing,
+        lastKeyTime: lastKeyTime ?? this.lastKeyTime,
+        isValidSpeed: isValidSpeed ?? this.isValidSpeed,
       );
 }
 
 class BarcodeScannerNotifier extends Notifier<BarcodeScannerState> {
   Timer? _debounceTimer;
+  static const int _maxHumanKeyIntervalMs = 60; // Standard scanner is < 20ms
   
   @override
   BarcodeScannerState build() => const BarcodeScannerState();
 
-  /// Processes key events. 
-  /// Returns true if a barcode completion was triggered by a terminator (Enter/Tab).
   bool onKeyEvent(KeyEvent event, {required Function(String) onComplete}) {
     if (event is! KeyDownEvent) return false;
     if (state.isProcessing) return false;
 
+    final now = DateTime.now();
     final logicalKey = event.logicalKey;
 
-    // 1. Manual completion via Enter or Tab
+    // 1. Check speed if buffer isn't empty
+    bool currentKeyIsFast = true;
+    if (state.buffer.isNotEmpty && state.lastKeyTime != null) {
+      final interval = now.difference(state.lastKeyTime!).inMilliseconds;
+      if (interval > _maxHumanKeyIntervalMs) {
+        currentKeyIsFast = false;
+      }
+    }
+
+    // 2. Manual completion via Enter or Tab
     if (logicalKey == LogicalKeyboardKey.enter ||
         logicalKey == LogicalKeyboardKey.tab) {
-      if (state.buffer.isNotEmpty) {
+      if (state.buffer.isNotEmpty && state.isValidSpeed) {
         _debounceTimer?.cancel();
         final finalBarcode = state.buffer;
         
@@ -47,34 +64,34 @@ class BarcodeScannerNotifier extends Notifier<BarcodeScannerState> {
         state = const BarcodeScannerState();
         return true;
       }
+      clearBuffer();
       return false;
     }
 
-    // 2. Ignore non-character keys
+    // 3. Ignore non-character keys
     if (_isModifierKey(logicalKey) || _isFunctionalKey(logicalKey)) return false;
 
-    // 3. Extract character
+    // 4. Extract character
     final char = _extractChar(event);
     if (char == null) return false;
 
-    // 4. Update buffer
-    state = state.copyWith(buffer: state.buffer + char);
+    // 5. Update buffer and speed state
+    state = state.copyWith(
+      buffer: state.buffer + char,
+      lastKeyTime: now,
+      isValidSpeed: state.buffer.isEmpty ? true : (state.isValidSpeed && currentKeyIsFast),
+    );
 
-    // 5. Auto-completion logic (Fallback for scanners without Enter suffix)
-    // Increased to 200ms to handle potential OS/Hardware lag
+    // 6. Auto-completion logic
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 200), () {
+    _debounceTimer = Timer(const Duration(milliseconds: 100), () {
       if (state.buffer.isNotEmpty && !state.isProcessing) {
-        final finalBarcode = state.buffer;
-        
-        // Minimum length for a barcode is usually 3-4 digits. 
-        // We'll process if length >= 3 or if idle for a while.
-        if (finalBarcode.length >= 3) {
+        if (state.isValidSpeed && state.buffer.length >= 3) {
+          final finalBarcode = state.buffer;
           state = state.copyWith(isProcessing: true);
           onComplete(finalBarcode);
           state = const BarcodeScannerState();
         } else {
-          // Noise or intentional typing that we missed - just clear.
           clearBuffer();
         }
       }

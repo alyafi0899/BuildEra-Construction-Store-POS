@@ -207,12 +207,12 @@ class StatusChip extends StatelessWidget {
 
 // ── SearchField ───────────────────────────────────────────────────────────
 
-class AppSearchField extends StatelessWidget {
+class AppSearchField extends StatefulWidget {
   final TextEditingController controller;
   final FocusNode? focusNode;
   final String hintText;
   final ValueChanged<String>? onChanged;
-  final ValueChanged<String>? onSubmitted; // New
+  final ValueChanged<String>? onSubmitted;
   final VoidCallback? onClear;
 
   const AppSearchField({
@@ -221,26 +221,52 @@ class AppSearchField extends StatelessWidget {
     this.focusNode,
     required this.hintText,
     this.onChanged,
-    this.onSubmitted, // New
+    this.onSubmitted,
     this.onClear,
   });
 
   @override
+  State<AppSearchField> createState() => _AppSearchFieldState();
+}
+
+class _AppSearchFieldState extends State<AppSearchField> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onTextChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onTextChanged);
+    super.dispose();
+  }
+
+  void _onTextChanged() {
+    setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
     return TextField(
-      controller: controller,
-      focusNode:  focusNode,
-      onChanged:  onChanged,
-      onSubmitted: onSubmitted, // Integration
+      controller: widget.controller,
+      focusNode:  widget.focusNode,
+      onChanged:  widget.onChanged,
+      onSubmitted: widget.onSubmitted,
       style: const TextStyle(color: AppTheme.textPrimary),
       decoration: InputDecoration(
-        hintText:    hintText,
+        hintText:    widget.hintText,
         prefixIcon:  const Icon(Icons.search, color: AppTheme.textMuted, size: 20),
-        suffixIcon:  controller.text.isNotEmpty
+        suffixIcon:  widget.controller.text.isNotEmpty
             ? IconButton(
-                icon:    const Icon(Icons.clear, size: 18),
-                onPressed: onClear,
+                icon:    const Icon(Icons.cancel_rounded, size: 18), // Use a clearer "cancel" icon
+                onPressed: () {
+                  widget.controller.clear();
+                  if (widget.onClear != null) widget.onClear!();
+                  setState(() {}); // Force rebuild to hide icon
+                },
                 color:   AppTheme.textMuted,
+                tooltip: 'Hapus Pencarian',
               )
             : null,
       ),

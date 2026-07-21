@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../pages/login_page.dart';
 import '../pages/verify_email_page.dart';
@@ -33,7 +34,23 @@ class AuthGate extends ConsumerWidget {
         // If the user has a PIN, securityPin will be non-null after load.
         // We use a simple check: if loginEmail is null, it might be still loading
         if (settings.loginEmail == null) {
-           return const SplashScreen(status: 'Memuat Pengaturan...');
+           return Scaffold(
+             backgroundColor: const Color(0xFF0F1117),
+             body: Center(
+               child: Column(
+                 mainAxisSize: MainAxisSize.min,
+                 children: [
+                   const SizedBox(
+                     width: 40,
+                     height: 40,
+                     child: CircularProgressIndicator(strokeWidth: 3, color: AppTheme.accent),
+                   ),
+                   const SizedBox(height: 16),
+                   Text('Memuat Pengaturan...', style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12)),
+                 ],
+               ),
+             ),
+           );
         }
 
         if (settings.securityPin == null) {

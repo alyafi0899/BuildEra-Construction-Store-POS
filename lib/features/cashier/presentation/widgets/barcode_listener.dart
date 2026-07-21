@@ -128,29 +128,15 @@ class _BarcodeListenerState extends ConsumerState<BarcodeListener> {
     final normalizedBarcode = barcode.trim();
     if (normalizedBarcode.isEmpty) return;
 
-    // If the user was in a field, the barcode was also "typed" into that field.
-    // We should clear the focused text field if it was a scan.
-    if (isUserInField) {
-      final primaryFocus = FocusManager.instance.primaryFocus;
-      if (primaryFocus != null && primaryFocus.context != null) {
-        // This is a bit of a hack to clear the focused TextField
-        // because we don't have direct access to its controller here.
-        // But since it's a scan, it's safer to just clear it.
-        // We can do this by sending a "select all + backspace" or by using the focused widget's state if possible.
-        // A better way is to notify the CashierPage that a scan happened.
-      }
-    }
-
+    // Reset buffer tracking for next scan
     final now = DateTime.now();
     if (_lastBarcode == normalizedBarcode &&
         _lastScanAt != null &&
-        now.difference(_lastScanAt!) < const Duration(milliseconds: 800)) {
+        now.difference(_lastScanAt!) < const Duration(milliseconds: 500)) {
       return;
     }
     _lastBarcode = normalizedBarcode;
     _lastScanAt = now;
-
-    ScaffoldMessenger.of(context).clearSnackBars();
 
     Product? matching;
     final productsAsync = ref.read(productsProvider);
@@ -171,6 +157,7 @@ class _BarcodeListenerState extends ConsumerState<BarcodeListener> {
 
     if (!context.mounted) return;
 
+    // Emit event for UI synchronization
     ref.read(barcodeEventProvider.notifier).emit(BarcodeEvent(
       barcode: normalizedBarcode, 
       product: matching,
@@ -178,13 +165,19 @@ class _BarcodeListenerState extends ConsumerState<BarcodeListener> {
     ));
 
     if (matching == null) {
-      if (normalizedBarcode.length >= 3) {
+      // ONLY show error if the scan was clearly NOT manual typing
+      // Manual typing doesn't have the 'isValidSpeed' flag set in the provider's logic
+      // But we double check here: if user is in field, we are SILENT on errors.
+      if (!isUserInField && normalizedBarcode.length >= 3) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         showError(context, 'Barcode "$normalizedBarcode" tidak terdaftar');
       }
       return;
     }
 
+    // Auto-add logic
     if (widget.autoAdd && !isUserInField) {
+      ScaffoldMessenger.of(context).clearSnackBars();
       ref.read(cartProvider.notifier).addProduct(matching);
       showSuccess(context, '${matching.name} masuk keranjang');
     }

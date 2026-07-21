@@ -11,7 +11,6 @@ import '../../../../shared/widgets/common_widgets.dart';
 import '../../../../shared/widgets/product_image.dart';
 import '../../../../core/utils/barcode_helper.dart';
 import '../../../../shared/widgets/product_detail_dialog.dart';
-import '../../../settings/providers/settings_provider.dart';
 import '../../providers/barcode_history_provider.dart';
 import '../../providers/product_provider.dart';
 import '../widgets/product_form_dialog.dart';
@@ -230,31 +229,6 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
               onPressed: () => productsAsync.whenData((p) => _exportToExcel(p)),
               icon:  const Icon(Icons.file_download_outlined, size: 18),
               label: const Text('Export Excel'),
-            ),
-            Consumer(
-              builder: (context, ref, child) {
-                final isUnlocked = ref.watch(pinUnlockProvider);
-                final settings = ref.watch(settingsProvider);
-                if (settings.securityPin == null) return const SizedBox();
-                
-                return IconButton(
-                  onPressed: () {
-                    if (isUnlocked) {
-                      ref.read(pinUnlockProvider.notifier).lock();
-                    } else {
-                      showDialog(
-                        context: context,
-                        builder: (context) => Dialog(
-                          backgroundColor: Colors.transparent,
-                          child: PinGate(child: const SizedBox.shrink()),
-                        ),
-                      );
-                    }
-                  },
-                  icon: Icon(isUnlocked ? Icons.lock_open_rounded : Icons.lock_rounded, color: AppTheme.accent),
-                  tooltip: isUnlocked ? 'Lock Sensitive Data' : 'Unlock Sensitive Data',
-                );
-              },
             ),
             ElevatedButton.icon(
               onPressed: () => ProductFormDialog.show(context),

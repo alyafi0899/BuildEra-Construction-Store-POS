@@ -19,8 +19,6 @@ import 'features/settings/providers/app_settings_provider.dart';
 import 'features/cashier/presentation/pages/customer_display_page.dart';
 import 'features/cashier/providers/cart_provider.dart';
 import 'features/cashier/providers/customer_display_provider.dart';
-import 'features/cashier/providers/scan_mode_provider.dart';
-import 'features/cashier/presentation/widgets/barcode_listener.dart';
 import 'features/products/providers/product_provider.dart';
 import 'features/products/presentation/pages/barcode_management_page.dart';
 import 'features/inventory/providers/restock_provider.dart';
@@ -62,7 +60,7 @@ Future<void> main(List<String> args) async {
     if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
       await windowManager.ensureInitialized();
       WindowOptions windowOptions = const WindowOptions(
-        size: const Size(1024, 768),
+        size: Size(1024, 768),
         center: true,
         backgroundColor: Colors.transparent,
         skipTaskbar: false,
@@ -122,13 +120,18 @@ Future<void> main(List<String> args) async {
 
   try {
     // Perform all heavy lifting while splash is showing
+    // Add timeout to prevent hanging if internet is extremely poor
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
-    );
+    ).timeout(const Duration(seconds: 10), onTimeout: () {
+      debugPrint('BOOT: Firebase Init Timeout (Continuing Offline)');
+      return Firebase.app(); // Attempt to use already initialized app or continue
+    });
     
     if (!kIsWeb && Platform.isWindows) {
       FirebaseFirestore.instance.settings = const Settings(
-        persistenceEnabled: false,
+        persistenceEnabled: true, // Enable offline cache for instant loading
+        cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
       );
     }
 
@@ -218,7 +221,6 @@ class _MainShellState extends ConsumerState<MainShell> {
     ref.watch(transactionsProvider);
     ref.watch(customersProvider);
 
-    final autoAdd = ref.watch(scanModeProvider);
     final shell = Row(children: [
       AppSidebar(
         selectedIndex: idx,
