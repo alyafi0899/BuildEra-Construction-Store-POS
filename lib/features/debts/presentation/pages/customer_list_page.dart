@@ -29,51 +29,28 @@ class _CustomerListPageState extends ConsumerState<CustomerListPage> {
   @override
   Widget build(BuildContext context) {
     final customersAsync = ref.watch(customersProvider);
+    final isMobile = MediaQuery.of(context).size.width < 800;
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
       body: Column(
         children: [
-          // Header
           PageHeader(
-            title: 'Data Pelanggan',
-            subtitle: 'Kelola profil pelanggan untuk transaksi piutang',
+            title: 'Pelanggan',
+            subtitle: 'Daftar piutang dan profil',
             icon: Icons.people_rounded,
-            actions: [
-              if (Navigator.canPop(context))
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.arrow_back_rounded, color: AppTheme.textMuted),
-                  tooltip: 'Kembali',
-                ),
-              ElevatedButton.icon(
-                onPressed: () => _showCustomerForm(context),
-                icon: const Icon(Icons.person_add_rounded, size: 18),
-                label: const Text('Tambah Pelanggan'),
-              ),
-            ],
           ),
 
-          // Filters
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            color: AppTheme.surface,
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 300,
-                  child: AppSearchField(
-                    controller: _searchCtrl,
-                    hintText: 'Cari nama atau nomor telepon...',
-                    onChanged: (v) => setState(() => _search = v),
-                    onClear: () => setState(() { _search = ''; _searchCtrl.clear(); }),
-                  ),
-                ),
-              ],
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: AppSearchField(
+              controller: _searchCtrl,
+              hintText: 'Cari nama atau telepon...',
+              onChanged: (v) => setState(() => _search = v),
+              onClear: () => setState(() { _search = ''; _searchCtrl.clear(); }),
             ),
           ),
 
-          // Table
           Expanded(
             child: customersAsync.when(
               loading: () => const AppLoading(),
@@ -88,31 +65,46 @@ class _CustomerListPageState extends ConsumerState<CustomerListPage> {
                   return const EmptyState(
                     icon: Icons.people_outline_rounded,
                     title: 'Tidak ada pelanggan',
-                    subtitle: 'Mulai dengan menambahkan pelanggan baru',
+                    subtitle: 'Tambah pelanggan baru menggunakan tombol +',
                   );
                 }
 
-                return _CustomerTable(
-                  customers: filtered,
-                  onEdit: (c) {
-                    requirePin(context, ref, () {
-                      _showCustomerForm(context, customer: c);
-                    });
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: filtered.length,
+                  itemBuilder: (context, i) {
+                    final c = filtered[i];
+                    return _CustomerCard(
+                      customer: c,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => CustomerDebtDetailPage(customer: c)),
+                      ),
+                      onEdit: () => requirePin(context, ref, () => _showCustomerForm(context, customer: c)),
+                      onDelete: () => _deleteCustomer(c.id),
+                    );
                   },
-                  onDelete: (id) => _deleteCustomer(id),
                 );
               },
             ),
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showCustomerForm(context),
+        backgroundColor: AppTheme.primary,
+        child: const Icon(Icons.person_add_rounded, color: Colors.white),
+      ),
     );
   }
 
   void _showCustomerForm(BuildContext context, {Customer? customer}) {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (context) => _CustomerFormDialog(customer: customer),
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: AppTheme.surface,
+      builder: (context) => _CustomerFormSheet(customer: customer),
     );
   }
 
@@ -135,126 +127,86 @@ class _CustomerListPageState extends ConsumerState<CustomerListPage> {
   }
 }
 
-class _CustomerTable extends StatelessWidget {
-  final List<Customer> customers;
-  final Function(Customer) onEdit;
-  final Function(String) onDelete;
-
-  const _CustomerTable({
-    required this.customers,
-    required this.onEdit,
-    required this.onDelete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scrollbar(
-      child: ListView.separated(
-        padding: const EdgeInsets.all(24),
-        itemCount: customers.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
-        itemBuilder: (context, i) {
-          final c = customers[i];
-          return _CustomerRow(
-            customer: c,
-            onEdit: () => onEdit(c),
-            onDelete: () => onDelete(c.id),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _CustomerRow extends StatelessWidget {
+class _CustomerCard extends StatelessWidget {
   final Customer customer;
+  final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  const _CustomerRow({
+  const _CustomerCard({
     required this.customer,
+    required this.onTap,
     required this.onEdit,
     required this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceAlt,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.border),
-      ),
-      child: InkWell(
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => CustomerDebtDetailPage(customer: customer)),
-        ),
-        borderRadius: BorderRadius.circular(12),
-        child: Row(
-          children: [
-            Container(
-              width: 48, height: 48,
-              decoration: BoxDecoration(
-                color: AppTheme.accent.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.person_rounded, color: AppTheme.accent),
+    final hasDebt = customer.totalOutstanding > 0;
+    
+    return AppCard(
+      margin: const EdgeInsets.only(bottom: 12),
+      onTap: onTap,
+      child: Row(
+        children: [
+          Container(
+            width: 44, height: 44,
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(customer.name, style: Theme.of(context).textTheme.titleLarge),
-                  Text(customer.phone, style: Theme.of(context).textTheme.bodySmall),
-                ],
-              ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+            child: const Icon(Icons.person_rounded, color: AppTheme.primary),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Total Piutang', style: Theme.of(context).textTheme.bodySmall),
-                Text(
-                  Formatters.currency(customer.totalOutstanding),
-                  style: TextStyle(
-                    color: customer.totalOutstanding > 0 ? AppTheme.warning : AppTheme.success,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
+                Text(customer.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                Text(customer.phone, style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
               ],
             ),
-            const SizedBox(width: 24),
-            IconButton(
-              onPressed: onEdit,
-              icon: const Icon(Icons.edit_rounded, size: 20, color: AppTheme.textSecondary),
-              tooltip: 'Edit',
-            ),
-            IconButton(
-              onPressed: onDelete,
-              icon: const Icon(Icons.delete_rounded, size: 20, color: AppTheme.danger),
-              tooltip: 'Hapus',
-            ),
-            const SizedBox(width: 8),
-            const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
-          ],
-        ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                Formatters.currency(customer.totalOutstanding),
+                style: TextStyle(
+                  color: hasDebt ? AppTheme.danger : AppTheme.success,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+              const Text('Outstanding', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+            ],
+          ),
+          PopupMenuButton(
+            icon: const Icon(Icons.more_vert_rounded, size: 20, color: AppTheme.textMuted),
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'edit', child: Text('Edit')),
+              const PopupMenuItem(value: 'delete', child: Text('Hapus', style: TextStyle(color: AppTheme.danger))),
+            ],
+            onSelected: (val) {
+              if (val == 'edit') onEdit();
+              if (val == 'delete') onDelete();
+            },
+          ),
+        ],
       ),
     );
   }
 }
 
-class _CustomerFormDialog extends ConsumerStatefulWidget {
+class _CustomerFormSheet extends ConsumerStatefulWidget {
   final Customer? customer;
-  const _CustomerFormDialog({this.customer});
+  const _CustomerFormSheet({this.customer});
 
   @override
-  ConsumerState<_CustomerFormDialog> createState() => _CustomerFormDialogState();
+  ConsumerState<_CustomerFormSheet> createState() => _CustomerFormSheetState();
 }
 
-class _CustomerFormDialogState extends ConsumerState<_CustomerFormDialog> {
+class _CustomerFormSheetState extends ConsumerState<_CustomerFormSheet> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameCtrl;
   late TextEditingController _phoneCtrl;
@@ -307,46 +259,72 @@ class _CustomerFormDialogState extends ConsumerState<_CustomerFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.customer == null ? 'Tambah Pelanggan' : 'Edit Pelanggan'),
-      content: SizedBox(
-        width: 400,
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: _nameCtrl,
-                decoration: const InputDecoration(labelText: 'Nama Lengkap *'),
-                validator: (v) => v!.isEmpty ? 'Nama tidak boleh kosong' : null,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _phoneCtrl,
-                decoration: const InputDecoration(labelText: 'Nomor Telepon *'),
-                validator: (v) => v!.isEmpty ? 'Nomor telepon tidak boleh kosong' : null,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _addressCtrl,
-                decoration: const InputDecoration(labelText: 'Alamat'),
-                maxLines: 2,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _notesCtrl,
-                decoration: const InputDecoration(labelText: 'Catatan'),
-                maxLines: 2,
-              ),
-            ],
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            height: 5, width: 40,
+            margin: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(color: AppTheme.border, borderRadius: BorderRadius.circular(5)),
           ),
-        ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Text(widget.customer == null ? 'Tambah Pelanggan' : 'Edit Pelanggan', 
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                const Spacer(),
+                IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+              ],
+            ),
+          ),
+          const Divider(),
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextFormField(
+                      controller: _nameCtrl,
+                      decoration: const InputDecoration(labelText: 'Nama Lengkap *'),
+                      validator: (v) => v!.isEmpty ? 'Nama tidak boleh kosong' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _phoneCtrl,
+                      decoration: const InputDecoration(labelText: 'Nomor Telepon *'),
+                      validator: (v) => v!.isEmpty ? 'Nomor telepon tidak boleh kosong' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _addressCtrl,
+                      decoration: const InputDecoration(labelText: 'Alamat'),
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _notesCtrl,
+                      decoration: const InputDecoration(labelText: 'Catatan'),
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 32),
+                    ElevatedButton(
+                      onPressed: _save,
+                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
+                      child: const Text('Simpan Data Pelanggan'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
-        ElevatedButton(onPressed: _save, child: const Text('Simpan')),
-      ],
     );
   }
 }
