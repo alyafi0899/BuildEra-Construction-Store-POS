@@ -42,6 +42,30 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
             icon: Icons.warehouse_rounded,
           ),
 
+          // Stats Row
+          productsAsync.when(
+            data: (products) {
+              final total = products.length;
+              final low = products.where((p) => p.isLowStock).length;
+              final out = products.where((p) => p.stock <= 0).length;
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                height: 90,
+                child: Row(
+                  children: [
+                    _invStat('Total SKU', total.toString(), AppTheme.primary),
+                    const SizedBox(width: 8),
+                    _invStat('Stok Rendah', low.toString(), AppTheme.warning),
+                    const SizedBox(width: 8),
+                    _invStat('Habis', out.toString(), AppTheme.danger),
+                  ],
+                ),
+              );
+            },
+            loading: () => const SizedBox(height: 90),
+            error: (_, __) => const SizedBox(),
+          ),
+
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -92,14 +116,38 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
       ),
     );
   }
+
+  Widget _invStat(String label, String val, Color color) {
+    return Expanded(
+      child: AppCard(
+        padding: const EdgeInsets.all(12),
+        color: color.withValues(alpha: 0.05),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(val, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 18)),
+            Text(label, style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-class _InventoryCard extends ConsumerWidget {
+class _InventoryCard extends ConsumerStatefulWidget {
   final Product product;
   const _InventoryCard({required this.product});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_InventoryCard> createState() => _InventoryCardState();
+}
+
+class _InventoryCardState extends ConsumerState<_InventoryCard> {
+  bool _showHistory = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final product = widget.product;
     final isLow = product.isLowStock;
     final isOut = product.stock <= 0;
 
@@ -107,37 +155,43 @@ class _InventoryCard extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 12),
       child: Column(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          InkWell(
+            onTap: () => setState(() => _showHistory = !_showHistory),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      Text(product.category, style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                    Text(product.category, style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+                    Text(Formatters.decimal(product.stock), 
+                      style: TextStyle(
+                        fontSize: 18, 
+                        fontWeight: FontWeight.bold, 
+                        color: isOut ? AppTheme.danger : (isLow ? AppTheme.warning : AppTheme.success)
+                      )),
+                    Text(product.baseUnit, style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
                   ],
                 ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(Formatters.decimal(product.stock), 
-                    style: TextStyle(
-                      fontSize: 18, 
-                      fontWeight: FontWeight.bold, 
-                      color: isOut ? AppTheme.danger : (isLow ? AppTheme.warning : AppTheme.success)
-                    )),
-                  Text(product.baseUnit, style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
-                ],
-              ),
-            ],
+                const SizedBox(width: 8),
+                Icon(_showHistory ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: AppTheme.textMuted),
+              ],
+            ),
           ),
+          if (_showHistory) _buildHistory(context, ref, product),
           const Divider(height: 24),
           Row(
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () => _showQuickAdjust(context, ref),
+                  onPressed: () => _showQuickAdjust(context, ref, product),
                   icon: const Icon(Icons.edit_note_rounded, size: 18),
                   label: const Text('Penyesuaian'),
                   style: OutlinedButton.styleFrom(
@@ -165,7 +219,43 @@ class _InventoryCard extends ConsumerWidget {
     );
   }
 
-  void _showQuickAdjust(BuildContext context, WidgetRef ref) {
+  Widget _buildHistory(BuildContext context, WidgetRef ref, Product p) {
+    final historyAsync = ref.watch(restockHistoryProvider);
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: AppTheme.surfaceAlt, borderRadius: BorderRadius.circular(12)),
+      child: historyAsync.when(
+        data: (list) {
+          final prodRecords = list.where((r) => r.productId == p.id).toList();
+          if (prodRecords.isEmpty) return const Text('Belum ada riwayat restock', style: TextStyle(fontSize: 11, color: AppTheme.textMuted));
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('RIWAYAT TERBARU', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+              const SizedBox(height: 8),
+              ...prodRecords.take(3).map((r) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Text(Formatters.date(r.createdAt), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 8),
+                    Text('+${Formatters.decimal(r.quantityAdded)}', style: const TextStyle(fontSize: 11, color: AppTheme.success)),
+                    const Spacer(),
+                    Text(Formatters.currency(r.totalCostPerUnit), style: const TextStyle(fontSize: 11)),
+                  ],
+                ),
+              )),
+            ],
+          );
+        },
+        loading: () => const LinearProgressIndicator(),
+        error: (_, __) => const SizedBox(),
+      ),
+    );
+  }
+
+  void _showQuickAdjust(BuildContext context, WidgetRef ref, Product product) {
     final ctrl = TextEditingController();
     showDialog(
       context: context,

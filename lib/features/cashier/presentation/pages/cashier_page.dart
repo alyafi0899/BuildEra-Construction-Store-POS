@@ -66,11 +66,11 @@ class _CashierPageState extends ConsumerState<CashierPage> {
                   
                   // Search Area
                   Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                     color: AppTheme.surface,
                     child: AppSearchField(
                       controller: _searchCtrl,
-                      hintText: 'Cari produk atau scan...',
+                      hintText: 'Cari produk...',
                       onChanged: (v) => ref.read(productSearchQueryProvider.notifier).set(v),
                     ),
                   ),
@@ -83,9 +83,12 @@ class _CashierPageState extends ConsumerState<CashierPage> {
 
                   // Product Selection Area
                   Expanded(
-                    child: isMobile 
-                      ? const _ProductGrid(isCompact: true) 
-                      : const _ProductGrid(isCompact: false),
+                    child: SafeArea(
+                      top: false,
+                      child: isMobile 
+                        ? const _ProductGrid(isCompact: true) 
+                        : const _ProductGrid(isCompact: false),
+                    ),
                   ),
                 ],
               ),
@@ -204,12 +207,7 @@ class _CategoryChip extends StatelessWidget {
         label: Text(label),
         selected: selected,
         onSelected: (_) => onTap(),
-        selectedColor: AppTheme.primary.withValues(alpha: 0.2),
-        checkmarkColor: AppTheme.primary,
-        labelStyle: TextStyle(
-          color: selected ? AppTheme.primary : AppTheme.textSecondary,
-          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       ),
     );
   }

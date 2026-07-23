@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../pages/login_page.dart';
 import '../pages/verify_email_page.dart';
-import '../pages/setup_pin_page.dart';
-import '../../../../main.dart'; // To get MainShell or whatever home is
+import '../../../../main.dart'; 
 import '../../../../shared/widgets/splash_screen.dart';
-import '../../../settings/providers/settings_provider.dart';
 
 class AuthGate extends ConsumerWidget {
   const AuthGate({super.key});
@@ -26,42 +23,14 @@ class AuthGate extends ConsumerWidget {
           return const VerifyEmailPage();
         }
 
-        // Check for PIN enforcement
-        final settings = ref.watch(settingsProvider);
-        
-        // If settings are still loading or initial, we might need to wait 
-        // but settingsProvider uses watch(authStateProvider) and then _loadSettings.
-        // If the user has a PIN, securityPin will be non-null after load.
-        // We use a simple check: if loginEmail is null, it might be still loading
-        if (settings.loginEmail == null) {
-           return Scaffold(
-             backgroundColor: const Color(0xFF0F1117),
-             body: Center(
-               child: Column(
-                 mainAxisSize: MainAxisSize.min,
-                 children: [
-                   const SizedBox(
-                     width: 40,
-                     height: 40,
-                     child: CircularProgressIndicator(strokeWidth: 3, color: AppTheme.accent),
-                   ),
-                   const SizedBox(height: 16),
-                   Text('Memuat Pengaturan...', style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12)),
-                 ],
-               ),
-             ),
-           );
-        }
-
-        if (settings.securityPin == null) {
-          return const SetupPinPage();
-        }
-
+        // Removed the settings.loginEmail check that was causing hangs.
+        // For the Manager Android version, we go straight to MainShell.
         return const MainShell();
       },
-      loading: () => const SplashScreen(),
+      loading: () => const SplashScreen(status: 'Otentikasi...'),
       error: (e, stack) => Scaffold(
-        body: Center(child: Text('Terjadi kesalahan sistem: $e')),
+        backgroundColor: const Color(0xFF0F1117),
+        body: Center(child: Text('Kesalahan Sistem: $e', style: const TextStyle(color: Colors.white))),
       ),
     );
   }

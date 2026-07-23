@@ -7,6 +7,7 @@ import '../models/product.dart';
 import 'product_image.dart';
 import '../../features/payment/providers/transaction_provider.dart';
 import '../../features/products/models/product_financials.dart';
+import 'common_widgets.dart';
 
 class ProductDetailDialog extends ConsumerWidget {
   final Product product;
