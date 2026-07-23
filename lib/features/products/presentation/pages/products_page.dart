@@ -181,6 +181,173 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     }
   }
 
+class ProductsPage extends ConsumerStatefulWidget {
+  const ProductsPage({super.key});
+
+  @override
+  ConsumerState<ProductsPage> createState() => _ProductsPageState();
+}
+
+class _ProductsPageState extends ConsumerState<ProductsPage> {
+  final _searchCtrl = TextEditingController();
+  final Set<String> _selectedIds = {};
+  bool _isGenerating = false;
+
+  @override
+  void dispose() { 
+    _searchCtrl.dispose(); 
+    super.dispose(); 
+  }
+
+  void _toggleSelectAll(List<Product> products) {
+    setState(() {
+      final allVisibleSelected = products.every((p) => _selectedIds.contains(p.id));
+      if (allVisibleSelected) {
+        for (final p in products) {
+          _selectedIds.remove(p.id);
+        }
+      } else {
+        for (final p in products) {
+          _selectedIds.add(p.id);
+        }
+      }
+    });
+  }
+
+  void _toggleSelect(String id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  Future<void> _bulkDelete() async {
+    final count = _selectedIds.length;
+    final ok = await showConfirmDialog(context,
+        title: 'Hapus Massal',
+        content: 'Yakin hapus $count produk terpilih? Data tidak dapat dipulihkan.');
+    
+    if (!mounted) return;
+    if (ok) {
+      try {
+        await ref.read(productsActionProvider).deleteProductsBatch(_selectedIds.toList());
+        setState(() => _selectedIds.clear());
+        if (mounted) showSuccess(context, '$count produk dihapus');
+      } catch (e) {
+        if (mounted) showError(context, 'Gagal menghapus produk: $e');
+      }
+    }
+  }
+
+  Future<void> _generateMissingBarcodes(List<Product> allProducts) async {
+    final missing = allProducts.where((p) => p.barcode == null || p.barcode!.isEmpty).toList();
+    if (missing.isEmpty) {
+      showSuccess(context, 'Semua produk sudah memiliki barcode.');
+      return;
+    }
+
+    final ok = await showConfirmDialog(context,
+        title: 'Generate Barcode Massal',
+        content: 'Akan membuat barcode unik untuk ${missing.length} produk. Lanjutkan?',
+        confirmLabel: 'Generate',
+        confirmColor: AppTheme.accent);
+    
+    if (!mounted || !ok) return;
+
+    setState(() => _isGenerating = true);
+
+    try {
+      final historyRepo = ref.read(barcodeHistoryRepositoryProvider);
+      final productsAction = ref.read(productsActionProvider);
+      final List<Product> updatedProducts = [];
+
+      for (final product in missing) {
+        String newBarcode = '';
+        bool isUnique = false;
+        int attempts = 0;
+
+        while (!isUnique && attempts < 15) {
+          final rawData = BarcodeHelper.generateRandomEAN13Data();
+          newBarcode = BarcodeHelper.getEAN13WithCheckDigit(rawData);
+          final used = await historyRepo.isBarcodeUsed(newBarcode);
+          // Also check in our current batch to avoid duplicate within the same generation
+          final duplicateInBatch = updatedProducts.any((p) => p.barcode == newBarcode);
+          
+          if (!used && !duplicateInBatch) isUnique = true;
+          attempts++;
+        }
+
+        if (isUnique) {
+          updatedProducts.add(product.copyWith(barcode: newBarcode));
+        }
+      }
+
+      if (updatedProducts.isNotEmpty) {
+        await productsAction.updateProductsBatch(updatedProducts);
+        if (mounted) showSuccess(context, 'Berhasil membuat ${updatedProducts.length} barcode baru.');
+      } else {
+        if (mounted) showError(context, 'Tidak ada barcode unik yang berhasil dibuat.');
+      }
+    } catch (e) {
+      if (mounted) showError(context, 'Gagal generate barcode: $e');
+    } finally {
+      if (mounted) setState(() => _isGenerating = false);
+    }
+  }
+
+  Future<void> _exportToExcel(List<Product> products) async {
+    try {
+      final excel = Excel.createExcel();
+      final sheet = excel['Sheet1'];
+
+      // Header row matching the import format + metadata
+      sheet.appendRow([
+        TextCellValue('Nama Produk'),
+        TextCellValue('Barcode'),
+        TextCellValue('Kategori'),
+        TextCellValue('Satuan Dasar'),
+        TextCellValue('Stok Awal'),
+        TextCellValue('Harga Modal (Rp)'),
+        TextCellValue('Harga Jual Dasar (Rp)'),
+        TextCellValue('Tanggal Dibuat'),
+        TextCellValue('Terakhir Diubah'),
+      ]);
+
+      // Data rows
+      for (final p in products) {
+        sheet.appendRow([
+          TextCellValue(p.name),
+          TextCellValue(p.barcode ?? ''),
+          TextCellValue(p.category),
+          TextCellValue(p.baseUnit),
+          DoubleCellValue(p.stock),
+          DoubleCellValue(p.costPrice),
+          DoubleCellValue(p.basePrice),
+          TextCellValue(Formatters.dateTime(p.createdAt)),
+          TextCellValue(Formatters.dateTime(p.updatedAt)),
+        ]);
+      }
+
+      final bytes = excel.save();
+      if (bytes == null) return;
+
+      final now = DateTime.now();
+      final fileName = 'Backup_Produk_${now.year}${now.month}${now.day}_${now.hour}${now.minute}.xlsx';
+
+      await Printing.sharePdf(
+        bytes: Uint8List.fromList(bytes),
+        filename: fileName,
+      );
+
+      if (mounted) showSuccess(context, 'Backup berhasil diekspor');
+    } catch (e) {
+      if (mounted) showError(context, 'Gagal ekspor: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsProvider);
@@ -188,10 +355,10 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     final categoryFilter = ref.watch(productCategoryFilterProvider);
     final sort = ref.watch(productSortProvider);
     final filters = ref.watch(productFiltersProvider);
-    final isMobile = MediaQuery.of(context).size.width < 800;
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
+<<<<<<< HEAD
       body: Column(
         children: [
           PageHeader(
@@ -563,24 +730,175 @@ class _ProductMobileCard extends StatelessWidget {
                       ],
                     ),
                   ],
-                ),
+=======
+      body: PinGate(
+        child: Column(
+          children: [
+            // Top bar
+            PageHeader(
+          title: 'Manajemen Produk',
+          subtitle: 'Kelola daftar produk dan satuan jual',
+          icon: Icons.inventory_2_rounded,
+          actions: [
+            if (_isGenerating)
+              const Row(
+                children: [
+                  SizedBox(
+                    width: 16, height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent),
+                  ),
+                  SizedBox(width: 12),
+                  Text('Generating Barcodes...', style: TextStyle(color: AppTheme.accent, fontSize: 13, fontWeight: FontWeight.bold)),
+                ],
               ),
-              const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
+            OutlinedButton.icon(
+              onPressed: _isGenerating ? null : () => productsAsync.whenData((p) => _generateMissingBarcodes(p)),
+              icon:  const Icon(Icons.auto_fix_high_rounded, size: 18),
+              label: const Text('Generate Missing'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => ExcelImportDialog.show(context),
+              icon:  const Icon(Icons.file_upload_outlined, size: 18),
+              label: const Text('Import Excel'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => productsAsync.whenData((p) => _exportToExcel(p)),
+              icon:  const Icon(Icons.file_download_outlined, size: 18),
+              label: const Text('Export Excel'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => ProductFormDialog.show(context),
+              icon:  const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Tambah Produk'),
+            ),
+          ],
+        ),
+
+        // Filters & Sorting
+        Container(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+          color:   AppTheme.surface,
+          child:   Column(
+            children: [
+              Row(children: [
+                SizedBox(
+                  width: 260,
+                  child: AppSearchField(
+                    controller: _searchCtrl,
+                    hintText:   'Cari produk atau barcode...',
+                    onChanged:  (v) => ref.read(productSearchQueryProvider.notifier).set(v),
+                    onClear:    () {
+                      _searchCtrl.clear();
+                      ref.read(productSearchQueryProvider.notifier).set('');
+                    },
+                  ),
+>>>>>>> parent of bd29cdf (fixing bug)
+                ),
+                const SizedBox(width: 16),
+                SizedBox(
+                  width: 160,
+                  height: 48,
+                  child: DropdownButtonFormField<String?>(
+                    initialValue:   categoryFilter,
+                    isExpanded:     true,
+                    decoration:     const InputDecoration(labelText: 'Kategori', isDense: true),
+                    dropdownColor:  AppTheme.surfaceAlt,
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('Semua Kategori')),
+                      ...AppConstants.categories.map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis))),
+                    ],
+                    onChanged: (v) => ref.read(productCategoryFilterProvider.notifier).set(v),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                SizedBox(
+                  width: 160,
+                  height: 48,
+                  child: DropdownButtonFormField<ProductSortField>(
+                    initialValue:   sort.field,
+                    isExpanded:     true,
+                    decoration:     const InputDecoration(labelText: 'Urutkan', isDense: true),
+                    dropdownColor:  AppTheme.surfaceAlt,
+                    items: const [
+                      DropdownMenuItem(value: ProductSortField.name,     child: Text('Nama (A-Z)')),
+                      DropdownMenuItem(value: ProductSortField.category, child: Text('Kategori')),
+                      DropdownMenuItem(value: ProductSortField.stock,    child: Text('Stok')),
+                      DropdownMenuItem(value: ProductSortField.cost,     child: Text('Harga Modal')),
+                      DropdownMenuItem(value: ProductSortField.price,    child: Text('Harga Jual')),
+                      DropdownMenuItem(value: ProductSortField.profit,   child: Text('Profit Satuan')),
+                      DropdownMenuItem(value: ProductSortField.created,  child: Text('Tanggal Dibuat')),
+                      DropdownMenuItem(value: ProductSortField.updated,  child: Text('Terakhir Diubah')),
+                    ],
+                    onChanged: (v) => ref.read(productSortProvider.notifier).setField(v!),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () => ref.read(productSortProvider.notifier).toggleOrder(),
+                  icon: Icon(sort.ascending ? Icons.south_rounded : Icons.north_rounded, color: AppTheme.accent),
+                  tooltip: sort.ascending ? 'Ascending' : 'Descending',
+                ),
+                const SizedBox(width: 16),
+                if (_selectedIds.isNotEmpty)
+                  ElevatedButton.icon(
+                    onPressed: _bulkDelete,
+                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
+                    icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+                    label: Text('Hapus (${_selectedIds.length})'),
+                  ),
+                const Spacer(),
+                productsAsync.when(
+                  data: (p) => Text('${p.length} produk', style: Theme.of(context).textTheme.bodySmall),
+                  loading: () => const SizedBox(),
+                  error: (_, __) => const SizedBox(),
+                ),
+              ]),
+              const SizedBox(height: 12),
+              Row(children: [
+                const Icon(Icons.filter_list_rounded, size: 18, color: AppTheme.textMuted),
+                const SizedBox(width: 12),
+                const _FilterLabel('Stok:'),
+                _FilterTab(label: 'Semua', selected: filters.stock == 'all', onTap: () => ref.read(productFiltersProvider.notifier).setStock('all')),
+                _FilterTab(label: 'Tersedia', selected: filters.stock == 'in', onTap: () => ref.read(productFiltersProvider.notifier).setStock('in')),
+                _FilterTab(label: 'Rendah', selected: filters.stock == 'low', onTap: () => ref.read(productFiltersProvider.notifier).setStock('low')),
+                _FilterTab(label: 'Habis', selected: filters.stock == 'out', onTap: () => ref.read(productFiltersProvider.notifier).setStock('out')),
+                
+                const SizedBox(width: 24),
+                const _FilterLabel('Bayar Supplier:'),
+                _FilterTab(label: 'Semua', selected: filters.supplier == 'all', onTap: () => ref.read(productFiltersProvider.notifier).setSupplier('all')),
+                _FilterTab(label: 'Lunas', selected: filters.supplier == 'paid', onTap: () => ref.read(productFiltersProvider.notifier).setSupplier('paid')),
+                _FilterTab(label: 'Belum', selected: filters.supplier == 'unpaid', onTap: () => ref.read(productFiltersProvider.notifier).setSupplier('unpaid')),
+
+                const SizedBox(width: 24),
+                const _FilterLabel('Bayar Ongkir:'),
+                _FilterTab(label: 'Semua', selected: filters.shipping == 'all', onTap: () => ref.read(productFiltersProvider.notifier).setShipping('all')),
+                _FilterTab(label: 'Lunas', selected: filters.shipping == 'paid', onTap: () => ref.read(productFiltersProvider.notifier).setShipping('paid')),
+                _FilterTab(label: 'Belum', selected: filters.shipping == 'unpaid', onTap: () => ref.read(productFiltersProvider.notifier).setShipping('unpaid')),
+              ]),
             ],
           ),
         ),
-      ),
-    );
-  }
 
-  Widget _infoBadge(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(6),
+        // Table
+        Expanded(
+          child: sortedProducts.isEmpty && productsAsync.isLoading
+            ? const AppLoading()
+            : sortedProducts.isEmpty 
+              ? const EmptyState(
+                  icon:     Icons.inventory_2_outlined,
+                  title:    'Tidak ada produk',
+                  subtitle: 'Tambah produk pertama Anda atau sesuaikan filter',
+                )
+              : _ProductTable(
+                  products: sortedProducts,
+                  selectedIds: _selectedIds,
+                  onToggleSelect: _toggleSelect,
+                  onSelectAll: () => _toggleSelectAll(sortedProducts),
+                ),
+        ),
+          ],
+        ),
       ),
-      child: Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
     );
   }
 }

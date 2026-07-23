@@ -34,6 +34,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   late TextEditingController _addressCtrl;
   late TextEditingController _descriptionCtrl;
 
+  List<BankAccount> _bankAccounts = [];
+
   @override
   void initState() {
     super.initState();
@@ -44,6 +46,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     _emailCtrl = TextEditingController(text: settings.email);
     _addressCtrl = TextEditingController(text: settings.address);
     _descriptionCtrl = TextEditingController(text: settings.description);
+    _bankAccounts = List.from(settings.bankAccounts);
   }
 
   @override
@@ -57,6 +60,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     super.dispose();
   }
 
+  void _addBankAccount() {
+    setState(() {
+      _bankAccounts.add(const BankAccount(bankName: '', accountNumber: '', accountHolder: ''));
+    });
+  }
+
+  void _removeBankAccount(int index) {
+    setState(() {
+      _bankAccounts.removeAt(index);
+    });
+  }
+
   void _save() {
     if (_formKey.currentState!.validate()) {
       final settings = ref.read(settingsProvider).copyWith(
@@ -66,43 +81,657 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         email: _emailCtrl.text,
         address: _addressCtrl.text,
         description: _descriptionCtrl.text,
+        bankAccounts: _bankAccounts,
       );
+      
       ref.read(settingsProvider.notifier).updateSettings(settings);
-      showSuccess(context, 'Pengaturan disimpan');
+      showSuccess(context, 'Pengaturan berhasil disimpan');
+    }
+  }
+
+  Future<void> _handleFullBackup(WidgetRef ref) async {
+    debugPrint('DEBUG: _handleFullBackup invoked');
+    
+    // 1. Fetch data from cache first
+    final products = ref.read(productsProvider).asData?.value ?? [];
+    final restocks = ref.read(restockHistoryProvider).asData?.value ?? [];
+    final billPayments = ref.read(billPaymentsProvider).asData?.value ?? [];
+    final customers = ref.read(customersProvider).asData?.value ?? [];
+    final customerDebts = ref.read(debtsProvider(null)).asData?.value ?? [];
+    final customerPayments = ref.read(debtPaymentsProvider((customerId: null, debtId: null))).asData?.value ?? [];
+    final transactions = ref.read(transactionsProvider).asData?.value ?? [];
+    final settings = ref.read(settingsProvider);
+
+    debugPrint('DEBUG: Data counts - Products: ${products.length}, Transactions: ${transactions.length}');
+
+    // 2. Immediate Feedback
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Membuka Folder Picker...'), duration: Duration(seconds: 1)),
+    );
+
+    try {
+      await BackupHelper.performFullBackup(
+        context: context,
+        products: products,
+        restocks: restocks,
+        billPayments: billPayments,
+        customers: customers,
+        customerDebts: customerDebts,
+        customerPayments: customerPayments,
+        transactions: transactions,
+        settings: settings,
+      );
+      
+      if (mounted) showSuccess(context, 'Backup Berhasil Disimpan!');
+    } catch (e, stack) {
+      debugPrint('DEBUG: Backup FATAL ERROR: $e');
+      debugPrint('DEBUG: StackTrace: $stack');
+      if (mounted) showError(context, 'Gagal Backup: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Sync UI with provider changes
+    ref.listen(settingsProvider, (prev, next) {
+      if (_businessNameCtrl.text.isEmpty && next.businessName.isNotEmpty) {
+        _businessNameCtrl.text = next.businessName;
+        _ownerNameCtrl.text = next.ownerName;
+        _phoneCtrl.text = next.phone;
+        _emailCtrl.text = next.email;
+        _addressCtrl.text = next.address;
+        _descriptionCtrl.text = next.description;
+        setState(() {
+          _bankAccounts = List.from(next.bankAccounts);
+        });
+      }
+    });
+
     return Scaffold(
       backgroundColor: AppTheme.bg,
       body: Column(
         children: [
           PageHeader(
-            title: 'Pengaturan',
-            subtitle: 'Konfigurasi toko dan sistem',
+            title: 'Pengaturan Akun & Toko',
             icon: Icons.settings_rounded,
+            actions: [
+              OutlinedButton.icon(
+                onPressed: () => ref.read(authRepositoryProvider).logout(),
+                icon: const Icon(Icons.logout, size: 18),
+                label: const Text('Keluar (Logout)'),
+                style: OutlinedButton.styleFrom(foregroundColor: AppTheme.danger, side: const BorderSide(color: AppTheme.danger)),
+              ),
+              ElevatedButton.icon(
+                onPressed: _save,
+                icon: const Icon(Icons.save_rounded, size: 18),
+                label: const Text('Simpan Perubahan'),
+              ),
+            ],
           ),
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Form(
+                key: _formKey,
+                child: Center(
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 800),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const _SectionTitle(title: 'Informasi Bisnis'),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(child: _buildInput('Nama Toko / Usaha', _businessNameCtrl, Icons.store_rounded)),
+                            const SizedBox(width: 20),
+                            Expanded(child: _buildInput('Nama Pemilik', _ownerNameCtrl, Icons.person_rounded)),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        Row(
+                          children: [
+                            Expanded(child: _buildInput('Nomor Telepon', _phoneCtrl, Icons.phone_rounded)),
+                            const SizedBox(width: 20),
+                            Expanded(child: _buildInput('Email Bisnis', _emailCtrl, Icons.business_outlined)),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        _buildInput('Alamat Toko', _addressCtrl, Icons.location_on_rounded, maxLines: 2),
+                        const SizedBox(height: 20),
+                        _buildInput('Deskripsi Toko', _descriptionCtrl, Icons.description_rounded, maxLines: 3),
+                        
+                        const SizedBox(height: 40),
+                        const _SectionTitle(title: 'Metode Pembayaran Digital'),
+                        const SizedBox(height: 16),
+                        _buildQrisSetting(ref),
+
+                        const SizedBox(height: 40),
+                        const _SectionTitle(title: 'Keamanan Data'),
+                        const SizedBox(height: 16),
+                        _buildPinSetting(ref),
+
+                        const SizedBox(height: 40),
+                        const _SectionTitle(title: 'Data & Backup'),
+                        const SizedBox(height: 16),
+                        AppCard(
+                          child: Column(
+                            children: [
+                              ListTile(
+                                leading: const Icon(Icons.download_for_offline_rounded, color: AppTheme.accent),
+                                title: const Text('Backup Keseluruhan (Excel)', style: TextStyle(fontWeight: FontWeight.bold)),
+                                subtitle: const Text('Download 3 file Excel: Master Produk, Piutang Pelanggan, dan Analitik Penjualan'),
+                                trailing: const Icon(Icons.chevron_right_rounded),
+                                onTap: () => _handleFullBackup(ref),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 40),
+                        const _SectionTitle(title: 'Pengaturan Tampilan & Tema'),
+                        const SizedBox(height: 16),
+                        //_buildThemeSelector(ref),
+                        const SizedBox(height: 16),
+                        _buildAppSettings(ref),
+
+                        const SizedBox(height: 40),
+                        Row(
+                          children: [
+                            const _SectionTitle(title: 'Daftar Rekening Bank'),
+                            const Spacer(),
+                            TextButton.icon(
+                              onPressed: _addBankAccount,
+                              icon: const Icon(Icons.add_circle_outline, size: 18),
+                              label: const Text('Tambah Rekening'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Column(
+                          children: [
+                            if (_bankAccounts.isEmpty)
+                              const Center(child: Text('Belum ada rekening', style: TextStyle(color: AppTheme.textSecondary)))
+                            else
+                              for (int i = 0; i < _bankAccounts.length; i++)
+                                _buildBankCard(i),
+                          ],
+                        ),
+                        const SizedBox(height: 40),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInput(String label, TextEditingController ctrl, IconData icon, {int maxLines = 1}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: ctrl,
+          maxLines: maxLines,
+          decoration: InputDecoration(
+            prefixIcon: Icon(icon, size: 20, color: AppTheme.accent.withValues(alpha: 0.7)),
+          ),
+          style: const TextStyle(fontSize: 14),
+        ),
+      ],
+    );
+  }
+
+  // Widget _buildThemeSelector(WidgetRef ref) {
+  //   final currentMode = ref.watch(themeProvider);
+  //   final notifier = ref.read(themeProvider.notifier);
+  //   final colorScheme = Theme.of(context).colorScheme;
+  //
+  //   return Container(
+  //     padding: const EdgeInsets.all(20),
+  //     decoration: BoxDecoration(
+  //       color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+  //       borderRadius: BorderRadius.circular(16),
+  //       border: Border.all(color: colorScheme.outline),
+  //     ),
+  //     child: Column(
+  //       crossAxisAlignment: CrossAxisAlignment.start,
+  //       children: [
+  //         Row(
+  //           children: [
+  //             Icon(Icons.palette_rounded, size: 20, color: colorScheme.primary),
+  //             const SizedBox(width: 12),
+  //             const Text('Tema Warna Aplikasi', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+  //           ],
+  //         ),
+  //         const SizedBox(height: 20),
+  //         GridView.count(
+  //           shrinkWrap: true,
+  //           physics: const NeverScrollableScrollPhysics(),
+  //           crossAxisCount: 3,
+  //           mainAxisSpacing: 12,
+  //           crossAxisSpacing: 12,
+  //           childAspectRatio: 2.2,
+  //           children: AppThemeMode.values.map((mode) {
+  //             final isSelected = currentMode == mode;
+  //             final themeData = AppThemes.getTheme(mode);
+  //
+  //             return InkWell(
+  //               onTap: () => notifier.setTheme(mode),
+  //               borderRadius: BorderRadius.circular(12),
+  //               child: AnimatedContainer(
+  //                 duration: const Duration(milliseconds: 200),
+  //                 decoration: BoxDecoration(
+  //                   color: themeData.scaffoldBackgroundColor,
+  //                   borderRadius: BorderRadius.circular(12),
+  //                   border: Border.all(
+  //                     color: isSelected ? colorScheme.primary : colorScheme.outline,
+  //                     width: isSelected ? 2 : 1,
+  //                   ),
+  //                   boxShadow: isSelected ? [
+  //                     BoxShadow(color: colorScheme.primary.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))
+  //                   ] : [],
+  //                 ),
+  //                 child: Stack(
+  //                   children: [
+  //                     Padding(
+  //                       padding: const EdgeInsets.symmetric(horizontal: 16),
+  //                       child: Row(
+  //                         children: [
+  //                           Container(
+  //                             width: 24,
+  //                             height: 24,
+  //                             decoration: BoxDecoration(
+  //                               color: themeData.colorScheme.primary,
+  //                               shape: BoxShape.circle,
+  //                               border: Border.all(color: Colors.white.withValues(alpha: 0.5), width: 2),
+  //                             ),
+  //                           ),
+  //                           const SizedBox(width: 12),
+  //                           Expanded(
+  //                             child: Text(
+  //                               _getThemeLabel(mode),
+  //                               style: TextStyle(
+  //                                 fontSize: 12,
+  //                                 fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
+  //                                 color: themeData.colorScheme.onSurface,
+  //                               ),
+  //                             ),
+  //                           ),
+  //                         ],
+  //                       ),
+  //                     ),
+  //                     if (isSelected)
+  //                       Positioned(
+  //                         top: 8, right: 8,
+  //                         child: Icon(Icons.check_circle_rounded, size: 16, color: colorScheme.primary),
+  //                       ),
+  //                   ],
+  //                 ),
+  //               ),
+  //             );
+  //           }).toList(),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
+  //
+  // String _getThemeLabel(AppThemeMode mode) {
+  //   switch (mode) {
+  //     case AppThemeMode.darkOrange: return 'Dark Orange';
+  //     case AppThemeMode.lightBlue: return 'Light Blue';
+  //     case AppThemeMode.lightBlueOrange: return 'Blue + Orange';
+  //     case AppThemeMode.lightOrangeBlue: return 'Orange + Blue';
+  //     case AppThemeMode.lightOrangeGreen: return 'Orange + Green';
+  //     case AppThemeMode.lightOrange: return 'Light Orange';
+  //   }
+  // }
+
+  Widget _buildQrisSetting(WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.outline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.qr_code_2_rounded, size: 20, color: colorScheme.primary),
+              const SizedBox(width: 12),
+              const Text('Barcode QRIS Toko', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Preview Box (5:8 Aspect Ratio)
+              Container(
+                width: 120,
+                height: 192, // 120 * 8 / 5
+                decoration: BoxDecoration(
+                  color: colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: colorScheme.outline),
+                ),
+                child: settings.qrisImagePath != null
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(11),
+                        child: Image.file(File(settings.qrisImagePath!), fit: BoxFit.cover),
+                      )
+                    : Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.qr_code_scanner_rounded, size: 32, color: colorScheme.onSurface.withValues(alpha: 0.2)),
+                          const SizedBox(height: 8),
+                          Text('Belum ada', style: TextStyle(fontSize: 10, color: colorScheme.onSurface.withValues(alpha: 0.4))),
+                        ],
+                      ),
+              ),
+              const SizedBox(width: 24),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Upload Barcode QRIS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(height: 4),
+                    const Text('Gambar ini akan ditampilkan di layar kasir dan layar pelanggan saat memilih metode pembayaran QRIS.',
+                      style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            final bytes = await ImageHelper.pickAndCropImage(context);
+                            if (bytes != null) {
+                              final user = ref.read(authStateProvider).value;
+                              if (user == null) return;
+                              final processed = await ImageHelper.processImage(bytes);
+                              final path = await ImageHelper.saveLocally(user.uid, 'qris_barcode.jpg', processed, subFolder: 'store_assets');
+                              if (path != null) {
+                                final updated = settings.copyWith(qrisImagePath: path);
+                                ref.read(settingsProvider.notifier).updateSettings(updated);
+                                if (mounted) {
+                                  showSuccess(context, 'Barcode QRIS berhasil diperbarui');
+                                }
+                              }
+                            }
+                          },
+                          icon: const Icon(Icons.upload_rounded, size: 18),
+                          label: const Text('Pilih Gambar'),
+                        ),
+                        if (settings.qrisImagePath != null) ...[
+                          const SizedBox(width: 12),
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              final updated = settings.copyWith(qrisImagePath: null);
+                              ref.read(settingsProvider.notifier).updateSettings(updated);
+                              showSuccess(context, 'Barcode QRIS dihapus');
+                            },
+                            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                            label: const Text('Hapus'),
+                            style: OutlinedButton.styleFrom(foregroundColor: AppTheme.danger, side: const BorderSide(color: AppTheme.danger)),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text('Rekomendasi: Gambar vertikal dengan perbandingan 5:8 untuk hasil terbaik.',
+                      style: TextStyle(fontSize: 11, color: colorScheme.onSurface.withValues(alpha: 0.4), fontStyle: FontStyle.italic)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPinSetting(WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+    final colorScheme = Theme.of(context).colorScheme;
+    final hasPin = settings.securityPin != null;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.outline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(hasPin ? Icons.lock_rounded : Icons.lock_open_rounded, 
+                  size: 20, color: hasPin ? AppTheme.success : AppTheme.warning),
+              const SizedBox(width: 12),
+              Text(hasPin ? 'PIN Keamanan Aktif' : 'PIN Keamanan Belum Dibuat', 
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            hasPin 
+              ? 'Lindungi data laba, modal, dan laporan finansial dari akses yang tidak sah.'
+              : 'Sangat disarankan untuk membuat PIN guna melindungi informasi finansial toko Anda.',
+            style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              if (!hasPin)
+                ElevatedButton.icon(
+                  onPressed: () => _showPinEntryDialog(context, ref, isSetup: true),
+                  icon: const Icon(Icons.add_moderator_rounded, size: 18),
+                  label: const Text('Buat PIN Baru'),
+                )
+              else ...[
+                ElevatedButton.icon(
+                  onPressed: () => _requireAuth(context, ref, onSuccess: () {
+                    _showPinEntryDialog(context, ref, isSetup: true);
+                  }),
+                  icon: const Icon(Icons.edit_note_rounded, size: 18),
+                  label: const Text('Ubah PIN'),
+                ),
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: () => _requireAuth(context, ref, onSuccess: () {
+                    final updated = settings.copyWith(securityPin: null);
+                    ref.read(settingsProvider.notifier).updateSettings(updated);
+                    showSuccess(context, 'PIN Keamanan dinonaktifkan');
+                  }),
+                  icon: const Icon(Icons.no_encryption_gmailerrorred_rounded, size: 18),
+                  label: const Text('Nonaktifkan'),
+                  style: OutlinedButton.styleFrom(foregroundColor: AppTheme.danger, side: const BorderSide(color: AppTheme.danger)),
+                ),
+              ],
+              const Spacer(),
+              if (hasPin)
+                TextButton(
+                  onPressed: () => _requireAuth(context, ref, onSuccess: () {
+                    _showPinEntryDialog(context, ref, isSetup: true);
+                  }),
+                  child: const Text('Lupa PIN?', style: TextStyle(fontSize: 12)),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _requireAuth(BuildContext context, WidgetRef ref, {required VoidCallback onSuccess}) {
+    final emailCtrl = TextEditingController();
+    final passCtrl = TextEditingController();
+    bool loading = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Verifikasi Pemilik'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Masukkan email dan password akun Anda untuk melanjutkan tindakan ini.', 
+                  style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+              const SizedBox(height: 20),
+              TextField(
+                controller: emailCtrl,
+                decoration: const InputDecoration(labelText: 'Email', isDense: true),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: passCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Password', isDense: true),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+            ElevatedButton(
+              onPressed: loading ? null : () async {
+                setState(() => loading = true);
+                try {
+                  await ref.read(authRepositoryProvider).reauthenticate(emailCtrl.text.trim(), passCtrl.text);
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    onSuccess();
+                  }
+                } catch (e) {
+                  if (context.mounted) showError(context, 'Autentikasi Gagal: $e');
+                } finally {
+                  if (context.mounted) setState(() => loading = false);
+                }
+              },
+              child: loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Verifikasi'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPinEntryDialog(BuildContext context, WidgetRef ref, {required bool isSetup}) {
+    final pinCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isSetup ? 'Setel PIN Baru' : 'Masukkan PIN'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Gunakan 4-6 digit angka yang mudah diingat namun aman.', 
+                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+            const SizedBox(height: 20),
+            TextField(
+              controller: pinCtrl,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(labelText: 'PIN Baru', counterText: '', isDense: true),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: confirmCtrl,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(labelText: 'Konfirmasi PIN', counterText: '', isDense: true),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () {
+              if (pinCtrl.text.length < 4) {
+                showError(context, 'PIN minimal 4 digit');
+                return;
+              }
+              if (pinCtrl.text != confirmCtrl.text) {
+                showError(context, 'PIN konfirmasi tidak cocok');
+                return;
+              }
+              
+              final settings = ref.read(settingsProvider);
+              final updated = settings.copyWith(securityPin: pinCtrl.text);
+              ref.read(settingsProvider.notifier).updateSettings(updated);
+              
+              Navigator.pop(context);
+              showSuccess(context, 'PIN Keamanan berhasil diperbarui');
+            },
+            child: const Text('Simpan PIN'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppSettings(WidgetRef ref) {
+    final appSettings = ref.watch(appSettingsProvider);
+    final notifier = ref.read(appSettingsProvider.notifier);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceAlt,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        children: [
+          _buildSettingRow(
+            icon: Icons.fullscreen_rounded,
+            label: 'Layar Penuh (Full Screen)',
+            child: Switch.adaptive(
+              value: appSettings.isFullScreen,
+              onChanged: (v) => notifier.setFullScreen(v),
+              activeTrackColor: AppTheme.accent,
+            ),
+          ),
+          const Divider(height: 32),
+          _buildSettingRow(
+            icon: Icons.monitor_rounded,
+            label: 'Tampilan Pelanggan (Dual Display)',
+            child: Row(
               children: [
-                _buildGroup('TOKO', [
-                  _tile(Icons.store_rounded, 'Informasi Bisnis', () => _showBusinessInfo(context)),
-                  _tile(Icons.qr_code_2_rounded, 'Pengaturan QRIS', () => _showQrisSetting(context)),
-                  _tile(Icons.account_balance_rounded, 'Rekening Bank', () => _showBankAccounts(context)),
-                ]),
-                const SizedBox(height: 16),
-                _buildGroup('SISTEM', [
-                  _tile(Icons.security_rounded, 'Keamanan & PIN', () => _showSecuritySetting(context)),
-                  _tile(Icons.cloud_download_rounded, 'Backup Data', () => _handleFullBackup(context, ref)),
-                  _tile(Icons.monitor_rounded, 'Tampilan Layar', () => _showDisplaySettings(context)),
-                ]),
-                const SizedBox(height: 16),
-                _buildGroup('AKUN', [
-                  _tile(Icons.logout_rounded, 'Keluar (Logout)', () => _handleLogout(context, ref), color: AppTheme.danger),
-                ]),
-                const SizedBox(height: 40),
+                if (appSettings.isCustomerDisplayEnabled)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: OutlinedButton.icon(
+                      onPressed: () => _openCustomerDisplayUrl(context),
+                      icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                      label: const Text('Buka Layar', style: TextStyle(fontSize: 12)),
+                    ),
+                  ),
+                Switch.adaptive(
+                  value: appSettings.isCustomerDisplayEnabled,
+                  onChanged: (v) => notifier.setCustomerDisplay(v),
+                  activeTrackColor: AppTheme.accent,
+                ),
               ],
             ),
           ),
@@ -111,419 +740,112 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-  Widget _buildGroup(String title, List<Widget> children) {
+  Widget _buildSettingRow({required IconData icon, required String label, required Widget child}) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: AppTheme.textSecondary),
+        const SizedBox(width: 12),
+        Text(label, style: const TextStyle(fontSize: 14)),
+        const Spacer(),
+        child,
+      ],
+    );
+  }
+
+  Widget _buildBankCard(int i) {
+    final account = _bankAccounts[i];
+    return Container(
+      key: ValueKey('bank_card_$i'),
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceAlt,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _buildSmallInput('Nama Bank', account.bankName, (v) {
+                  setState(() => _bankAccounts[i] = BankAccount(bankName: v, accountNumber: account.accountNumber, accountHolder: account.accountHolder));
+                }),
+              ),
+              IconButton(onPressed: () => _removeBankAccount(i), icon: const Icon(Icons.delete_outline, color: AppTheme.danger)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildSmallInput('Nomor Rekening', account.accountNumber, (v) {
+                  setState(() => _bankAccounts[i] = BankAccount(bankName: account.bankName, accountNumber: v, accountHolder: account.accountHolder));
+                }),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildSmallInput('Pemilik', account.accountHolder, (v) {
+                  setState(() => _bankAccounts[i] = BankAccount(bankName: account.bankName, accountNumber: account.accountNumber, accountHolder: v));
+                }),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSmallInput(String label, String initial, ValueChanged<String> onChanged) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 8, bottom: 8),
-          child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.textMuted)),
-        ),
-        AppCard(
-          padding: EdgeInsets.zero,
-          child: Column(children: children),
+        Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+        const SizedBox(height: 4),
+        TextFormField(
+          initialValue: initial,
+          onChanged: onChanged,
+          decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
+          style: const TextStyle(fontSize: 13),
         ),
       ],
     );
   }
 
-  Widget _tile(IconData icon, String title, VoidCallback onTap, {Color? color}) {
-    return ListTile(
-      leading: Icon(icon, color: color ?? AppTheme.primary, size: 22),
-      title: Text(title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: color)),
-      trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
-      onTap: onTap,
-    );
-  }
-
-  void _showBusinessInfo(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: AppTheme.bg,
-      builder: (_) => _SettingsFormSheet(
-        title: 'Informasi Bisnis',
-        onSave: _save,
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              _field(_businessNameCtrl, 'Nama Toko'),
-              const SizedBox(height: 16),
-              _field(_ownerNameCtrl, 'Nama Pemilik'),
-              const SizedBox(height: 16),
-              _field(_phoneCtrl, 'No. Telepon', keyboardType: TextInputType.phone),
-              const SizedBox(height: 16),
-              _field(_emailCtrl, 'Email', keyboardType: TextInputType.emailAddress),
-              const SizedBox(height: 16),
-              _field(_addressCtrl, 'Alamat', maxLines: 2),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _field(TextEditingController ctrl, String label, {TextInputType? keyboardType, int maxLines = 1}) {
-    return TextFormField(
-      controller: ctrl,
-      keyboardType: keyboardType,
-      maxLines: maxLines,
-      decoration: InputDecoration(labelText: label),
-    );
-  }
-
-  void _showQrisSetting(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: AppTheme.bg,
-      builder: (_) => Consumer(builder: (context, ref, _) {
-        final settings = ref.watch(settingsProvider);
-        return _SettingsFormSheet(
-          title: 'Pengaturan QRIS',
-          onSave: () => Navigator.pop(context),
-          child: Column(
-            children: [
-              Container(
-                height: 250, width: 180,
-                decoration: BoxDecoration(color: AppTheme.surfaceAlt, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppTheme.border)),
-                child: settings.qrisImagePath != null
-                  ? ClipRRect(borderRadius: BorderRadius.circular(11), child: Image.file(File(settings.qrisImagePath!), fit: BoxFit.cover))
-                  : const Icon(Icons.qr_code_scanner_rounded, size: 64, color: AppTheme.textMuted),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: () async {
-                  final bytes = await ImageHelper.pickAndCropImage(context);
-                  if (bytes != null) {
-                    final user = ref.read(authStateProvider).value;
-                    if (user == null) return;
-                    final processed = await ImageHelper.processImage(bytes);
-                    final path = await ImageHelper.saveLocally(user.uid, 'qris_barcode.jpg', processed, subFolder: 'store_assets');
-                    if (path != null) {
-                      ref.read(settingsProvider.notifier).updateSettings(settings.copyWith(qrisImagePath: path));
-                      if (mounted) showSuccess(context, 'QRIS diperbarui');
-                    }
-                  }
-                },
-                icon: const Icon(Icons.upload_rounded),
-                label: const Text('Ganti Gambar QRIS'),
-              ),
-              if (settings.qrisImagePath != null)
-                TextButton(
-                  onPressed: () => ref.read(settingsProvider.notifier).updateSettings(settings.copyWith(qrisImagePath: null)),
-                  child: const Text('Hapus Gambar', style: TextStyle(color: AppTheme.danger)),
-                ),
-            ],
-          ),
-        );
-      }),
-    );
-  }
-
-  void _showBankAccounts(BuildContext context) {
-    // Similar implementation for bank accounts as a mobile-friendly list
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: AppTheme.bg,
-      builder: (_) => const _BankAccountsSheet(),
-    );
-  }
-
-  void _showSecuritySetting(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: AppTheme.bg,
-      builder: (_) => const _SecuritySheet(),
-    );
-  }
-
-  void _showDisplaySettings(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppTheme.bg,
-      builder: (_) => const _DisplaySettingsSheet(),
-    );
-  }
-
-  Future<void> _handleFullBackup(BuildContext context, WidgetRef ref) async {
-    showSuccess(context, 'Memulai proses backup...');
+  void _openCustomerDisplayUrl(BuildContext context) async {
     try {
-      await BackupHelper.performFullBackup(
-        context: context,
-        products: ref.read(productsProvider).asData?.value ?? [],
-        restocks: ref.read(restockHistoryProvider).asData?.value ?? [],
-        billPayments: ref.read(billPaymentsProvider).asData?.value ?? [],
-        customers: ref.read(customersProvider).asData?.value ?? [],
-        customerDebts: ref.read(debtsProvider(null)).asData?.value ?? [],
-        customerPayments: ref.read(debtPaymentsProvider((customerId: null, debtId: null))).asData?.value ?? [],
-        transactions: ref.read(transactionsProvider).asData?.value ?? [],
-        settings: ref.read(settingsProvider),
+      final user = ref.read(authStateProvider).value;
+      final args = ['multi_window', 'uid=${user?.uid ?? 'unknown'}'];
+      
+      // Use detached mode to ensure process independence on Windows
+      await Process.start(
+        Platform.resolvedExecutable, 
+        args,
+        mode: ProcessStartMode.detached,
       );
-      if (mounted) showSuccess(context, 'Backup Berhasil!');
+      
+      if (context.mounted) {
+        showSuccess(context, 'Membuka jendela pelanggan...');
+      }
     } catch (e) {
-      if (mounted) showError(context, 'Gagal: $e');
+      if (context.mounted) {
+        showError(context, 'Gagal membuka jendela: $e');
+      }
     }
   }
-
-  void _handleLogout(BuildContext context, WidgetRef ref) async {
-    final ok = await showConfirmDialog(context, title: 'Keluar', content: 'Anda akan keluar dari akun ini.');
-    if (ok) ref.read(authRepositoryProvider).logout();
-  }
 }
 
-class _SettingsFormSheet extends StatelessWidget {
+class _SectionTitle extends StatelessWidget {
   final String title;
-  final Widget child;
-  final VoidCallback onSave;
-
-  const _SettingsFormSheet({required this.title, required this.child, required this.onSave});
+  const _SectionTitle({required this.title});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(height: 5, width: 40, margin: const EdgeInsets.symmetric(vertical: 12), decoration: BoxDecoration(color: AppTheme.border, borderRadius: BorderRadius.circular(5))),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              const Spacer(),
-              IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
-            ]),
-          ),
-          const Divider(),
-          Flexible(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  child,
-                  const SizedBox(height: 32),
-                  ElevatedButton(onPressed: onSave, child: const Text('Simpan Perubahan')),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BankAccountsSheet extends ConsumerStatefulWidget {
-  const _BankAccountsSheet();
-  @override
-  ConsumerState<_BankAccountsSheet> createState() => _BankAccountsSheetState();
-}
-
-class _BankAccountsSheetState extends ConsumerState<_BankAccountsSheet> {
-  @override
-  Widget build(BuildContext context) {
-    final settings = ref.watch(settingsProvider);
-    final bankAccounts = settings.bankAccounts;
-
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(height: 5, width: 40, margin: const EdgeInsets.symmetric(vertical: 12), decoration: BoxDecoration(color: AppTheme.border, borderRadius: BorderRadius.circular(5))),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(children: [
-            const Text('Rekening Bank', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            const Spacer(),
-            IconButton(onPressed: () => _add(context, ref), icon: const Icon(Icons.add_circle_outline, color: AppTheme.primary)),
-            IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
-          ]),
-        ),
-        const Divider(),
-        Expanded(
-          child: bankAccounts.isEmpty
-            ? const EmptyState(icon: Icons.account_balance_outlined, title: 'Belum ada rekening')
-            : ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: bankAccounts.length,
-                itemBuilder: (context, i) => AppCard(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(bankAccounts[i].bankName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            Text(bankAccounts[i].accountNumber, style: const TextStyle(fontSize: 16, letterSpacing: 1)),
-                            Text(bankAccounts[i].accountHolder, style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => _remove(i),
-                        icon: const Icon(Icons.delete_outline, color: AppTheme.danger),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-        ),
-      ],
-    );
-  }
-
-  void _add(BuildContext context, WidgetRef ref) {
-    final bankCtrl = TextEditingController();
-    final numCtrl = TextEditingController();
-    final holderCtrl = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Tambah Rekening'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: bankCtrl, decoration: const InputDecoration(labelText: 'Nama Bank')),
-            const SizedBox(height: 12),
-            TextField(controller: numCtrl, decoration: const InputDecoration(labelText: 'Nomor Rekening')),
-            const SizedBox(height: 12),
-            TextField(controller: holderCtrl, decoration: const InputDecoration(labelText: 'Nama Pemilik')),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
-          ElevatedButton(
-            onPressed: () {
-              final updated = ref.read(settingsProvider).copyWith(
-                bankAccounts: [...ref.read(settingsProvider).bankAccounts, BankAccount(
-                  bankName: bankCtrl.text,
-                  accountNumber: numCtrl.text,
-                  accountHolder: holderCtrl.text,
-                )],
-              );
-              ref.read(settingsProvider.notifier).updateSettings(updated);
-              Navigator.pop(context);
-            },
-            child: const Text('Tambah'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _remove(int i) {
-    final list = List<BankAccount>.from(ref.read(settingsProvider).bankAccounts);
-    list.removeAt(i);
-    ref.read(settingsProvider.notifier).updateSettings(ref.read(settingsProvider).copyWith(bankAccounts: list));
-  }
-}
-
-class _SecuritySheet extends ConsumerWidget {
-  const _SecuritySheet();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(settingsProvider);
-    final hasPin = settings.securityPin != null;
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(height: 5, width: 40, margin: const EdgeInsets.symmetric(vertical: 12), decoration: BoxDecoration(color: AppTheme.border, borderRadius: BorderRadius.circular(5))),
-        const Padding(
-          padding: EdgeInsets.all(16),
-          child: Text('Keamanan & PIN', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-        ),
-        const Divider(),
-        Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              Icon(hasPin ? Icons.lock_rounded : Icons.lock_open_rounded, size: 64, color: hasPin ? AppTheme.success : AppTheme.warning),
-              const SizedBox(height: 16),
-              Text(hasPin ? 'PIN Keamanan Aktif' : 'PIN Belum Diatur', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const SizedBox(height: 8),
-              const Text('PIN digunakan untuk melindungi data finansial dan menghapus transaksi.', textAlign: TextAlign.center, style: TextStyle(color: AppTheme.textMuted)),
-              const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: () => _setupPin(context, ref),
-                child: Text(hasPin ? 'Ubah PIN' : 'Setel PIN Sekarang'),
-              ),
-              if (hasPin)
-                TextButton(
-                  onPressed: () => ref.read(settingsProvider.notifier).updateSettings(settings.copyWith(securityPin: null)),
-                  child: const Text('Nonaktifkan PIN', style: TextStyle(color: AppTheme.danger)),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _setupPin(BuildContext context, WidgetRef ref) {
-    final pinCtrl = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Setel PIN (4-6 Digit)'),
-        content: TextField(
-          controller: pinCtrl,
-          obscureText: true,
-          keyboardType: TextInputType.number,
-          maxLength: 6,
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 24, letterSpacing: 10),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
-          ElevatedButton(
-            onPressed: () {
-              if (pinCtrl.text.length < 4) return;
-              ref.read(settingsProvider.notifier).updateSettings(ref.read(settingsProvider).copyWith(securityPin: pinCtrl.text));
-              Navigator.pop(context);
-              showSuccess(context, 'PIN Berhasil Disimpan');
-            },
-            child: const Text('Simpan'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DisplaySettingsSheet extends ConsumerWidget {
-  const _DisplaySettingsSheet();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final appSettings = ref.watch(appSettingsProvider);
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const SizedBox(height: 16),
-        SwitchListTile.adaptive(
-          title: const Text('Layar Penuh (Full Screen)'),
-          secondary: const Icon(Icons.fullscreen_rounded),
-          value: appSettings.isFullScreen,
-          onChanged: (v) => ref.read(appSettingsProvider.notifier).setFullScreen(v),
-        ),
-        SwitchListTile.adaptive(
-          title: const Text('Tampilan Pelanggan'),
-          secondary: const Icon(Icons.monitor_rounded),
-          value: appSettings.isCustomerDisplayEnabled,
-          onChanged: (v) => ref.read(appSettingsProvider.notifier).setCustomerDisplay(v),
-        ),
-        const SizedBox(height: 32),
+        Text(title, style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: AppTheme.accent, fontWeight: FontWeight.bold)),
+        const Divider(color: AppTheme.border, height: 24),
       ],
     );
   }
