@@ -13,7 +13,9 @@ class PrintProfile {
   final double fontSizeName;
   final double fontSizeBarcode;
   final double fontSizePrice;
-  final double barcodeWidth; // New field
+  final double fontSizeStoreName; // New field
+  final double barcodeWidth;
+  final bool isRollMode;
 
   PrintProfile({
     required this.id,
@@ -23,7 +25,7 @@ class PrintProfile {
     this.labelWidth = 40,
     this.labelHeight = 30,
     this.barcodeHeight = 12,
-    this.barcodeWidth = 35, // Default
+    this.barcodeWidth = 35,
     this.paperMargin = 10,
     this.labelMargin = 2,
     this.labelPadding = 2,
@@ -31,6 +33,8 @@ class PrintProfile {
     this.fontSizeName = 8,
     this.fontSizeBarcode = 7,
     this.fontSizePrice = 8,
+    this.fontSizeStoreName = 7,
+    this.isRollMode = false,
   });
 
   Map<String, dynamic> toMap() => {
@@ -49,6 +53,8 @@ class PrintProfile {
         'font_size_name': fontSizeName,
         'font_size_barcode': fontSizeBarcode,
         'font_size_price': fontSizePrice,
+        'font_size_store_name': fontSizeStoreName,
+        'is_roll_mode': isRollMode,
       };
 
   factory PrintProfile.fromMap(Map<String, dynamic> m) => PrintProfile(
@@ -67,5 +73,7 @@ class PrintProfile {
         fontSizeName: (m['font_size_name'] ?? 8).toDouble(),
         fontSizeBarcode: (m['font_size_barcode'] ?? 7).toDouble(),
         fontSizePrice: (m['font_size_price'] ?? 8).toDouble(),
+        fontSizeStoreName: (m['font_size_store_name'] ?? 7).toDouble(),
+        isRollMode: m['is_roll_mode'] ?? false,
       );
 }

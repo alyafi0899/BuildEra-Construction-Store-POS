@@ -33,6 +33,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   late TextEditingController _emailCtrl;
   late TextEditingController _addressCtrl;
   late TextEditingController _descriptionCtrl;
+  late TextEditingController _receiptWidthCtrl;
 
   List<BankAccount> _bankAccounts = [];
 
@@ -46,6 +47,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     _emailCtrl = TextEditingController(text: settings.email);
     _addressCtrl = TextEditingController(text: settings.address);
     _descriptionCtrl = TextEditingController(text: settings.description);
+    _receiptWidthCtrl = TextEditingController(text: settings.receiptWidth.toString());
     _bankAccounts = List.from(settings.bankAccounts);
   }
 
@@ -57,6 +59,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     _emailCtrl.dispose();
     _addressCtrl.dispose();
     _descriptionCtrl.dispose();
+    _receiptWidthCtrl.dispose();
     super.dispose();
   }
 
@@ -81,6 +84,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         email: _emailCtrl.text,
         address: _addressCtrl.text,
         description: _descriptionCtrl.text,
+        receiptWidth: double.tryParse(_receiptWidthCtrl.text) ?? 80.0,
         bankAccounts: _bankAccounts,
       );
       
@@ -141,6 +145,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         _emailCtrl.text = next.email;
         _addressCtrl.text = next.address;
         _descriptionCtrl.text = next.description;
+        _receiptWidthCtrl.text = next.receiptWidth.toString();
         setState(() {
           _bankAccounts = List.from(next.bankAccounts);
         });
@@ -201,6 +206,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         const SizedBox(height: 20),
                         _buildInput('Deskripsi Toko', _descriptionCtrl, Icons.description_rounded, maxLines: 3),
                         
+                        const SizedBox(height: 40),
+                        const _SectionTitle(title: 'Pengaturan Printer & Struk'),
+                        const SizedBox(height: 16),
+                        _buildPrinterSettings(),
+
                         const SizedBox(height: 40),
                         const _SectionTitle(title: 'Metode Pembayaran Digital'),
                         const SizedBox(height: 16),
@@ -809,6 +819,58 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           style: const TextStyle(fontSize: 13),
         ),
       ],
+    );
+  }
+
+  Widget _buildPrinterSettings() {
+    return AppCard(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.print_rounded, size: 20, color: AppTheme.accent),
+                const SizedBox(width: 12),
+                const Text('Format Struk', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Lebar Kertas (mm)', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _receiptWidthCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+                        decoration: const InputDecoration(
+                          prefixIcon: Icon(Icons.straighten_rounded, size: 20),
+                          hintText: 'Contoh: 80, 75, 58',
+                        ),
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 24),
+                const Expanded(
+                  flex: 2,
+                  child: Text(
+                    'Sesuaikan dengan lebar kertas printer thermal Anda. Umumnya 80mm untuk printer besar dan 58mm untuk printer bluetooth portable.',
+                    style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 

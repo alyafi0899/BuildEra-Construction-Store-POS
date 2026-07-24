@@ -40,6 +40,7 @@ class StoreSettings {
   final String? logoUrl;
   final String? qrisImagePath; // New: Local path for QRIS barcode
   final String? securityPin; // New: PIN for sensitive data
+  final double receiptWidth; // New: Receipt paper width in mm
 
   const StoreSettings({
     this.businessName = '',
@@ -53,6 +54,7 @@ class StoreSettings {
     this.logoUrl,
     this.qrisImagePath,
     this.securityPin,
+    this.receiptWidth = 80.0,
   });
 
   Map<String, dynamic> toMap() {
@@ -68,6 +70,7 @@ class StoreSettings {
       'logoUrl': logoUrl,
       'qrisImagePath': qrisImagePath,
       'securityPin': securityPin,
+      'receiptWidth': receiptWidth,
     };
   }
 
@@ -87,6 +90,7 @@ class StoreSettings {
       logoUrl: map['logoUrl']?.toString(),
       qrisImagePath: map['qrisImagePath']?.toString(),
       securityPin: map['securityPin']?.toString(),
+      receiptWidth: (map['receiptWidth'] as num?)?.toDouble() ?? 80.0,
     );
   }
 
@@ -106,6 +110,7 @@ class StoreSettings {
     String? logoUrl,
     String? qrisImagePath,
     String? securityPin,
+    double? receiptWidth,
   }) {
     return StoreSettings(
       businessName: businessName ?? this.businessName,
@@ -119,6 +124,7 @@ class StoreSettings {
       logoUrl: logoUrl ?? this.logoUrl,
       qrisImagePath: qrisImagePath ?? this.qrisImagePath,
       securityPin: securityPin ?? this.securityPin,
+      receiptWidth: receiptWidth ?? this.receiptWidth,
     );
   }
 }

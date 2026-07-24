@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -14,6 +15,7 @@ import '../../providers/product_provider.dart';
 
 import '../../models/print_profile.dart';
 import '../../providers/print_profile_provider.dart';
+import '../../../settings/providers/settings_provider.dart';
 
 class BarcodeManagementPage extends ConsumerStatefulWidget {
   const BarcodeManagementPage({super.key});
@@ -28,12 +30,13 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
   String _sortBy = 'name'; 
   bool _sortAsc = true;
   String? _selectedProfileId;
+  bool _isRollMode = false;
   
   final Map<String, int> _selectedQuantities = {};
   
   // Settings with persistent controllers to avoid cursor jumping
   late final TextEditingController _ctrlPaperW, _ctrlPaperH, _ctrlLabelW, _ctrlLabelH, _ctrlBarH, _ctrlBarW, _ctrlPaperM, _ctrlLabelM, _ctrlLabelP, _ctrlCols;
-  late final TextEditingController _ctrlFntName, _ctrlFntBar, _ctrlFntPrice;
+  late final TextEditingController _ctrlFntName, _ctrlFntBar, _ctrlFntPrice, _ctrlFntStore;
 
   double _paperWidthMm = 210;
   double _paperHeightMm = 297;
@@ -48,6 +51,7 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
   double _fontSizeName = 8;
   double _fontSizeBarcode = 7;
   double _fontSizePrice = 8;
+  double _fontSizeStore = 7;
 
   @override
   void initState() {
@@ -65,6 +69,7 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
     _ctrlFntName = TextEditingController(text: _fontSizeName.toString());
     _ctrlFntBar = TextEditingController(text: _fontSizeBarcode.toString());
     _ctrlFntPrice = TextEditingController(text: _fontSizePrice.toString());
+    _ctrlFntStore = TextEditingController(text: _fontSizeStore.toString());
   }
 
   @override
@@ -73,6 +78,7 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
     _ctrlPaperW.dispose(); _ctrlPaperH.dispose(); _ctrlLabelW.dispose(); _ctrlLabelH.dispose();
     _ctrlBarH.dispose(); _ctrlBarW.dispose(); _ctrlPaperM.dispose(); _ctrlLabelM.dispose(); _ctrlLabelP.dispose();
     _ctrlCols.dispose(); _ctrlFntName.dispose(); _ctrlFntBar.dispose(); _ctrlFntPrice.dispose();
+    _ctrlFntStore.dispose();
     super.dispose();
   }
 
@@ -86,10 +92,8 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
     });
   }
 
-  void _updateQty(String id, int delta) {
+  void _updateQty(String id, int next) {
     setState(() {
-      final current = _selectedQuantities[id] ?? 0;
-      final next = current + delta;
       if (next <= 0) {
         _selectedQuantities.remove(id);
       } else {
@@ -101,6 +105,7 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
   void _loadProfile(PrintProfile p) {
     setState(() {
       _selectedProfileId = p.id;
+      _isRollMode = p.isRollMode;
       _paperWidthMm = p.paperWidth;
       _paperHeightMm = p.paperHeight;
       _labelWidthMm = p.labelWidth;
@@ -114,6 +119,7 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
       _fontSizeName = p.fontSizeName;
       _fontSizeBarcode = p.fontSizeBarcode;
       _fontSizePrice = p.fontSizePrice;
+      _fontSizeStore = p.fontSizeStoreName;
 
       _ctrlPaperW.text = _paperWidthMm.toString();
       _ctrlPaperH.text = _paperHeightMm.toString();
@@ -128,6 +134,7 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
       _ctrlFntName.text = _fontSizeName.toString();
       _ctrlFntBar.text = _fontSizeBarcode.toString();
       _ctrlFntPrice.text = _fontSizePrice.toString();
+      _ctrlFntStore.text = _fontSizeStore.toString();
     });
   }
 
@@ -152,6 +159,7 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
       final profile = PrintProfile(
         id: '',
         name: nameCtrl.text,
+        isRollMode: _isRollMode,
         paperWidth: _paperWidthMm,
         paperHeight: _paperHeightMm,
         labelWidth: _labelWidthMm,
@@ -165,6 +173,7 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
         fontSizeName: _fontSizeName,
         fontSizeBarcode: _fontSizeBarcode,
         fontSizePrice: _fontSizePrice,
+        fontSizeStoreName: _fontSizeStore,
       );
       await ref.read(printProfilesProvider.notifier).saveProfile(profile);
       if (mounted) showSuccess(context, 'Profil berhasil disimpan');
@@ -196,28 +205,55 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
     }
 
     const double mmToPt = 2.83465;
-    final paperFormat = PdfPageFormat(
-      _paperWidthMm * mmToPt,
-      _paperHeightMm * mmToPt,
-      marginAll: _paperMarginMm * mmToPt,
-    );
-
-    final labelsPerPage = _columnCount * ((paperFormat.availableHeight / (_labelHeightMm * mmToPt)).floor());
     
-    for (var i = 0; i < flatLabels.length; i += labelsPerPage) {
-      final pageLabels = flatLabels.skip(i).take(labelsPerPage).toList();
-      doc.addPage(
-        pw.Page(
-          pageFormat: paperFormat,
-          build: (pw.Context context) {
-            return pw.Wrap(
-              spacing: _labelMarginMm * mmToPt,
-              runSpacing: _labelMarginMm * mmToPt,
-              children: pageLabels.map((p) => _buildPdfLabel(p, mmToPt, flatLabels.length)).toList(),
-            );
-          },
-        ),
+    if (_isRollMode) {
+      // Roll Mode: multiple labels across is possible (e.g. 2 up or 3 up rolls)
+      // Height is constant (label height + gap), width is (labelWidth * cols) + gaps
+      final rollWidth = (_labelWidthMm * _columnCount) + (_labelMarginMm * (_columnCount - 1));
+      final rollFormat = PdfPageFormat(
+        rollWidth * mmToPt,
+        (_labelHeightMm + _labelMarginMm) * mmToPt, 
+        marginAll: 0, 
       );
+
+      for (var i = 0; i < flatLabels.length; i += _columnCount) {
+        final rowLabels = flatLabels.skip(i).take(_columnCount).toList();
+        doc.addPage(
+          pw.Page(
+            pageFormat: rollFormat,
+            build: (pw.Context context) {
+              return pw.Wrap(
+                spacing: _labelMarginMm * mmToPt,
+                children: rowLabels.map((p) => _buildPdfLabel(p, mmToPt, flatLabels.length, isRoll: true)).toList(),
+              );
+            },
+          ),
+        );
+      }
+    } else {
+      final paperFormat = PdfPageFormat(
+        _paperWidthMm * mmToPt,
+        _paperHeightMm * mmToPt,
+        marginAll: _paperMarginMm * mmToPt,
+      );
+
+      final labelsPerPage = _columnCount * ((paperFormat.availableHeight / (_labelHeightMm * mmToPt)).floor());
+
+      for (var i = 0; i < flatLabels.length; i += labelsPerPage) {
+        final pageLabels = flatLabels.skip(i).take(labelsPerPage).toList();
+        doc.addPage(
+          pw.Page(
+            pageFormat: paperFormat,
+            build: (pw.Context context) {
+              return pw.Wrap(
+                spacing: _labelMarginMm * mmToPt,
+                runSpacing: _labelMarginMm * mmToPt,
+                children: pageLabels.map((p) => _buildPdfLabel(p, mmToPt, flatLabels.length)).toList(),
+              );
+            },
+          ),
+        );
+      }
     }
 
     final bytes = await doc.save();
@@ -230,13 +266,8 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
     }
   }
 
-  pw.Widget _buildPdfLabel(Product p, double mmToPt, int totalCount) {
-    // Standardize to TopCenter alignment as per last request
-    const alignment = pw.Alignment.topCenter;
-    const crossAlign = pw.CrossAxisAlignment.center;
-    const textAlign = pw.TextAlign.center;
-
-    // Use Code128 as it's the most compatible for any type of barcode string
+  pw.Widget _buildPdfLabel(Product p, double mmToPt, int totalCount, {bool isRoll = false}) {
+    final settings = ref.read(settingsProvider);
     final bc = Barcode.code128();
 
     return pw.SizedBox(
@@ -244,25 +275,38 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
       height: _labelHeightMm * mmToPt,
       child: pw.Container(
         padding: pw.EdgeInsets.all(_labelPaddingMm * mmToPt),
-        alignment: alignment,
         decoration: pw.BoxDecoration(
-          border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+          border: isRoll ? null : pw.Border.all(color: PdfColors.grey300, width: 0.5),
         ),
         child: pw.Column(
           mainAxisAlignment: pw.MainAxisAlignment.start,
-          crossAxisAlignment: crossAlign,
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
-            // 1. Product Name
+            // 1. Store Name (Alignment: Left)
+            pw.Align(
+              alignment: pw.Alignment.centerLeft,
+              child: pw.Text(
+                settings.businessName,
+                style: pw.TextStyle(
+                  fontSize: _fontSizeStore, 
+                  fontWeight: pw.FontWeight.bold, // Default Bold
+                  color: PdfColors.grey700,
+                ),
+              ),
+            ),
+            pw.SizedBox(height: 2),
+
+            // 2. Product Name (Alignment: Center)
             pw.Text(
               p.name,
-              textAlign: textAlign,
+              textAlign: pw.TextAlign.center,
               maxLines: 2,
               overflow: pw.TextOverflow.clip,
               style: pw.TextStyle(fontSize: _fontSizeName, fontWeight: pw.FontWeight.bold),
             ),
-            pw.SizedBox(height: 2),
+            pw.Spacer(),
             
-            // 2. Barcode
+            // 3. Barcode (Alignment: Center)
             pw.SizedBox(
               height: _barcodeHeightMm * mmToPt,
               width: _barcodeWidthMm * mmToPt,
@@ -273,21 +317,20 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
               ),
             ),
             
-            // 3. Barcode Number
+            // 4. Barcode Number (Alignment: Center)
             pw.Text(
               p.barcode ?? '',
               style: pw.TextStyle(fontSize: _fontSizeBarcode, letterSpacing: 1),
             ),
             
-            pw.SizedBox(height: 2),
+            pw.Spacer(),
             
-            // 4. Price
+            // 5. Price (Alignment: Center)
             pw.Text(
-              Formatters.currency(p.basePrice),
+              'Rp. ${Formatters.currency(p.basePrice).replaceAll('Rp', '').trim()}',
               style: pw.TextStyle(
                 fontSize: _fontSizePrice, 
                 fontWeight: pw.FontWeight.bold,
-                color: PdfColors.blue700, // Price in Blue color
               ),
             ),
           ],
@@ -366,8 +409,7 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
                                 isSelected: _selectedQuantities.containsKey(filtered[i].id),
                                 qty: _selectedQuantities[filtered[i].id] ?? 0,
                                 onToggle: () => _toggleSelect(filtered[i]),
-                                onAdd: () => _updateQty(filtered[i].id, 1),
-                                onRem: () => _updateQty(filtered[i].id, -1),
+                                onQtyChanged: (v) => _updateQty(filtered[i].id, v),
                               ),
                             );
                           },
@@ -390,23 +432,30 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _section('Kertas (mm)', [
-                                _field('Lebar', _ctrlPaperW, (v) => _paperWidthMm = v),
-                                _field('Tinggi', _ctrlPaperH, (v) => _paperHeightMm = v),
-                                _field('Margin', _ctrlPaperM, (v) => _paperMarginMm = v),
-                              ]),
+                              _buildModeIllustration(),
+                              const SizedBox(height: 24),
+                              _buildModeSwitch(),
                               const Divider(height: 40),
+                              if (!_isRollMode) ...[
+                                _section('Kertas (mm)', [
+                                  _field('Lebar', _ctrlPaperW, (v) => _paperWidthMm = v),
+                                  _field('Tinggi', _ctrlPaperH, (v) => _paperHeightMm = v),
+                                  _field('Margin', _ctrlPaperM, (v) => _paperMarginMm = v),
+                                ]),
+                                const Divider(height: 40),
+                              ],
                               _section('Label & Barcode (mm)', [
                                 _field('Lebar Label', _ctrlLabelW, (v) => _labelWidthMm = v),
                                 _field('Tinggi Label', _ctrlLabelH, (v) => _labelHeightMm = v),
                                 _field('Lebar Barcode', _ctrlBarW, (v) => _barcodeWidthMm = v),
                                 _field('Tinggi Barcode', _ctrlBarH, (v) => _barcodeHeightMm = v),
-                                _field('Jarak Label', _ctrlLabelM, (v) => _labelMarginMm = v),
+                                _field(_isRollMode ? 'Jarak (Gap)' : 'Jarak Label', _ctrlLabelM, (v) => _labelMarginMm = v),
                                 _field('Padding Label', _ctrlLabelP, (v) => _labelPaddingMm = v),
                                 _field('Jumlah Kolom', _ctrlCols, (v) => _columnCount = v.toInt()),
                               ]),
                               const Divider(height: 40),
                               _section('Ukuran Font (pt)', [
+                                _field('Nama Toko', _ctrlFntStore, (v) => _fontSizeStore = v),
                                 _field('Nama Produk', _ctrlFntName, (v) => _fontSizeName = v),
                                 _field('Nomor Barcode', _ctrlFntBar, (v) => _fontSizeBarcode = v),
                                 _field('Harga Produk', _ctrlFntPrice, (v) => _fontSizePrice = v),
@@ -545,36 +594,193 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
       ]),
     );
   }
+
+  Widget _buildModeSwitch() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _isRollMode ? AppTheme.accent.withValues(alpha: 0.1) : AppTheme.surfaceAlt,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _isRollMode ? AppTheme.accent : AppTheme.border),
+      ),
+      child: Row(
+        children: [
+          Icon(_isRollMode ? Icons.settings_input_component_rounded : Icons.description_rounded, 
+               color: _isRollMode ? AppTheme.accent : AppTheme.textSecondary),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Mode Printer Roll', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                Text('Satu label per halaman PDF', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: _isRollMode, 
+            onChanged: (v) => setState(() => _isRollMode = v),
+            activeTrackColor: AppTheme.accent,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModeIllustration() {
+    return Container(
+      height: 120,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppTheme.bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: CustomPaint(
+        painter: _BarcodeModePainter(isRoll: _isRollMode),
+      ),
+    );
+  }
 }
 
-class _ProductSelectionTile extends StatelessWidget {
+class _BarcodeModePainter extends CustomPainter {
+  final bool isRoll;
+  _BarcodeModePainter({required this.isRoll});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = AppTheme.textMuted.withValues(alpha: 0.3)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    if (isRoll) {
+      // Draw Roll
+      final centerX = size.width / 2;
+      final centerY = size.height / 2;
+      
+      // Roll circle
+      canvas.drawCircle(Offset(centerX - 40, centerY), 30, paint);
+      canvas.drawCircle(Offset(centerX - 40, centerY), 10, paint);
+      
+      // Paper coming out
+      final path = Path()
+        ..moveTo(centerX - 40, centerY - 30)
+        ..lineTo(centerX + 60, centerY - 30)
+        ..lineTo(centerX + 60, centerY + 30)
+        ..lineTo(centerX - 40, centerY + 30);
+      canvas.drawPath(path, paint);
+      
+      // Labels
+      final labelPaint = Paint()..color = AppTheme.accent.withValues(alpha: 0.4)..style = PaintingStyle.fill;
+      canvas.drawRRect(RRect.fromLTRBR(centerX - 10, centerY - 20, centerX + 15, centerY + 20, const Radius.circular(2)), labelPaint);
+      canvas.drawRRect(RRect.fromLTRBR(centerX + 25, centerY - 20, centerX + 50, centerY + 20, const Radius.circular(2)), labelPaint);
+    } else {
+      // Draw Sheet (A4)
+      final rect = Rect.fromCenter(center: Offset(size.width / 2, size.height / 2), width: 70, height: 90);
+      canvas.drawRect(rect, paint);
+      
+      // Grid of labels
+      final labelPaint = Paint()..color = AppTheme.accent.withValues(alpha: 0.4)..style = PaintingStyle.fill;
+      for (var y = 0; y < 3; y++) {
+        for (var x = 0; x < 2; x++) {
+          canvas.drawRRect(
+            RRect.fromLTRBR(
+              rect.left + 10 + (x * 30), 
+              rect.top + 10 + (y * 25), 
+              rect.left + 30 + (x * 30), 
+              rect.top + 30 + (y * 25), 
+              const Radius.circular(2)
+            ), 
+            labelPaint
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+class _ProductSelectionTile extends StatefulWidget {
   final Product product;
   final bool isSelected;
   final int qty;
-  final VoidCallback onToggle, onAdd, onRem;
+  final VoidCallback onToggle;
+  final ValueChanged<int> onQtyChanged;
 
-  const _ProductSelectionTile({required this.product, required this.isSelected, required this.qty, required this.onToggle, required this.onAdd, required this.onRem});
+  const _ProductSelectionTile({required this.product, required this.isSelected, required this.qty, required this.onToggle, required this.onQtyChanged});
+
+  @override
+  State<_ProductSelectionTile> createState() => _ProductSelectionTileState();
+}
+
+class _ProductSelectionTileState extends State<_ProductSelectionTile> {
+  late TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.qty > 0 ? widget.qty.toString() : '');
+  }
+
+  @override
+  void didUpdateWidget(_ProductSelectionTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.qty != oldWidget.qty) {
+      final text = widget.qty > 0 ? widget.qty.toString() : '';
+      if (_controller.text != text) {
+        _controller.text = text;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: isSelected ? AppTheme.accent.withValues(alpha: 0.08) : AppTheme.surface,
+        color: widget.isSelected ? AppTheme.accent.withValues(alpha: 0.08) : AppTheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isSelected ? AppTheme.accent : AppTheme.border, width: isSelected ? 1.5 : 1),
+        border: Border.all(color: widget.isSelected ? AppTheme.accent : AppTheme.border, width: widget.isSelected ? 1.5 : 1),
       ),
       child: Row(children: [
-        Checkbox(value: isSelected, onChanged: (_) => onToggle(), activeColor: AppTheme.accent),
+        Checkbox(value: widget.isSelected, onChanged: (_) => widget.onToggle(), activeColor: AppTheme.accent),
         const SizedBox(width: 8),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), overflow: TextOverflow.ellipsis),
-          Text(product.barcode ?? 'Tanpa Barcode', style: const TextStyle(color: AppTheme.textMuted, fontSize: 12, fontFamily: 'monospace')),
+          Text(widget.product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), overflow: TextOverflow.ellipsis),
+          Text(widget.product.barcode ?? 'Tanpa Barcode', style: const TextStyle(color: AppTheme.textMuted, fontSize: 12, fontFamily: 'monospace')),
         ])),
-        if (isSelected) ...[
-          IconButton(onPressed: onRem, icon: const Icon(Icons.remove_circle_outline, size: 20, color: AppTheme.textSecondary)),
-          Container(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text('$qty', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15))),
-          IconButton(onPressed: onAdd, icon: const Icon(Icons.add_circle_outline, size: 20, color: AppTheme.accent)),
+        if (widget.isSelected) ...[
+          const SizedBox(width: 16),
+          SizedBox(
+            width: 80,
+            child: TextFormField(
+              controller: _controller,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              textAlign: TextAlign.center,
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                hintText: 'Qty',
+                suffixText: 'pcs',
+                suffixStyle: const TextStyle(fontSize: 10, color: AppTheme.textMuted),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onChanged: (v) {
+                final val = int.tryParse(v) ?? 0;
+                widget.onQtyChanged(val);
+              },
+            ),
+          ),
         ],
       ]),
     );

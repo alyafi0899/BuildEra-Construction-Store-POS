@@ -27,7 +27,11 @@ class InvoiceHelper {
 
     pdf.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.roll80,
+        pageFormat: PdfPageFormat(
+          settings.receiptWidth * PdfPageFormat.mm,
+          double.infinity,
+          marginAll: 5 * PdfPageFormat.mm,
+        ),
         margin: const pw.EdgeInsets.all(10),
         build: (pw.Context context) {
           return pw.Column(
