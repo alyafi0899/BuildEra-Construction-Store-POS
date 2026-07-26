@@ -62,10 +62,11 @@ class PageHeader extends StatelessWidget {
           ),
           if (actions != null && actions!.isNotEmpty) ...[
             const SizedBox(width: 16),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: actions!.expand((w) => [w, const SizedBox(width: 12)]).toList()
-                ..removeLast(),
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: actions!,
             ),
           ],
         ],

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../core/utils/image_helper.dart';
 import '../../providers/customer_display_provider.dart';
 import '../../../settings/providers/settings_provider.dart';
 
@@ -140,9 +141,18 @@ class CustomerDisplayPage extends ConsumerWidget {
                       border: Border.all(color: Colors.white, width: 4),
                       boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10)],
                     ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.file(File(settings.qrisImagePath!), fit: BoxFit.cover),
+                    child: FutureBuilder<String?>(
+                      future: ImageHelper.resolveLocalPath(settings.qrisImagePath),
+                      builder: (context, snapshot) {
+                        final resolvedPath = snapshot.data;
+                        if (resolvedPath != null) {
+                          return ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.file(File(resolvedPath), fit: BoxFit.cover),
+                          );
+                        }
+                        return const Center(child: Icon(Icons.qr_code_scanner_rounded, size: 48, color: AppTheme.textMuted));
+                      },
                     ),
                   ),
                 ),

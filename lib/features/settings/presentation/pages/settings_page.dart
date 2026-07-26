@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -438,19 +439,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: colorScheme.outline),
                 ),
-                child: settings.qrisImagePath != null
-                    ? ClipRRect(
+                child: FutureBuilder<String?>(
+                  future: ImageHelper.resolveLocalPath(settings.qrisImagePath),
+                  builder: (context, snapshot) {
+                    final resolvedPath = snapshot.data;
+                    if (resolvedPath != null) {
+                      return ClipRRect(
                         borderRadius: BorderRadius.circular(11),
-                        child: Image.file(File(settings.qrisImagePath!), fit: BoxFit.cover),
-                      )
-                    : Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.qr_code_scanner_rounded, size: 32, color: colorScheme.onSurface.withValues(alpha: 0.2)),
-                          const SizedBox(height: 8),
-                          Text('Belum ada', style: TextStyle(fontSize: 10, color: colorScheme.onSurface.withValues(alpha: 0.4))),
-                        ],
-                      ),
+                        child: Image.file(File(resolvedPath), fit: BoxFit.cover),
+                      );
+                    }
+                    return Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.qr_code_scanner_rounded, size: 32, color: colorScheme.onSurface.withValues(alpha: 0.2)),
+                        const SizedBox(height: 8),
+                        Text('Belum ada', style: TextStyle(fontSize: 10, color: colorScheme.onSurface.withValues(alpha: 0.4))),
+                      ],
+                    );
+                  },
+                ),
               ),
               const SizedBox(width: 24),
               Expanded(
@@ -875,6 +883,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   void _openCustomerDisplayUrl(BuildContext context) async {
+    if (kIsWeb || !(Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+      if (context.mounted) {
+        showError(context, 'Fitur ini hanya tersedia di versi Desktop');
+      }
+      return;
+    }
+
     try {
       final user = ref.read(authStateProvider).value;
       final args = ['multi_window', 'uid=${user?.uid ?? 'unknown'}'];

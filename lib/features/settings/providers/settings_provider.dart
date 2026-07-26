@@ -30,7 +30,7 @@ class SettingsNotifier extends Notifier<StoreSettings> {
 
     // 2. Load from Firestore in background or if no cache
     try {
-      final doc = await _db.collection('users').doc(uid).get();
+      final doc = await _db.collection('users').doc(uid).get().timeout(const Duration(seconds: 5));
       if (doc.exists) {
         final settings = StoreSettings.fromMap(doc.data()!);
         state = settings;

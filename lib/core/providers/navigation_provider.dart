@@ -10,3 +10,14 @@ class NavigationNotifier extends Notifier<int> {
 }
 
 final navigationIndexProvider = NotifierProvider<NavigationNotifier, int>(NavigationNotifier.new);
+
+class SidebarCollapsedNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void toggle() {
+    state = !state;
+  }
+}
+
+final sidebarCollapsedProvider = NotifierProvider<SidebarCollapsedNotifier, bool>(SidebarCollapsedNotifier.new);

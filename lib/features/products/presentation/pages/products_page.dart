@@ -317,22 +317,25 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                 ),
               ]),
               const SizedBox(height: 12),
-              Row(children: [
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 12,
+                runSpacing: 8,
+                children: [
                 const Icon(Icons.filter_list_rounded, size: 18, color: AppTheme.textMuted),
-                const SizedBox(width: 12),
                 const _FilterLabel('Stok:'),
                 _FilterTab(label: 'Semua', selected: filters.stock == 'all', onTap: () => ref.read(productFiltersProvider.notifier).setStock('all')),
                 _FilterTab(label: 'Tersedia', selected: filters.stock == 'in', onTap: () => ref.read(productFiltersProvider.notifier).setStock('in')),
                 _FilterTab(label: 'Rendah', selected: filters.stock == 'low', onTap: () => ref.read(productFiltersProvider.notifier).setStock('low')),
                 _FilterTab(label: 'Habis', selected: filters.stock == 'out', onTap: () => ref.read(productFiltersProvider.notifier).setStock('out')),
                 
-                const SizedBox(width: 24),
+                const SizedBox(width: 12),
                 const _FilterLabel('Bayar Supplier:'),
                 _FilterTab(label: 'Semua', selected: filters.supplier == 'all', onTap: () => ref.read(productFiltersProvider.notifier).setSupplier('all')),
                 _FilterTab(label: 'Lunas', selected: filters.supplier == 'paid', onTap: () => ref.read(productFiltersProvider.notifier).setSupplier('paid')),
                 _FilterTab(label: 'Belum', selected: filters.supplier == 'unpaid', onTap: () => ref.read(productFiltersProvider.notifier).setSupplier('unpaid')),
 
-                const SizedBox(width: 24),
+                const SizedBox(width: 12),
                 const _FilterLabel('Bayar Ongkir:'),
                 _FilterTab(label: 'Semua', selected: filters.shipping == 'all', onTap: () => ref.read(productFiltersProvider.notifier).setShipping('all')),
                 _FilterTab(label: 'Lunas', selected: filters.shipping == 'paid', onTap: () => ref.read(productFiltersProvider.notifier).setShipping('paid')),
@@ -401,53 +404,59 @@ class _ProductTableState extends State<_ProductTable> {
       controller: _scrollController,
       thumbVisibility: true,
       trackVisibility: true,
-      child: ListView.builder(
-        controller: _scrollController,
-        padding: const EdgeInsets.all(24),
-        itemCount: widget.products.length + 1, // Header + rows
-        itemBuilder: (context, index) {
-          if (index == 0) {
-            // Table header
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color:        AppTheme.surfaceAlt,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
-                border:       Border.all(color: AppTheme.border),
-              ),
-              child: Row(children: [
-                SizedBox(
-                  width: 40,
-                  child: Checkbox(
-                    value: allSelected,
-                    onChanged: (_) => widget.onSelectAll(),
-                    activeColor: AppTheme.accent,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: 1200, // Ensure a minimum width for the table to prevent squishing
+          child: ListView.builder(
+            controller: _scrollController,
+            padding: const EdgeInsets.all(24),
+            itemCount: widget.products.length + 1, // Header + rows
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                // Table header
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color:        AppTheme.surfaceAlt,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
+                    border:       Border.all(color: AppTheme.border),
                   ),
-                ),
-                _th('Produk',    flex: 4),
-                _th('Kategori',  flex: 2),
-                _th('Supplier & Ongkir', flex: 2),
-                _th('Stok',      flex: 1, align: TextAlign.right),
-                _th('Modal', flex: 1, align: TextAlign.right),
-                _th('Harga Jual',  flex: 1, align: TextAlign.right),
-                _th('Profit', flex: 1, align: TextAlign.right),
-                _th('Aksi',      flex: 1, align: TextAlign.center),
-              ]),
-            );
-          }
+                  child: Row(children: [
+                    SizedBox(
+                      width: 40,
+                      child: Checkbox(
+                        value: allSelected,
+                        onChanged: (_) => widget.onSelectAll(),
+                        activeColor: AppTheme.accent,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                      ),
+                    ),
+                    _th('Produk',    flex: 12),
+                    _th('Kategori',  flex: 4),
+                    _th('Supplier & Ongkir', flex: 6),
+                    _th('Stok',      flex: 3, align: TextAlign.right),
+                    _th('Modal', flex: 5, align: TextAlign.right),
+                    _th('Harga Jual',  flex: 5, align: TextAlign.right),
+                    _th('Profit', flex: 5, align: TextAlign.right),
+                    _th('Aksi',      flex: 4, align: TextAlign.center),
+                  ]),
+                );
+              }
 
-          final product = widget.products[index - 1];
-          return RepaintBoundary(
-            child: _ProductRow(
-              key: ValueKey('prod_row_${product.id}'),
-              product: product,
-              isEven:  index.isEven,
-              isSelected: widget.selectedIds.contains(product.id),
-              onToggleSelect: () => widget.onToggleSelect(product.id),
-            ),
-          );
-        },
+              final product = widget.products[index - 1];
+              return RepaintBoundary(
+                child: _ProductRow(
+                  key: ValueKey('prod_row_${product.id}'),
+                  product: product,
+                  isEven:  index.isEven,
+                  isSelected: widget.selectedIds.contains(product.id),
+                  onToggleSelect: () => widget.onToggleSelect(product.id),
+                ),
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -458,6 +467,8 @@ class _ProductTableState extends State<_ProductTable> {
       child: Text(
         label,
         textAlign: align,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: const TextStyle(
           color:      AppTheme.textSecondary,
           fontSize:   12,
@@ -511,7 +522,7 @@ class _ProductRow extends StatelessWidget {
           ),
         ),
         // Product name + icon
-        Expanded(flex: 4, child: InkWell(
+        Expanded(flex: 12, child: InkWell(
           onTap: () => ProductDetailDialog.show(context, product),
           child: Row(children: [
             ProductImage(imagePath: product.imagePath, size: 36),
@@ -530,10 +541,10 @@ class _ProductRow extends StatelessWidget {
             ])),
           ]),
         )),
-        Expanded(flex: 2, child: Text(product.category, style: const TextStyle(fontSize: 12))),
+        Expanded(flex: 4, child: Text(product.category, style: const TextStyle(fontSize: 12))),
         
         // Supplier & Shipping Info
-        Expanded(flex: 2, child: Column(
+        Expanded(flex: 6, child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (f.supplierName != null)
@@ -545,37 +556,44 @@ class _ProductRow extends StatelessWidget {
           ],
         )),
 
-        Expanded(flex: 1, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-          if (product.isLowStock)
-            const Padding(
-              padding: EdgeInsets.only(right: 4),
-              child: Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 14),
+        Expanded(flex: 3, child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerRight,
+          child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            if (product.isLowStock)
+              const Padding(
+                padding: EdgeInsets.only(right: 4),
+                child: Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 14),
+              ),
+            Text(
+              Formatters.decimal(product.stock),
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color:      product.isLowStock ? AppTheme.warning : AppTheme.textPrimary,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
             ),
-          Text(
-            Formatters.decimal(product.stock),
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              color:      product.isLowStock ? AppTheme.warning : AppTheme.textPrimary,
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
-            ),
-          ),
-        ])),
-        Expanded(flex: 1, child: BlurGate(child: Text(Formatters.currency(product.costPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)))),
-        Expanded(flex: 1, child: Text(Formatters.currency(product.basePrice), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-        Expanded(flex: 1, child: BlurGate(child: Text(Formatters.currency(profit), textAlign: TextAlign.right, style: TextStyle(color: profit >= 0 ? AppTheme.success : AppTheme.danger, fontWeight: FontWeight.bold, fontSize: 12)))),
+          ]),
+        )),
+        Expanded(flex: 5, child: BlurGate(child: Text(Formatters.currency(product.costPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)))),
+        Expanded(flex: 5, child: Text(Formatters.currency(product.basePrice), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+        Expanded(flex: 5, child: BlurGate(child: Text(Formatters.currency(profit), textAlign: TextAlign.right, style: TextStyle(color: profit >= 0 ? AppTheme.success : AppTheme.danger, fontWeight: FontWeight.bold, fontSize: 12)))),
         
-        Expanded(flex: 1, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          IconButton(
-            onPressed: () => ProductFormDialog.show(context, product: product),
-            icon: const Icon(Icons.edit_rounded, size: 16, color: AppTheme.textSecondary),
-            tooltip: 'Edit',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-          ),
-          const SizedBox(width: 4),
-          _DeleteButton(product: product),
-        ])),
+        Expanded(flex: 4, child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            IconButton(
+              onPressed: () => ProductFormDialog.show(context, product: product),
+              icon: const Icon(Icons.edit_rounded, size: 16, color: AppTheme.textSecondary),
+              tooltip: 'Edit',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+            const SizedBox(width: 4),
+            _DeleteButton(product: product),
+          ]),
+        )),
       ]),
     );
   }

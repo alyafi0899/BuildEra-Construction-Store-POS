@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -56,6 +57,26 @@ class TransactionRepository {
     list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return list;
   }
+
+  // ── Sync Logic ────────────────────────────────────────────────────────────
+
+  Future<void> bootstrap() async {
+    final box = await _getBox();
+    if (box.isNotEmpty) return;
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(_uid)
+        .collection('transactions')
+        .get()
+        .timeout(const Duration(seconds: 5));
+
+    for (final doc in snapshot.docs) {
+      await box.put(doc.id, doc.data());
+    }
+  }
+
+  // ── Write Operations ───────────────────────────────────────────────────────
 
   Future<Transaction?> getTransactionById(String id) async {
     final box = await _getBox();

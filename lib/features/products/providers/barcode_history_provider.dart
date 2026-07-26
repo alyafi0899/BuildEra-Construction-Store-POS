@@ -19,6 +19,18 @@ class BarcodeHistoryRepository {
 
   Future<Box> _getBox() => LocalDatabase.openBox(_uid, 'barcode_history');
 
+  // ── Sync Logic ────────────────────────────────────────────────────────────
+
+  Future<void> bootstrap() async {
+    final box = await _getBox();
+    if (box.isNotEmpty) return;
+
+    final snapshot = await _historyCol.get().timeout(const Duration(seconds: 5));
+    for (final doc in snapshot.docs) {
+      await box.put(doc.id, doc.data());
+    }
+  }
+
   /// Checks if a barcode was EVER used (even in deleted products)
   Future<bool> isBarcodeUsed(String barcode) async {
     final normalized = barcode.trim();

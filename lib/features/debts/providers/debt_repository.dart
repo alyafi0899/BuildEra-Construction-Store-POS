@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -18,6 +19,33 @@ class DebtRepository {
   DebtRepository(this._uid, this._ref);
 
   Future<Box> _getBox(String col) => LocalDatabase.openBox(_uid, col);
+
+  // ── Sync Logic ────────────────────────────────────────────────────────────
+
+  Future<void> bootstrap() async {
+    final userDoc = FirebaseFirestore.instance.collection('users').doc(_uid);
+
+    // 1. Bootstrap Customers
+    final cBox = await _getBox('customers');
+    if (cBox.isEmpty) {
+      final snap = await userDoc.collection('customers').get().timeout(const Duration(seconds: 5));
+      for (final d in snap.docs) await cBox.put(d.id, d.data());
+    }
+
+    // 2. Bootstrap Debts
+    final dBox = await _getBox('debts');
+    if (dBox.isEmpty) {
+      final snap = await userDoc.collection('debts').get().timeout(const Duration(seconds: 5));
+      for (final d in snap.docs) await dBox.put(d.id, d.data());
+    }
+
+    // 3. Bootstrap Payments
+    final pBox = await _getBox('debt_payments');
+    if (pBox.isEmpty) {
+      final snap = await userDoc.collection('debt_payments').get().timeout(const Duration(seconds: 5));
+      for (final d in snap.docs) await pBox.put(d.id, d.data());
+    }
+  }
 
   // ── Customers ─────────────────────────────────────────────────────────────
 

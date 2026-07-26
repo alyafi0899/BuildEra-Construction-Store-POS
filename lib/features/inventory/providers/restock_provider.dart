@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/restock_record.dart';
@@ -17,6 +18,26 @@ class RestockRepository {
   RestockRepository(this._uid, this._ref);
 
   Future<Box> _getBox() => LocalDatabase.openBox(_uid, 'restock_history');
+
+  // ── Sync Logic ────────────────────────────────────────────────────────────
+
+  Future<void> bootstrap() async {
+    final userDoc = FirebaseFirestore.instance.collection('users').doc(_uid);
+
+    // 1. Bootstrap Restock History
+    final rBox = await _getBox();
+    if (rBox.isEmpty) {
+      final snap = await userDoc.collection('restock_history').get().timeout(const Duration(seconds: 5));
+      for (final d in snap.docs) await rBox.put(d.id, d.data());
+    }
+
+    // 2. Bootstrap Bill Payments
+    final pBox = await LocalDatabase.openBox(_uid, 'bill_payments');
+    if (pBox.isEmpty) {
+      final snap = await userDoc.collection('bill_payments').get().timeout(const Duration(seconds: 5));
+      for (final d in snap.docs) await pBox.put(d.id, d.data());
+    }
+  }
 
   Stream<List<RestockRecord>> getRestockStream() async* {
     final box = await _getBox();

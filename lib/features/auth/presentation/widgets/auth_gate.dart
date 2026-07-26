@@ -8,6 +8,7 @@ import '../pages/setup_pin_page.dart';
 import '../../../../main.dart'; // To get MainShell or whatever home is
 import '../../../../shared/widgets/splash_screen.dart';
 import '../../../settings/providers/settings_provider.dart';
+import '../../../../core/sync/providers/initial_sync_provider.dart';
 
 class AuthGate extends ConsumerWidget {
   const AuthGate({super.key});
@@ -30,9 +31,6 @@ class AuthGate extends ConsumerWidget {
         final settings = ref.watch(settingsProvider);
         
         // If settings are still loading or initial, we might need to wait 
-        // but settingsProvider uses watch(authStateProvider) and then _loadSettings.
-        // If the user has a PIN, securityPin will be non-null after load.
-        // We use a simple check: if loginEmail is null, it might be still loading
         if (settings.loginEmail == null) {
            return Scaffold(
              backgroundColor: const Color(0xFF0F1117),
@@ -52,6 +50,10 @@ class AuthGate extends ConsumerWidget {
              ),
            );
         }
+
+        // --- IMPROVEMENT: Sync Trigger point ---
+        // We trigger sync once settings are loaded.
+        Future.microtask(() => ref.read(initialSyncProvider.notifier).performInitialSync());
 
         if (settings.securityPin == null) {
           return const SetupPinPage();

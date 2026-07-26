@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
@@ -28,7 +29,9 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
       isCustomerDisplayEnabled: isCust,
     );
 
-    if (!kIsWeb) {
+    final isDesktop = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+
+    if (isDesktop) {
       await windowManager.setFullScreen(isFull);
       
       // Auto-launch customer display if enabled
@@ -40,7 +43,7 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
             Platform.resolvedExecutable, 
             ['multi_window', 'uid=${user?.uid ?? 'unknown'}'],
             mode: ProcessStartMode.detached,
-          );
+          ).catchError((e) => debugPrint('DEBUG: Failed to auto-launch customer display: $e'));
         });
       }
     }
@@ -50,7 +53,7 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     state = state.copyWith(isFullScreen: value);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyFullScreen, value);
-    if (!kIsWeb) {
+    if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
       await windowManager.setFullScreen(value);
     }
   }
@@ -60,13 +63,13 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyCustomerDisplay, value);
     
-    if (value && !kIsWeb) {
+    if (value && !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
       final user = ref.read(authStateProvider).value;
       await Process.start(
         Platform.resolvedExecutable, 
         ['multi_window', 'uid=${user?.uid ?? 'unknown'}'],
         mode: ProcessStartMode.detached,
-      );
+      ).catchError((e) => debugPrint('DEBUG: Failed to launch customer display: $e'));
     }
   }
 }
