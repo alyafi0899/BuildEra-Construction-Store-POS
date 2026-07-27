@@ -99,6 +99,7 @@ class PageHeader extends StatelessWidget {
 class AppCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
+  final EdgeInsetsGeometry? margin;
   final Color? color;
   final VoidCallback? onTap;
   final double? elevation;
@@ -107,6 +108,7 @@ class AppCard extends StatelessWidget {
     super.key,
     required this.child,
     this.padding,
+    this.margin,
     this.color,
     this.onTap,
     this.elevation,
@@ -114,7 +116,6 @@ class AppCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-<<<<<<< HEAD
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
       margin: margin,
@@ -132,17 +133,6 @@ class AppCard extends StatelessWidget {
             padding: padding ?? const EdgeInsets.all(16),
             child: child,
           ),
-=======
-    return Card(
-      color: color,
-      elevation: elevation ?? 2,
-      child: InkWell(
-        onTap:        onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: padding ?? const EdgeInsets.all(16),
-          child:   child,
->>>>>>> parent of bd29cdf (fixing bug)
         ),
       ),
     );

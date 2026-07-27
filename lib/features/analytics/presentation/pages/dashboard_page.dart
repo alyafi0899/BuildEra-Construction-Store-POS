@@ -218,7 +218,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   Widget _buildBillAlerts(SalesSummary summary) {
     final alerts = [...summary.unpaidSupplierDetails, ...summary.unpaidShippingDetails];
     return Column(
-      children: alerts.take(3).map((a) => AppCard(
+      children: alerts.take(3).map<Widget>((a) => AppCard(
         margin: const EdgeInsets.only(bottom: 8),
         color: AppTheme.danger.withValues(alpha: 0.05),
         child: Row(
@@ -311,7 +311,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   Widget _buildTopProductsList(SalesSummary summary) {
     if (summary.topProducts.isEmpty) return const Text('Belum ada data produk terlaris');
     return Column(
-      children: summary.topProducts.take(5).map((p) => AppCard(
+      children: summary.topProducts.take(5).map<Widget>((p) => AppCard(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(

@@ -6,11 +6,11 @@ class AppTheme {
   static const Color primary     = Color(0xFFFE6A02); // Brand Orange
   static const Color secondary   = Color(0xFF004F81); // Brand Blue
   
-  static const Color bg          = Color(0xFFF8F9FA);
-  static const Color surface     = Colors.white;
-  static const Color surfaceAlt  = Color(0xFFF1F3F5);
-  static const Color card        = Colors.white;
-  static const Color border      = Color(0xFFE9ECEF);
+  static const Color bg          = Color(0xFF0E0701);
+  static const Color surface     = Color(0xFF021120);
+  static const Color surfaceAlt  = Color(0xFF021120);
+  static const Color card        = Color(0xFF021120);
+  static const Color border      = Color(0xFFFF5600);
   
   static const Color success     = Color(0xFF2ECC71);
   static const Color warning     = Color(0xFFF39C12);
