@@ -55,46 +55,49 @@ class AppSidebar extends ConsumerWidget {
       color: AppTheme.surface,
       child: Column(children: [
         // Logo area
-        Container(
-          padding: EdgeInsets.symmetric(vertical: 28, horizontal: isCollapsed ? 12 : 20),
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: AppTheme.border)),
-          ),
-          child: Column(crossAxisAlignment: isCollapsed ? CrossAxisAlignment.center : CrossAxisAlignment.start, children: [
-            Row(
-              mainAxisAlignment: isCollapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.asset('assets/images/logo.png', width: 36, height: 36, fit: BoxFit.cover),
-                ),
-                if (!isCollapsed) ...[
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const Text('BuildEra',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                                color:       Colors.white,
-                                fontSize:    15,
-                                fontWeight:  FontWeight.w900,
-                                letterSpacing: 0.5, // Reduced letter spacing
-                              )),
-                      Text(businessName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                                color:       AppTheme.accent,
-                                fontSize:    10,
-                                fontWeight:  FontWeight.w600,
-                                letterSpacing: 0.2, // Reduced letter spacing
-                              )),
-                    ]),
+        GestureDetector(
+          onTap: () => ref.read(sidebarCollapsedProvider.notifier).expand(),
+          child: Container(
+            padding: EdgeInsets.symmetric(vertical: 28, horizontal: isCollapsed ? 12 : 20),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: AppTheme.border)),
+            ),
+            child: Column(crossAxisAlignment: isCollapsed ? CrossAxisAlignment.center : CrossAxisAlignment.start, children: [
+              Row(
+                mainAxisAlignment: isCollapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.asset('assets/images/logo.png', width: 36, height: 36, fit: BoxFit.cover),
                   ),
-                ],
-              ]),
-          ]),
+                  if (!isCollapsed) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        const Text('BuildEra',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                  color:       Colors.white,
+                                  fontSize:    15,
+                                  fontWeight:  FontWeight.w900,
+                                  letterSpacing: 0.5, // Reduced letter spacing
+                                )),
+                        Text(businessName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                  color:       AppTheme.accent,
+                                  fontSize:    10,
+                                  fontWeight:  FontWeight.w600,
+                                  letterSpacing: 0.2, // Reduced letter spacing
+                                )),
+                      ]),
+                    ),
+                  ],
+                ]),
+            ]),
+          ),
         ),
 
         // Nav items
@@ -104,7 +107,7 @@ class AppSidebar extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: isCollapsed ? CrossAxisAlignment.center : CrossAxisAlignment.start,
               children: [
-                ..._buildCategorizedNav(context, isCollapsed),
+                ..._buildCategorizedNav(context, ref, isCollapsed),
                 const SizedBox(height: 32),
                 if (!isCollapsed)
                   const Padding(
@@ -157,7 +160,7 @@ class AppSidebar extends ConsumerWidget {
     );
   }
 
-  List<Widget> _buildCategorizedNav(BuildContext context, bool isCollapsed) {
+  List<Widget> _buildCategorizedNav(BuildContext context, WidgetRef ref, bool isCollapsed) {
     final Map<String, List<_NavItem>> categories = {};
     for (final item in _navItems) {
       final cat = item.category ?? 'LAINNYA';
@@ -165,7 +168,7 @@ class AppSidebar extends ConsumerWidget {
     }
 
     final List<Widget> widgets = [];
-    categories.forEach((cat, items) {
+            categories.forEach((cat, items) {
       if (!isCollapsed) {
         widgets.add(Padding(
           padding: const EdgeInsets.only(left: 10, bottom: 8, top: 16),
@@ -183,7 +186,10 @@ class AppSidebar extends ConsumerWidget {
       widgets.addAll(items.map((item) => _NavTile(
             item:     item,
             selected: selectedIndex == item.index,
-            onTap:    () => onItemSelected(item.index),
+            onTap:    () {
+              onItemSelected(item.index);
+              ref.read(sidebarCollapsedProvider.notifier).expand();
+            },
             isCollapsed: isCollapsed,
           )));
     });

@@ -241,7 +241,11 @@ class _MainShellState extends ConsumerState<MainShell> {
         onItemSelected: (i) => ref.read(navigationIndexProvider.notifier).setIndex(i),
       ),
       Expanded(
-        child: IndexedStack(index: idx, children: _pages),
+        child: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (_) => ref.read(sidebarCollapsedProvider.notifier).collapse(),
+          child: IndexedStack(index: idx, children: _pages),
+        ),
       ),
     ]);
 

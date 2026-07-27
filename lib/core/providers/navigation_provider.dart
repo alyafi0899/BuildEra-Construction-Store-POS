@@ -13,10 +13,18 @@ final navigationIndexProvider = NotifierProvider<NavigationNotifier, int>(Naviga
 
 class SidebarCollapsedNotifier extends Notifier<bool> {
   @override
-  bool build() => false;
+  bool build() => true;
 
   void toggle() {
     state = !state;
+  }
+
+  void collapse() {
+    state = true;
+  }
+
+  void expand() {
+    state = false;
   }
 }
 
