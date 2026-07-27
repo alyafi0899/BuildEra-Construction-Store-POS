@@ -208,7 +208,7 @@ class StatusChip extends StatelessWidget {
 
 // ── SearchField ───────────────────────────────────────────────────────────
 
-class AppSearchField extends StatefulWidget {
+class AppSearchField extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode? focusNode;
   final String hintText;
@@ -227,49 +227,40 @@ class AppSearchField extends StatefulWidget {
   });
 
   @override
-  State<AppSearchField> createState() => _AppSearchFieldState();
-}
-
-class _AppSearchFieldState extends State<AppSearchField> {
-  @override
-  void initState() {
-    super.initState();
-    widget.controller.addListener(_onTextChanged);
-  }
-
-  @override
-  void dispose() {
-    widget.controller.removeListener(_onTextChanged);
-    super.dispose();
-  }
-
-  void _onTextChanged() {
-    setState(() {});
-  }
-
-  @override
   Widget build(BuildContext context) {
     return TextField(
-      controller: widget.controller,
-      focusNode:  widget.focusNode,
-      onChanged:  widget.onChanged,
-      onSubmitted: widget.onSubmitted,
+      controller: controller,
+      focusNode:  focusNode,
+      onChanged:  onChanged,
+      onSubmitted: onSubmitted,
       style: const TextStyle(color: AppTheme.textPrimary),
       decoration: InputDecoration(
-        hintText:    widget.hintText,
-        prefixIcon:  const Icon(Icons.search, color: AppTheme.textMuted, size: 20),
-        suffixIcon:  widget.controller.text.isNotEmpty
-            ? IconButton(
-                icon:    const Icon(Icons.cancel_rounded, size: 18), // Use a clearer "cancel" icon
-                onPressed: () {
-                  widget.controller.clear();
-                  if (widget.onClear != null) widget.onClear!();
-                  setState(() {}); // Force rebuild to hide icon
-                },
-                color:   AppTheme.textMuted,
-                tooltip: 'Hapus Pencarian',
-              )
-            : null,
+        hintText:    hintText,
+        prefixIcon: ValueListenableBuilder<TextEditingValue>(
+          valueListenable: controller,
+          builder: (context, value, child) {
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(left: 12, right: 4),
+                  child: Icon(Icons.search, color: AppTheme.textMuted, size: 20),
+                ),
+                if (value.text.isNotEmpty)
+                  IconButton(
+                    icon:    const Icon(Icons.cancel_rounded, size: 20),
+                    onPressed: () {
+                      controller.clear();
+                      if (onClear != null) onClear!();
+                      if (onChanged != null) onChanged!('');
+                    },
+                    color:   AppTheme.accent,
+                    tooltip: 'Hapus Pencarian',
+                  ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }

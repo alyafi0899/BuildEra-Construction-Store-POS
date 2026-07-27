@@ -58,45 +58,53 @@ class AppSidebar extends ConsumerWidget {
         GestureDetector(
           onTap: () => ref.read(sidebarCollapsedProvider.notifier).expand(),
           child: Container(
-            padding: EdgeInsets.symmetric(vertical: 28, horizontal: isCollapsed ? 12 : 20),
+            padding: EdgeInsets.symmetric(vertical: 28, horizontal: isCollapsed ? 17 : 20),
             decoration: const BoxDecoration(
               border: Border(bottom: BorderSide(color: AppTheme.border)),
             ),
-            child: Column(crossAxisAlignment: isCollapsed ? CrossAxisAlignment.center : CrossAxisAlignment.start, children: [
-              Row(
-                mainAxisAlignment: isCollapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.asset('assets/images/logo.png', width: 36, height: 36, fit: BoxFit.cover),
-                  ),
-                  if (!isCollapsed) ...[
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        const Text('BuildEra',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                  color:       Colors.white,
-                                  fontSize:    15,
-                                  fontWeight:  FontWeight.w900,
-                                  letterSpacing: 0.5, // Reduced letter spacing
-                                )),
-                        Text(businessName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                  color:       AppTheme.accent,
-                                  fontSize:    10,
-                                  fontWeight:  FontWeight.w600,
-                                  letterSpacing: 0.2, // Reduced letter spacing
-                                )),
-                      ]),
+            child: Row(
+              mainAxisAlignment: isCollapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.asset('assets/images/logo.png', width: 36, height: 36, fit: BoxFit.cover),
+                ),
+                if (!isCollapsed) ...[
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'BuildEra',
+                          maxLines: 1,
+                          overflow: TextOverflow.clip,
+                          softWrap: false,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        Text(
+                          businessName,
+                          maxLines: 1,
+                          overflow: TextOverflow.clip, softWrap: false,
+                          style: TextStyle(
+                            color: AppTheme.accent,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ]),
-            ]),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
 
@@ -138,23 +146,30 @@ class AppSidebar extends ConsumerWidget {
             mainAxisAlignment: isCollapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
             children: [
               const CircleAvatar(
-                radius:          16,
+                radius: 16,
                 backgroundColor: AppTheme.accent,
                 child: Icon(Icons.person, color: Colors.white, size: 18),
               ),
               if (!isCollapsed) ...[
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(settings.ownerName.isEmpty ? 'Admin' : settings.ownerName,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        settings.ownerName.isEmpty ? 'Admin' : settings.ownerName,
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium),
-                    Text('Owner', style: Theme.of(context).textTheme.bodySmall),
-                  ]),
+                        overflow: TextOverflow.clip, softWrap: false,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      Text('Owner', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
                 ),
               ],
-            ]),
+            ],
+          ),
         ),
       ]),
     );
@@ -168,7 +183,7 @@ class AppSidebar extends ConsumerWidget {
     }
 
     final List<Widget> widgets = [];
-            categories.forEach((cat, items) {
+    categories.forEach((cat, items) {
       if (!isCollapsed) {
         widgets.add(Padding(
           padding: const EdgeInsets.only(left: 10, bottom: 8, top: 16),
@@ -184,9 +199,9 @@ class AppSidebar extends ConsumerWidget {
         widgets.add(const SizedBox(height: 16));
       }
       widgets.addAll(items.map((item) => _NavTile(
-            item:     item,
+            item: item,
             selected: selectedIndex == item.index,
-            onTap:    () {
+            onTap: () {
               onItemSelected(item.index);
               ref.read(sidebarCollapsedProvider.notifier).expand();
             },
@@ -199,7 +214,7 @@ class AppSidebar extends ConsumerWidget {
 
 class _NavTile extends StatelessWidget {
   final _NavItem item;
-  final bool     selected;
+  final bool selected;
   final VoidCallback onTap;
   final bool isCollapsed;
 
@@ -215,13 +230,14 @@ class _NavTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Material(
-        color:        selected ? AppTheme.accent.withValues(alpha: 0.15) : Colors.transparent,
+        color: selected ? AppTheme.accent.withValues(alpha: 0.15) : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
-          onTap:        onTap,
+          onTap: onTap,
           borderRadius: BorderRadius.circular(8),
           child: Container(
-            padding: EdgeInsets.symmetric(horizontal: isCollapsed ? 8 : 12, vertical: 11),
+            padding: EdgeInsets.symmetric(horizontal: isCollapsed ? 10 : 12, vertical: 11),
+            width: double.infinity,
             child: Row(
               mainAxisAlignment: isCollapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
               children: [
@@ -229,7 +245,7 @@ class _NavTile extends StatelessWidget {
                   message: isCollapsed ? item.label : '',
                   child: Icon(
                     item.icon,
-                    size:  20,
+                    size: 20,
                     color: selected ? AppTheme.accent : AppTheme.textSecondary,
                   ),
                 ),
@@ -239,26 +255,28 @@ class _NavTile extends StatelessWidget {
                     child: Text(
                       item.label,
                       maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      overflow: TextOverflow.clip, softWrap: false,
                       style: TextStyle(
-                        color:      selected ? AppTheme.accent : AppTheme.textSecondary,
+                        color: selected ? AppTheme.accent : AppTheme.textSecondary,
                         fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                        fontSize:   13, // Slightly reduced font size for safety
+                        fontSize: 13,
                       ),
                     ),
                   ),
                   if (selected) ...[
-                    const SizedBox(width: 4), // Fixed gap
+                    const SizedBox(width: 4),
                     Container(
-                      width: 4, height: 4,
+                      width: 4,
+                      height: 4,
                       decoration: const BoxDecoration(
-                        color:  AppTheme.accent,
-                        shape:  BoxShape.circle,
+                        color: AppTheme.accent,
+                        shape: BoxShape.circle,
                       ),
                     ),
                   ],
                 ],
-              ]),
+              ],
+            ),
           ),
         ),
       ),
