@@ -69,11 +69,15 @@ class TransactionRepository {
         .doc(_uid)
         .collection('transactions')
         .get()
-        .timeout(const Duration(seconds: 5));
+        .timeout(const Duration(seconds: 10));
 
+    if (snapshot.docs.isEmpty) return;
+
+    final Map<String, dynamic> dataMap = {};
     for (final doc in snapshot.docs) {
-      await box.put(doc.id, doc.data());
+      dataMap[doc.id] = doc.data();
     }
+    await box.putAll(dataMap);
   }
 
   // ── Write Operations ───────────────────────────────────────────────────────

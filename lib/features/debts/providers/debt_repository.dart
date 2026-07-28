@@ -28,22 +28,34 @@ class DebtRepository {
     // 1. Bootstrap Customers
     final cBox = await _getBox('customers');
     if (cBox.isEmpty) {
-      final snap = await userDoc.collection('customers').get().timeout(const Duration(seconds: 5));
-      for (final d in snap.docs) await cBox.put(d.id, d.data());
+      final snap = await userDoc.collection('customers').get().timeout(const Duration(seconds: 10));
+      if (snap.docs.isNotEmpty) {
+        final Map<String, dynamic> data = {};
+        for (final d in snap.docs) data[d.id] = d.data();
+        await cBox.putAll(data);
+      }
     }
 
     // 2. Bootstrap Debts
     final dBox = await _getBox('debts');
     if (dBox.isEmpty) {
-      final snap = await userDoc.collection('debts').get().timeout(const Duration(seconds: 5));
-      for (final d in snap.docs) await dBox.put(d.id, d.data());
+      final snap = await userDoc.collection('debts').get().timeout(const Duration(seconds: 10));
+      if (snap.docs.isNotEmpty) {
+        final Map<String, dynamic> data = {};
+        for (final d in snap.docs) data[d.id] = d.data();
+        await dBox.putAll(data);
+      }
     }
 
     // 3. Bootstrap Payments
     final pBox = await _getBox('debt_payments');
     if (pBox.isEmpty) {
-      final snap = await userDoc.collection('debt_payments').get().timeout(const Duration(seconds: 5));
-      for (final d in snap.docs) await pBox.put(d.id, d.data());
+      final snap = await userDoc.collection('debt_payments').get().timeout(const Duration(seconds: 10));
+      if (snap.docs.isNotEmpty) {
+        final Map<String, dynamic> data = {};
+        for (final d in snap.docs) data[d.id] = d.data();
+        await pBox.putAll(data);
+      }
     }
   }
 

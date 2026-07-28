@@ -390,7 +390,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        const Text('Kategori Produk *', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                                        //const Text('Kategori Produk *', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
                                         const SizedBox(height: 8),
                                         Autocomplete<String>(
                                           optionsBuilder: (TextEditingValue textEditingValue) {

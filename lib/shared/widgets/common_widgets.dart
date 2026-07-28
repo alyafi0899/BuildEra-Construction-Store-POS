@@ -372,19 +372,21 @@ void showSuccess(BuildContext context, String msg) {
       const SizedBox(width: 8),
       Expanded(child: Text(msg)),
     ]),
-    duration: const Duration(milliseconds: 1500), // Reduced to 1.5s for faster scanning
+    duration: const Duration(seconds: 1), // Reduced to 1s for faster UX
     behavior: SnackBarBehavior.floating,
     width: 320,
   ));
 }
 
 void showError(BuildContext context, String msg) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+  final messenger = ScaffoldMessenger.of(context);
+  messenger.clearSnackBars();
+  messenger.showSnackBar(SnackBar(
     content: Row(children: [
       const Icon(Icons.error_outline, color: AppTheme.danger, size: 18),
       const SizedBox(width: 8),
-      Text(msg),
+      Expanded(child: Text(msg)),
     ]),
-    duration: const Duration(seconds: 3),
+    duration: const Duration(seconds: 2), // Reduced to 2s
   ));
 }

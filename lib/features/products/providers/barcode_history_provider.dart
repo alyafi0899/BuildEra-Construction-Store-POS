@@ -25,9 +25,11 @@ class BarcodeHistoryRepository {
     final box = await _getBox();
     if (box.isNotEmpty) return;
 
-    final snapshot = await _historyCol.get().timeout(const Duration(seconds: 5));
-    for (final doc in snapshot.docs) {
-      await box.put(doc.id, doc.data());
+    final snapshot = await _historyCol.get().timeout(const Duration(seconds: 10));
+    if (snapshot.docs.isNotEmpty) {
+      final Map<String, dynamic> data = {};
+      for (final doc in snapshot.docs) data[doc.id] = doc.data();
+      await box.putAll(data);
     }
   }
 

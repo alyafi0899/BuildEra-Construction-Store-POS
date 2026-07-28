@@ -27,15 +27,23 @@ class RestockRepository {
     // 1. Bootstrap Restock History
     final rBox = await _getBox();
     if (rBox.isEmpty) {
-      final snap = await userDoc.collection('restock_history').get().timeout(const Duration(seconds: 5));
-      for (final d in snap.docs) await rBox.put(d.id, d.data());
+      final snap = await userDoc.collection('restock_history').get().timeout(const Duration(seconds: 10));
+      if (snap.docs.isNotEmpty) {
+        final Map<String, dynamic> data = {};
+        for (final d in snap.docs) data[d.id] = d.data();
+        await rBox.putAll(data);
+      }
     }
 
     // 2. Bootstrap Bill Payments
     final pBox = await LocalDatabase.openBox(_uid, 'bill_payments');
     if (pBox.isEmpty) {
-      final snap = await userDoc.collection('bill_payments').get().timeout(const Duration(seconds: 5));
-      for (final d in snap.docs) await pBox.put(d.id, d.data());
+      final snap = await userDoc.collection('bill_payments').get().timeout(const Duration(seconds: 10));
+      if (snap.docs.isNotEmpty) {
+        final Map<String, dynamic> data = {};
+        for (final d in snap.docs) data[d.id] = d.data();
+        await pBox.putAll(data);
+      }
     }
   }
 

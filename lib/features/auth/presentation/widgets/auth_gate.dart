@@ -9,6 +9,7 @@ import '../../../../main.dart'; // To get MainShell or whatever home is
 import '../../../../shared/widgets/splash_screen.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../../core/sync/providers/initial_sync_provider.dart';
+import '../../../../core/sync/widgets/initial_sync_screen.dart';
 
 class AuthGate extends ConsumerWidget {
   const AuthGate({super.key});
@@ -53,7 +54,15 @@ class AuthGate extends ConsumerWidget {
 
         // --- IMPROVEMENT: Sync Trigger point ---
         // We trigger sync once settings are loaded.
-        Future.microtask(() => ref.read(initialSyncProvider.notifier).performInitialSync());
+        final syncState = ref.watch(initialSyncProvider);
+        
+        if (!syncState.isCompleted && syncState.progress < 1.0) {
+          Future.microtask(() => ref.read(initialSyncProvider.notifier).performInitialSync());
+        }
+
+        if (syncState.isSyncing) {
+          return const InitialSyncScreen();
+        }
 
         if (settings.securityPin == null) {
           return const SetupPinPage();
