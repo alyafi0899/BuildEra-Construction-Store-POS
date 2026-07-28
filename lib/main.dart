@@ -9,7 +9,6 @@ import 'shared/widgets/sidebar.dart';
 import 'shared/widgets/lazy_indexed_stack.dart';
 import 'features/cashier/presentation/pages/cashier_page.dart';
 import 'features/products/presentation/pages/products_page.dart';
-import 'features/inventory/presentation/pages/inventory_page.dart';
 import 'features/payment/presentation/pages/transactions_page.dart';
 import 'features/analytics/presentation/pages/analytics_page.dart';
 import 'features/settings/presentation/pages/settings_page.dart';
@@ -21,7 +20,6 @@ import 'features/cashier/presentation/pages/customer_display_page.dart';
 import 'features/cashier/providers/cart_provider.dart';
 import 'features/cashier/providers/customer_display_provider.dart';
 import 'features/products/presentation/pages/barcode_management_page.dart';
-import 'features/payment/presentation/pages/transactions_page.dart';
 import 'features/auth/presentation/widgets/auth_gate.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'shared/widgets/security_gate.dart';
@@ -99,8 +97,8 @@ Future<void> main(List<String> args) async {
   if (isDesktop) {
     await windowManager.ensureInitialized();
     WindowOptions windowOptions = const WindowOptions(
-      size: Size(1280, 800),
-      minimumSize: Size(1024, 700), // Enforce landscape minimum
+      size: Size(1500, 815),
+      minimumSize: Size(1500, 815), // Enforce requested minimum size
       center: true,
       backgroundColor: Color(0xFF0F1117),
       skipTaskbar: false,
@@ -196,7 +194,6 @@ class _MainShellState extends ConsumerState<MainShell> {
   final _pages = [
     const CashierPage(),
     const ProductsPage(),
-    const InventoryPage(),
     const TransactionsPage(),
     const PiutangDashboard(),
     const CustomerListPage(),

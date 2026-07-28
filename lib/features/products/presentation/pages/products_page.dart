@@ -16,6 +16,9 @@ import '../../providers/product_provider.dart';
 import '../widgets/product_form_dialog.dart';
 import '../widgets/excel_import_dialog.dart';
 import '../../models/product_financials.dart';
+import '../../../inventory/providers/restock_provider.dart';
+import '../../../inventory/models/restock_record.dart';
+import '../../../inventory/presentation/widgets/restock_dialog.dart';
 import '../../../../shared/widgets/security_gate.dart';
 
 class ProductsPage extends ConsumerStatefulWidget {
@@ -238,6 +241,28 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
               ],
             ),
 
+            // Stats row
+            productsAsync.when(
+              loading: () => const SizedBox(height: 100),
+              error:   (_, __) => const SizedBox(),
+              data: (products) {
+                final lowStock  = products.where((p) => p.isLowStock).length;
+                final totalSKU  = products.length;
+                final outOfStock = products.where((p) => p.stock <= 0).length;
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  color: AppTheme.surface,
+                  child: Row(children: [
+                    Expanded(child: StatCard(label: 'Total SKU',     value: totalSKU.toString(),  icon: Icons.inventory_2_rounded)),
+                    const SizedBox(width: 16),
+                    Expanded(child: StatCard(label: 'Stok Rendah',  value: lowStock.toString(),   icon: Icons.warning_amber_rounded, accentColor: AppTheme.warning)),
+                    const SizedBox(width: 16),
+                    Expanded(child: StatCard(label: 'Habis',        value: outOfStock.toString(), icon: Icons.remove_shopping_cart_rounded, accentColor: AppTheme.danger)),
+                  ]),
+                );
+              },
+            ),
+
             // Filters & Sorting
             Container(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
@@ -425,14 +450,16 @@ class _ProductTableState extends State<_ProductTable> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                   ),
                 ),
+                const SizedBox(width: 32), // Added space for expand icon
                 _th('Produk',    flex: 4),
-                _th('Kategori',  flex: 2),
-                _th('Supplier & Ongkir', flex: 2),
+                _th('Kategori',  flex: 1),
+                _th('Supplier & Ongkir', flex: 1),
                 _th('Stok',      flex: 1, align: TextAlign.right),
                 _th('Modal', flex: 1, align: TextAlign.right),
                 _th('Harga Jual',  flex: 1, align: TextAlign.right),
                 _th('Profit', flex: 1, align: TextAlign.right),
-                _th('Aksi',      flex: 1, align: TextAlign.center),
+                _th('Update Stok', flex: 1, align: TextAlign.center),
+                _th('Aksi',      flex: 2, align: TextAlign.center),
               ]),
             );
           }
@@ -469,7 +496,7 @@ class _ProductTableState extends State<_ProductTable> {
   }
 }
 
-class _ProductRow extends StatelessWidget {
+class _ProductRow extends ConsumerStatefulWidget {
   final Product product;
   final bool    isEven;
   final bool    isSelected;
@@ -484,99 +511,246 @@ class _ProductRow extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final profit = product.basePrice - product.costPrice;
-    final f = product.financials;
+  ConsumerState<_ProductRow> createState() => _ProductRowState();
+}
 
+class _ProductRowState extends ConsumerState<_ProductRow> {
+  bool _expanded = false;
+  late final TextEditingController _adjCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _adjCtrl = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _adjCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _adjust(double delta) async {
+    await ref.read(productsActionProvider).adjustStock(widget.product.id, delta);
+    _adjCtrl.clear();
+    if (mounted) showSuccess(context, 'Stok diperbarui');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profit = widget.product.basePrice - widget.product.costPrice;
+    final f = widget.product.financials;
+
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color:  widget.isSelected
+                ? AppTheme.accent.withValues(alpha: 0.05)
+                : (_expanded ? AppTheme.surfaceAlt.withValues(alpha: 0.1) : (widget.isEven ? AppTheme.card : AppTheme.surface)),
+            border: Border(
+              left:   BorderSide(color: widget.isSelected ? AppTheme.accent : AppTheme.border),
+              right:  BorderSide(color: widget.isSelected ? AppTheme.accent : AppTheme.border),
+              bottom: BorderSide(color: AppTheme.border),
+            ),
+          ),
+          child: Row(children: [
+            SizedBox(
+              width: 40,
+              child: Checkbox(
+                value: widget.isSelected,
+                onChanged: (_) => widget.onToggleSelect(),
+                activeColor: AppTheme.accent,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+              ),
+            ),
+            
+            // Expand Toggle
+            IconButton(
+              onPressed: () => setState(() => _expanded = !_expanded),
+              icon: Icon(_expanded ? Icons.keyboard_arrow_down_rounded : Icons.keyboard_arrow_right_rounded, 
+                size: 20, color: AppTheme.textMuted),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+            const SizedBox(width: 12),
+
+            // Product name + icon
+            Expanded(flex: 4, child: InkWell(
+              onTap: () => ProductDetailDialog.show(context, widget.product),
+              child: Row(children: [
+                ProductImage(imagePath: widget.product.imagePath, size: 36),
+                const SizedBox(width: 12),
+                Flexible(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(widget.product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
+                  Row(
+                    children: [
+                      Text(widget.product.baseUnit, style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+                      if (widget.product.barcode != null) ...[
+                        const SizedBox(width: 8),
+                        Text('• ${widget.product.barcode}', style: const TextStyle(fontFamily: 'monospace', fontSize: 10, color: AppTheme.textMuted)),
+                      ],
+                    ],
+                  ),
+                ])),
+              ]),
+            )),
+            Expanded(flex: 1, child: Text(widget.product.category, style: const TextStyle(fontSize: 12))),
+
+            // Supplier & Shipping Info
+            Expanded(flex: 1, child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (f.supplierName != null)
+                  _statusBadge(Icons.business_rounded, f.supplierName!, f.supplierPaymentStatus),
+                if (f.shippingServiceName != null)
+                  _statusBadge(Icons.local_shipping_rounded, f.shippingServiceName!, f.shippingPaymentStatus),
+                if (f.supplierName == null && f.shippingServiceName == null)
+                  const Text('—', style: TextStyle(color: AppTheme.textMuted)),
+              ],
+            )),
+
+            Expanded(flex: 1, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              if (widget.product.isLowStock)
+                const Padding(
+                  padding: EdgeInsets.only(right: 4),
+                  child: Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 14),
+                ),
+              Text(
+                Formatters.decimal(widget.product.stock),
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  color:      widget.product.isLowStock ? AppTheme.warning : AppTheme.textPrimary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ])),
+            Expanded(flex: 1, child: BlurGate(child: Text(Formatters.currency(widget.product.costPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)))),
+            Expanded(flex: 1, child: Text(Formatters.currency(widget.product.basePrice), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+            Expanded(flex: 1, child: BlurGate(child: Text(Formatters.currency(profit), textAlign: TextAlign.right, style: TextStyle(color: profit >= 0 ? AppTheme.success : AppTheme.danger, fontWeight: FontWeight.bold, fontSize: 12)))),
+
+            // Update Stok Cepat (Dedicated Column)
+            Expanded(flex: 1, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              SizedBox(
+                width: 60,
+                child: TextField(
+                  controller: _adjCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(signed: true, decimal: true),
+                  onSubmitted: (v) {
+                    final val = double.tryParse(v);
+                    if (val != null) _adjust(val);
+                  },
+                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                  decoration: const InputDecoration(
+                    hintText: '±Qty',
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                onPressed: () {
+                  final v = double.tryParse(_adjCtrl.text);
+                  if (v != null) _adjust(v);
+                },
+                icon: const Icon(Icons.check_circle_outline_rounded, color: AppTheme.accent, size: 20),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                tooltip: 'Terapkan Update Stok',
+              ),
+            ])),
+
+            Expanded(flex: 2, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              // Restock Formal
+              IconButton(
+                onPressed: () => RestockDialog.show(context, widget.product),
+                icon: const Icon(Icons.add_shopping_cart_rounded, size: 18, color: AppTheme.info),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                tooltip: 'Restock Formal',
+              ),
+              const SizedBox(width: 8),
+
+              IconButton(
+                onPressed: () => ProductFormDialog.show(context, product: widget.product),
+                icon: const Icon(Icons.edit_rounded, size: 16, color: AppTheme.textSecondary),
+                tooltip: 'Ubah Data Produk',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              const SizedBox(width: 8),
+              _DeleteButton(product: widget.product),
+            ])),
+          ]),
+        ),
+        if (_expanded) _buildInventoryHub(widget.product),
+      ],
+    );
+  }
+
+  Widget _buildInventoryHub(Product p) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color:  isSelected
-            ? AppTheme.accent.withValues(alpha: 0.05)
-            : (isEven ? AppTheme.card : AppTheme.surface),
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        color: AppTheme.surfaceAlt,
         border: Border(
-          left:   BorderSide(color: isSelected ? AppTheme.accent : AppTheme.border),
-          right:  BorderSide(color: isSelected ? AppTheme.accent : AppTheme.border),
+          left: BorderSide(color: AppTheme.border),
+          right: BorderSide(color: AppTheme.border),
           bottom: BorderSide(color: AppTheme.border),
         ),
       ),
-      child: Row(children: [
-        SizedBox(
-          width: 40,
-          child: Checkbox(
-            value: isSelected,
-            onChanged: (_) => onToggleSelect(),
-            activeColor: AppTheme.accent,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-          ),
-        ),
-        // Product name + icon
-        Expanded(flex: 4, child: InkWell(
-          onTap: () => ProductDetailDialog.show(context, product),
-          child: Row(children: [
-            ProductImage(imagePath: product.imagePath, size: 36),
-            const SizedBox(width: 12),
-            Flexible(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
-              Row(
-                children: [
-                  Text(product.baseUnit, style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
-                  if (product.barcode != null) ...[
-                    const SizedBox(width: 8),
-                    Text('• ${product.barcode}', style: const TextStyle(fontFamily: 'monospace', fontSize: 10, color: AppTheme.textMuted)),
-                  ],
-                ],
-              ),
-            ])),
-          ]),
-        )),
-        Expanded(flex: 2, child: Text(product.category, style: const TextStyle(fontSize: 12))),
-
-        // Supplier & Shipping Info
-        Expanded(flex: 2, child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (f.supplierName != null)
-              _statusBadge(Icons.business_rounded, f.supplierName!, f.supplierPaymentStatus),
-            if (f.shippingServiceName != null)
-              _statusBadge(Icons.local_shipping_rounded, f.shippingServiceName!, f.shippingPaymentStatus),
-            if (f.supplierName == null && f.shippingServiceName == null)
-              const Text('—', style: TextStyle(color: AppTheme.textMuted)),
-          ],
-        )),
-
-        Expanded(flex: 1, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-          if (product.isLowStock)
-            const Padding(
-              padding: EdgeInsets.only(right: 4),
-              child: Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 14),
-            ),
-          Text(
-            Formatters.decimal(product.stock),
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              color:      product.isLowStock ? AppTheme.warning : AppTheme.textPrimary,
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // History List Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(56, 16, 16, 8),
+            child: Row(
+              children: [
+                const Icon(Icons.history_rounded, size: 16, color: AppTheme.accent),
+                const SizedBox(width: 8),
+                Text('RIWAYAT RESTOCK PRODUK', 
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppTheme.accent, letterSpacing: 1.1)),
+              ],
             ),
           ),
-        ])),
-        Expanded(flex: 1, child: BlurGate(child: Text(Formatters.currency(product.costPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)))),
-        Expanded(flex: 1, child: Text(Formatters.currency(product.basePrice), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-        Expanded(flex: 1, child: BlurGate(child: Text(Formatters.currency(profit), textAlign: TextAlign.right, style: TextStyle(color: profit >= 0 ? AppTheme.success : AppTheme.danger, fontWeight: FontWeight.bold, fontSize: 12)))),
+          
+          _buildHistoryList(p),
+          const SizedBox(height: 12),
+        ],
+      ),
+    );
+  }
 
-        Expanded(flex: 1, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          IconButton(
-            onPressed: () => ProductFormDialog.show(context, product: product),
-            icon: const Icon(Icons.edit_rounded, size: 16, color: AppTheme.textSecondary),
-            tooltip: 'Edit',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-          ),
-          const SizedBox(width: 4),
-          _DeleteButton(product: product),
-        ])),
-      ]),
+  Widget _buildHistoryList(Product p) {
+    final historyAsync = ref.watch(restockHistoryProvider);
+    
+    return historyAsync.when(
+      data: (list) {
+        final prodRecords = list.where((r) => r.productId == p.id).toList();
+        if (prodRecords.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.fromLTRB(56, 8, 16, 16),
+            child: Text('Belum ada riwayat pengadaan untuk produk ini.', 
+              style: TextStyle(fontSize: 12, color: AppTheme.textMuted, fontStyle: FontStyle.italic)),
+          );
+        }
+
+        return Column(
+          children: prodRecords.map((r) => _RestockHistoryRow(record: r, product: p)).toList(),
+        );
+      },
+      loading: () => const Padding(
+        padding: EdgeInsets.fromLTRB(56, 16, 16, 16),
+        child: LinearProgressIndicator(minHeight: 2),
+      ),
+      error: (_, __) => const Padding(
+        padding: EdgeInsets.fromLTRB(56, 8, 16, 16),
+        child: Text('Gagal memuat riwayat'),
+      ),
     );
   }
 
@@ -597,6 +771,90 @@ class _ProductRow extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RestockHistoryRow extends ConsumerWidget {
+  final RestockRecord record;
+  final Product product;
+  const _RestockHistoryRow({required this.record, required this.product});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(56, 4, 16, 4),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppTheme.border.withValues(alpha: 0.5)),
+        ),
+        child: Row(children: [
+          Expanded(
+            flex: 2,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(Formatters.dateTime(record.createdAt), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+              if (record.notes != null)
+                Text(record.notes!, style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: AppTheme.textMuted), overflow: TextOverflow.ellipsis),
+            ]),
+          ),
+          Expanded(
+            flex: 2,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('+${Formatters.decimal(record.quantityAdded)} ${record.unitName}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.success, fontSize: 13)),
+              Text('Modal: ${Formatters.currency(record.totalCostPerUnit)}', style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+            ]),
+          ),
+          Expanded(
+            flex: 3,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (record.supplierName != null) _miniBadge(Icons.business_rounded, record.supplierName!, record.supplierPaymentStatus),
+              if (record.shippingServiceName != null) _miniBadge(Icons.local_shipping_rounded, record.shippingServiceName!, record.shippingPaymentStatus),
+            ]),
+          ),
+          const SizedBox(width: 16),
+          // Actions
+          IconButton(
+            onPressed: () => RestockDialog.show(context, product, record: record),
+            icon: const Icon(Icons.edit_rounded, size: 16, color: AppTheme.textSecondary),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            tooltip: 'Edit Riwayat',
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            onPressed: () async {
+              final ok = await showConfirmDialog(context, 
+                title: 'Hapus Riwayat Restock', 
+                content: 'Yakin hapus data ini? Stok akan dikurangi otomatis sesuai jumlah batch ini.');
+              if (ok) {
+                await ref.read(restockNotifierProvider.notifier).deleteRestock(record);
+              }
+            },
+            icon: const Icon(Icons.delete_outline_rounded, size: 16, color: AppTheme.danger),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            tooltip: 'Hapus Riwayat',
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _miniBadge(IconData icon, String label, PaymentStatus status) {
+    final color = status == PaymentStatus.paid ? AppTheme.success : AppTheme.warning;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: color),
+          const SizedBox(width: 4),
+          Flexible(child: Text(label, style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
         ],
       ),
     );
