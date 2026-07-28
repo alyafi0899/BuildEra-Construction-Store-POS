@@ -16,21 +16,20 @@ class _NavItem {
 const _navItems = [
   // OPERASIONAL
   _NavItem(Icons.point_of_sale_rounded,       'Kasir',       0, 'OPERASIONAL'),
-  _NavItem(Icons.receipt_long_rounded,        'Transaksi',   3, 'OPERASIONAL'),
-  _NavItem(Icons.account_balance_wallet_rounded, 'Piutang',   4, 'OPERASIONAL'),
-  _NavItem(Icons.people_rounded,               'Pelanggan',   5, 'OPERASIONAL'),
+  _NavItem(Icons.receipt_long_rounded,        'Transaksi',   2, 'OPERASIONAL'),
+  _NavItem(Icons.account_balance_wallet_rounded, 'Piutang',   3, 'OPERASIONAL'),
+  _NavItem(Icons.people_rounded,               'Pelanggan',   4, 'OPERASIONAL'),
 
   // INVENTORI
-  _NavItem(Icons.inventory_2_rounded,         'Produk',      1, 'INVENTORI'),
-  _NavItem(Icons.warehouse_rounded,           'Inventori',   2, 'INVENTORI'),
-  _NavItem(Icons.qr_code_2_rounded,           'Label Barcode', 7, 'INVENTORI'),
+  _NavItem(Icons.inventory_2_rounded,         'Produk / Stok', 1, 'INVENTORI'),
+  _NavItem(Icons.qr_code_2_rounded,           'Label Barcode', 6, 'INVENTORI'),
 
   // FINANSIAL
-  _NavItem(Icons.bar_chart_rounded,           'Analitik',    6, 'FINANSIAL'),
-  _NavItem(Icons.receipt_rounded,              'Tagihan',     9, 'FINANSIAL'),
+  _NavItem(Icons.bar_chart_rounded,           'Analitik',    5, 'FINANSIAL'),
+  _NavItem(Icons.receipt_rounded,              'Tagihan',     8, 'FINANSIAL'),
 
   // SISTEM
-  _NavItem(Icons.settings_rounded,            'Pengaturan',  8, 'SISTEM'),
+  _NavItem(Icons.settings_rounded,            'Pengaturan',  7, 'SISTEM'),
 ];
 
 class AppSidebar extends ConsumerWidget {

@@ -60,19 +60,21 @@ class TransactionRepository {
 
   // ── Sync Logic ────────────────────────────────────────────────────────────
 
-  Future<void> bootstrap() async {
+  Future<void> bootstrap({bool force = false}) async {
     final box = await _getBox();
-    if (box.isNotEmpty) return;
+    if (box.isNotEmpty && !force) return;
 
     final snapshot = await FirebaseFirestore.instance
         .collection('users')
         .doc(_uid)
         .collection('transactions')
         .get()
-        .timeout(const Duration(seconds: 5));
+        .timeout(const Duration(seconds: 15));
 
+    if (force) await box.clear();
     for (final doc in snapshot.docs) {
-      await box.put(doc.id, doc.data());
+      final data = Map<String, dynamic>.from(doc.data() as Map);
+      await box.put(doc.id, LocalDatabase.sanitize(data));
     }
   }
 

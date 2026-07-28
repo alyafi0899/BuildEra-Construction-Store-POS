@@ -21,13 +21,15 @@ class BarcodeHistoryRepository {
 
   // ── Sync Logic ────────────────────────────────────────────────────────────
 
-  Future<void> bootstrap() async {
+  Future<void> bootstrap({bool force = false}) async {
     final box = await _getBox();
-    if (box.isNotEmpty) return;
+    if (box.isNotEmpty && !force) return;
 
-    final snapshot = await _historyCol.get().timeout(const Duration(seconds: 5));
+    final snapshot = await _historyCol.get().timeout(const Duration(seconds: 15));
+    if (force) await box.clear();
     for (final doc in snapshot.docs) {
-      await box.put(doc.id, doc.data());
+      final data = Map<String, dynamic>.from(doc.data() as Map);
+      await box.put(doc.id, LocalDatabase.sanitize(data));
     }
   }
 
@@ -45,7 +47,8 @@ class BarcodeHistoryRepository {
       final historyDoc = await _historyCol.doc(normalized).get().timeout(const Duration(seconds: 2));
       if (historyDoc.exists) {
         // Cache it locally if we found it on server
-        await box.put(normalized, historyDoc.data());
+        final data = LocalDatabase.sanitize(historyDoc.data() as Map<String, dynamic>);
+        await box.put(normalized, data);
         return true;
       }
     } catch (_) {

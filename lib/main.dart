@@ -8,7 +8,6 @@ import 'core/theme/theme_provider.dart';
 import 'shared/widgets/sidebar.dart';
 import 'features/cashier/presentation/pages/cashier_page.dart';
 import 'features/products/presentation/pages/products_page.dart';
-import 'features/inventory/presentation/pages/inventory_page.dart';
 import 'features/payment/presentation/pages/transactions_page.dart';
 import 'features/analytics/presentation/pages/analytics_page.dart';
 import 'features/settings/presentation/pages/settings_page.dart';
@@ -178,6 +177,12 @@ class KonstruksiPosApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Re-enforce orientation lock on app build
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+
     final mode = ref.watch(themeProvider);
     return MaterialApp(
       title: 'BuildEra',
@@ -198,7 +203,6 @@ class _MainShellState extends ConsumerState<MainShell> {
   final _pages = [
     const CashierPage(),
     const ProductsPage(),
-    const InventoryPage(),
     const TransactionsPage(),
     const PiutangDashboard(),
     const CustomerListPage(),

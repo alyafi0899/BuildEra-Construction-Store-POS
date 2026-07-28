@@ -21,21 +21,29 @@ class RestockRepository {
 
   // ── Sync Logic ────────────────────────────────────────────────────────────
 
-  Future<void> bootstrap() async {
+  Future<void> bootstrap({bool force = false}) async {
     final userDoc = FirebaseFirestore.instance.collection('users').doc(_uid);
 
     // 1. Bootstrap Restock History
     final rBox = await _getBox();
-    if (rBox.isEmpty) {
-      final snap = await userDoc.collection('restock_history').get().timeout(const Duration(seconds: 5));
-      for (final d in snap.docs) await rBox.put(d.id, d.data());
+    if (rBox.isEmpty || force) {
+      final snap = await userDoc.collection('restock_history').get().timeout(const Duration(seconds: 15));
+      if (force) await rBox.clear();
+      for (final d in snap.docs) {
+        final data = Map<String, dynamic>.from(d.data() as Map);
+        await rBox.put(d.id, LocalDatabase.sanitize(data));
+      }
     }
 
     // 2. Bootstrap Bill Payments
     final pBox = await LocalDatabase.openBox(_uid, 'bill_payments');
-    if (pBox.isEmpty) {
-      final snap = await userDoc.collection('bill_payments').get().timeout(const Duration(seconds: 5));
-      for (final d in snap.docs) await pBox.put(d.id, d.data());
+    if (pBox.isEmpty || force) {
+      final snap = await userDoc.collection('bill_payments').get().timeout(const Duration(seconds: 15));
+      if (force) await pBox.clear();
+      for (final d in snap.docs) {
+        final data = Map<String, dynamic>.from(d.data() as Map);
+        await pBox.put(d.id, LocalDatabase.sanitize(data));
+      }
     }
   }
 

@@ -120,7 +120,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     children: [
                       const Text('Belum punya akun?', style: TextStyle(color: AppTheme.textSecondary)),
                       TextButton(
-                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterPage())),
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RegisterPage())),
                         child: const Text('Daftar Sekarang'),
                       ),
                     ],
