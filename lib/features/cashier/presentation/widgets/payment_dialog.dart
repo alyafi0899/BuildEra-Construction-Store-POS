@@ -406,6 +406,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
       TextField(
         controller: _notesCtrl,
         maxLines: 2,
+        keyboardType: TextInputType.multiline,
         style: const TextStyle(fontSize: 13),
         decoration: const InputDecoration(
           labelText: 'Keterangan Transaksi',
@@ -757,12 +758,14 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
             children: [
               TextFormField(
                 controller: nameCtrl,
+                keyboardType: TextInputType.name,
                 decoration: const InputDecoration(labelText: 'Nama Lengkap *', isDense: true),
                 validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: phoneCtrl,
+                keyboardType: TextInputType.phone,
                 decoration: const InputDecoration(labelText: 'Nomor HP *', isDense: true),
                 validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
               ),

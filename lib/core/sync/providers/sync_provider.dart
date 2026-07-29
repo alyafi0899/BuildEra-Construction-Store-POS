@@ -146,9 +146,8 @@ class SyncNotifier extends Notifier<SyncState> {
         final batch = db.batch();
         final processedKeys = <dynamic>[];
         
-        // Take a snapshot of keys to avoid concurrent modification issues
-        final allKeys = _queueBox!.keys.toList();
-        final keys = allKeys.take(chunkSize).toList();
+        // Mengambil kunci antrean (keys) secara dinamis agar tidak membebani RAM
+        final keys = _queueBox!.keys.take(chunkSize).toList();
 
         for (final key in keys) {
           final raw = _queueBox!.get(key);

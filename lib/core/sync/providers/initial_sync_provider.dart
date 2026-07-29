@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'connectivity_provider.dart';
+import '../services/local_database.dart';
 import '../../../features/auth/providers/auth_provider.dart';
 import '../../../features/products/providers/product_provider.dart';
 import '../../../features/products/providers/barcode_history_provider.dart';
@@ -9,104 +11,89 @@ import '../../../features/debts/providers/debt_repository.dart';
 import '../../../features/inventory/providers/restock_provider.dart';
 
 class InitialSyncState {
+  final bool isInitialSyncDone;
   final bool isSyncing;
-  final double progress;
-  final String currentStep;
   final String? error;
-  final bool isCompleted;
 
-  const InitialSyncState({
+  InitialSyncState({
+    this.isInitialSyncDone = false,
     this.isSyncing = false,
-    this.progress = 0,
-    this.currentStep = '',
     this.error,
-    this.isCompleted = false,
   });
 
   InitialSyncState copyWith({
+    bool? isInitialSyncDone,
     bool? isSyncing,
-    double? progress,
-    String? currentStep,
     String? error,
-    bool? isCompleted,
   }) {
     return InitialSyncState(
+      isInitialSyncDone: isInitialSyncDone ?? this.isInitialSyncDone,
       isSyncing: isSyncing ?? this.isSyncing,
-      progress: progress ?? this.progress,
-      currentStep: currentStep ?? this.currentStep,
       error: error ?? this.error,
-      isCompleted: isCompleted ?? this.isCompleted,
     );
   }
 }
 
 class InitialSyncNotifier extends Notifier<InitialSyncState> {
   @override
-  InitialSyncState build() => const InitialSyncState();
+  InitialSyncState build() {
+    // We use a future here to avoid blocking build, but we want it to update state ASAP
+    final user = ref.watch(authStateProvider).value;
+    if (user != null) {
+      _loadSyncStatus(user.uid);
+    }
+    return InitialSyncState(isInitialSyncDone: true); // Start as TRUE to avoid flashing dialog
+  }
 
-  Future<void> performInitialSync() async {
+  Future<void> _loadSyncStatus(String uid) async {
+    final box = await LocalDatabase.openBox(uid, 'sync_meta');
+    final isDone = box.get('initial_sync_done', defaultValue: false) as bool;
+    state = state.copyWith(isInitialSyncDone: isDone);
+  }
+
+  Future<void> performInitialSync({bool force = false}) async {
+    debugPrint('SYNC: Triggered performInitialSync(force: $force)');
     final auth = ref.read(authStateProvider).value;
     final isOnline = ref.read(isOnlineProvider);
     
-    if (auth == null || !isOnline) return;
-
-    // Check if we already have vital data (Local First check)
-    final productRepo = ref.read(productRepositoryProvider);
-    final products = await productRepo.getAllProducts();
-    
-    if (products.isNotEmpty) {
-      // Data already exists, sync in background without blocking
-      _backgroundSync(auth.uid);
+    if (auth == null) {
+      debugPrint('SYNC: No user found for initial sync');
       return;
     }
 
-    // No data found, block UI for initial sync
-    state = state.copyWith(isSyncing: true, currentStep: 'Menghubungkan ke Server...', progress: 0.1);
+    if (!isOnline) {
+      debugPrint('SYNC: Offline - Aborting');
+      state = state.copyWith(error: 'Tidak ada koneksi internet. Silakan coba lagi nanti.');
+      return;
+    }
+
+    debugPrint('SYNC: Starting Initial Download for user ${auth.uid}');
+    state = state.copyWith(isSyncing: true, error: null);
 
     try {
-      debugPrint('SYNC: Starting Initial Download for user ${auth.uid}');
-
-      // 1. Products (Vital)
-      state = state.copyWith(currentStep: 'Mengunduh Data Produk...', progress: 0.2);
-      await ref.read(productRepositoryProvider).bootstrap();
+      // 1. Products
+      await ref.read(productRepositoryProvider).bootstrap(force: force);
       
       // 2. Transactions
-      state = state.copyWith(currentStep: 'Mengunduh Riwayat Transaksi...', progress: 0.4);
-      await ref.read(transactionRepositoryProvider).bootstrap();
+      await ref.read(transactionRepositoryProvider).bootstrap(force: force);
       
       // 3. Debts & Customers
-      state = state.copyWith(currentStep: 'Mengunduh Data Pelanggan & Piutang...', progress: 0.6);
-      await ref.read(debtRepositoryProvider).bootstrap();
+      await ref.read(debtRepositoryProvider).bootstrap(force: force);
       
       // 4. Restocks & Bill Payments
-      state = state.copyWith(currentStep: 'Mengunduh Riwayat Inventori...', progress: 0.8);
-      await ref.read(restockRepositoryProvider).bootstrap();
+      await ref.read(restockRepositoryProvider).bootstrap(force: force);
 
       // 5. Barcode History
-      state = state.copyWith(currentStep: 'Menyelesaikan Sinkronisasi...', progress: 0.95);
-      await ref.read(barcodeHistoryRepositoryProvider).bootstrap();
+      await ref.read(barcodeHistoryRepositoryProvider).bootstrap(force: force);
 
+      final box = await LocalDatabase.openBox(auth.uid, 'sync_meta');
+      await box.put('initial_sync_done', true);
+
+      state = state.copyWith(isSyncing: false, isInitialSyncDone: true);
       debugPrint('SYNC: Initial Download Completed');
-      state = state.copyWith(isSyncing: false, isCompleted: true, progress: 1.0);
     } catch (e) {
       debugPrint('SYNC: Initial Download Error: $e');
       state = state.copyWith(isSyncing: false, error: e.toString());
-    }
-  }
-
-  Future<void> _backgroundSync(String uid) async {
-    // Background sync doesn't update state to avoid blocking UI
-    try {
-       // We can still call bootstrap, repositories should handle incremental logic 
-       // or skip if box is not empty (as per current implementation)
-       // Future improvement: Implement real incremental sync here
-       await ref.read(productRepositoryProvider).bootstrap();
-       await ref.read(transactionRepositoryProvider).bootstrap();
-       await ref.read(debtRepositoryProvider).bootstrap();
-       await ref.read(restockRepositoryProvider).bootstrap();
-       await ref.read(barcodeHistoryRepositoryProvider).bootstrap();
-    } catch (e) {
-      debugPrint('SYNC: Background Sync Error: $e');
     }
   }
 }

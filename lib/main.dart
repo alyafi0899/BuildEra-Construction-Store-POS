@@ -6,7 +6,6 @@ import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
 import 'shared/widgets/sidebar.dart';
-import 'shared/widgets/lazy_indexed_stack.dart';
 import 'features/cashier/presentation/pages/cashier_page.dart';
 import 'features/products/presentation/pages/products_page.dart';
 import 'features/payment/presentation/pages/transactions_page.dart';
@@ -19,7 +18,11 @@ import 'features/settings/providers/app_settings_provider.dart';
 import 'features/cashier/presentation/pages/customer_display_page.dart';
 import 'features/cashier/providers/cart_provider.dart';
 import 'features/cashier/providers/customer_display_provider.dart';
+import 'features/products/providers/product_provider.dart';
 import 'features/products/presentation/pages/barcode_management_page.dart';
+import 'features/inventory/providers/restock_provider.dart';
+import 'features/payment/providers/transaction_provider.dart';
+import 'features/debts/providers/debt_repository.dart';
 import 'features/auth/presentation/widgets/auth_gate.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'shared/widgets/security_gate.dart';
@@ -97,8 +100,8 @@ Future<void> main(List<String> args) async {
   if (isDesktop) {
     await windowManager.ensureInitialized();
     WindowOptions windowOptions = const WindowOptions(
-      size: Size(1500, 815),
-      minimumSize: Size(1500, 815), // Enforce requested minimum size
+      size: Size(1500, 800),
+      minimumSize: Size(1500, 700), // Enforce landscape minimum
       center: true,
       backgroundColor: Color(0xFF0F1117),
       skipTaskbar: false,
@@ -174,6 +177,12 @@ class KonstruksiPosApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Re-enforce orientation lock on app build
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+
     final mode = ref.watch(themeProvider);
     return MaterialApp(
       title: 'BuildEra',
@@ -224,16 +233,22 @@ class _MainShellState extends ConsumerState<MainShell> {
       }
     });
 
+    // Keep essential providers warm for backup and analytics
+    ref.watch(productsProvider);
+    ref.watch(restockHistoryProvider);
+    ref.watch(transactionsProvider);
+    ref.watch(customersProvider);
+
     final shell = Row(children: [
-      RepaintBoundary(
-        child: AppSidebar(
-          selectedIndex: idx,
-          onItemSelected: (i) => ref.read(navigationIndexProvider.notifier).setIndex(i),
-        ),
+      AppSidebar(
+        selectedIndex: idx,
+        onItemSelected: (i) => ref.read(navigationIndexProvider.notifier).setIndex(i),
       ),
       Expanded(
-        child: RepaintBoundary(
-          child: LazyIndexedStack(index: idx, children: _pages),
+        child: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (_) => ref.read(sidebarCollapsedProvider.notifier).collapse(),
+          child: IndexedStack(index: idx, children: _pages),
         ),
       ),
     ]);

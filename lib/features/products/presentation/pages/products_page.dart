@@ -565,12 +565,12 @@ class _ProductRowState extends ConsumerState<_ProductRow> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
               ),
             ),
-            
+
             // Expand Toggle
             IconButton(
               onPressed: () => setState(() => _expanded = !_expanded),
-              icon: Icon(_expanded ? Icons.keyboard_arrow_down_rounded : Icons.keyboard_arrow_right_rounded, 
-                size: 20, color: AppTheme.textMuted),
+              icon: Icon(_expanded ? Icons.keyboard_arrow_down_rounded : Icons.keyboard_arrow_right_rounded,
+                  size: 20, color: AppTheme.textMuted),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
             ),
@@ -712,12 +712,12 @@ class _ProductRowState extends ConsumerState<_ProductRow> {
               children: [
                 const Icon(Icons.history_rounded, size: 16, color: AppTheme.accent),
                 const SizedBox(width: 8),
-                Text('RIWAYAT RESTOCK PRODUK', 
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppTheme.accent, letterSpacing: 1.1)),
+                Text('RIWAYAT RESTOCK PRODUK',
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppTheme.accent, letterSpacing: 1.1)),
               ],
             ),
           ),
-          
+
           _buildHistoryList(p),
           const SizedBox(height: 12),
         ],
@@ -727,15 +727,15 @@ class _ProductRowState extends ConsumerState<_ProductRow> {
 
   Widget _buildHistoryList(Product p) {
     final historyAsync = ref.watch(restockHistoryProvider);
-    
+
     return historyAsync.when(
       data: (list) {
         final prodRecords = list.where((r) => r.productId == p.id).toList();
         if (prodRecords.isEmpty) {
           return const Padding(
             padding: EdgeInsets.fromLTRB(56, 8, 16, 16),
-            child: Text('Belum ada riwayat pengadaan untuk produk ini.', 
-              style: TextStyle(fontSize: 12, color: AppTheme.textMuted, fontStyle: FontStyle.italic)),
+            child: Text('Belum ada riwayat pengadaan untuk produk ini.',
+                style: TextStyle(fontSize: 12, color: AppTheme.textMuted, fontStyle: FontStyle.italic)),
           );
         }
 
@@ -828,9 +828,9 @@ class _RestockHistoryRow extends ConsumerWidget {
           const SizedBox(width: 8),
           IconButton(
             onPressed: () async {
-              final ok = await showConfirmDialog(context, 
-                title: 'Hapus Riwayat Restock', 
-                content: 'Yakin hapus data ini? Stok akan dikurangi otomatis sesuai jumlah batch ini.');
+              final ok = await showConfirmDialog(context,
+                  title: 'Hapus Riwayat Restock',
+                  content: 'Yakin hapus data ini? Stok akan dikurangi otomatis sesuai jumlah batch ini.');
               if (ok) {
                 await ref.read(restockNotifierProvider.notifier).deleteRestock(record);
               }

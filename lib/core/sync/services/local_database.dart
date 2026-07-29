@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 class LocalDatabase {
@@ -20,5 +21,26 @@ class LocalDatabase {
         await box.close();
       }
     }
+  }
+
+  /// Recursively converts Firestore Timestamps to ISO-8601 strings
+  /// so they can be saved in Hive without custom adapters.
+  static Map<String, dynamic> sanitize(Map<String, dynamic> data) {
+    final sanitized = <String, dynamic>{};
+    data.forEach((key, value) {
+      sanitized[key] = _sanitizeValue(value);
+    });
+    return sanitized;
+  }
+
+  static dynamic _sanitizeValue(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate().toIso8601String();
+    } else if (value is Map) {
+      return sanitize(Map<String, dynamic>.from(value));
+    } else if (value is List) {
+      return value.map(_sanitizeValue).toList();
+    }
+    return value;
   }
 }

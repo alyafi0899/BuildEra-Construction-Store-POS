@@ -22,39 +22,39 @@ class DebtRepository {
 
   // ── Sync Logic ────────────────────────────────────────────────────────────
 
-  Future<void> bootstrap() async {
+  Future<void> bootstrap({bool force = false}) async {
     final userDoc = FirebaseFirestore.instance.collection('users').doc(_uid);
 
     // 1. Bootstrap Customers
     final cBox = await _getBox('customers');
-    if (cBox.isEmpty) {
-      final snap = await userDoc.collection('customers').get().timeout(const Duration(seconds: 10));
-      if (snap.docs.isNotEmpty) {
-        final Map<String, dynamic> data = {};
-        for (final d in snap.docs) data[d.id] = d.data();
-        await cBox.putAll(data);
+    if (cBox.isEmpty || force) {
+      final snap = await userDoc.collection('customers').get().timeout(const Duration(seconds: 15));
+      if (force) await cBox.clear();
+      for (final d in snap.docs) {
+        final data = Map<String, dynamic>.from(d.data() as Map);
+        await cBox.put(d.id, LocalDatabase.sanitize(data));
       }
     }
 
     // 2. Bootstrap Debts
     final dBox = await _getBox('debts');
-    if (dBox.isEmpty) {
-      final snap = await userDoc.collection('debts').get().timeout(const Duration(seconds: 10));
-      if (snap.docs.isNotEmpty) {
-        final Map<String, dynamic> data = {};
-        for (final d in snap.docs) data[d.id] = d.data();
-        await dBox.putAll(data);
+    if (dBox.isEmpty || force) {
+      final snap = await userDoc.collection('debts').get().timeout(const Duration(seconds: 15));
+      if (force) await dBox.clear();
+      for (final d in snap.docs) {
+        final data = Map<String, dynamic>.from(d.data() as Map);
+        await dBox.put(d.id, LocalDatabase.sanitize(data));
       }
     }
 
     // 3. Bootstrap Payments
     final pBox = await _getBox('debt_payments');
-    if (pBox.isEmpty) {
-      final snap = await userDoc.collection('debt_payments').get().timeout(const Duration(seconds: 10));
-      if (snap.docs.isNotEmpty) {
-        final Map<String, dynamic> data = {};
-        for (final d in snap.docs) data[d.id] = d.data();
-        await pBox.putAll(data);
+    if (pBox.isEmpty || force) {
+      final snap = await userDoc.collection('debt_payments').get().timeout(const Duration(seconds: 15));
+      if (force) await pBox.clear();
+      for (final d in snap.docs) {
+        final data = Map<String, dynamic>.from(d.data() as Map);
+        await pBox.put(d.id, LocalDatabase.sanitize(data));
       }
     }
   }

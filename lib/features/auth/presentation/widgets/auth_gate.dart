@@ -9,18 +9,33 @@ import '../../../../main.dart'; // To get MainShell or whatever home is
 import '../../../../shared/widgets/splash_screen.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../../core/sync/providers/initial_sync_provider.dart';
-import '../../../../core/sync/widgets/initial_sync_screen.dart';
 
-class AuthGate extends ConsumerWidget {
+class AuthGate extends ConsumerStatefulWidget {
   const AuthGate({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends ConsumerState<AuthGate> {
+  bool _dialogShown = false;
+
+  @override
+  Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
+
+    // Listen to sync state to show dialog
+    ref.listen(initialSyncProvider, (prev, next) {
+      // Only prompt if sync is not done AND not already syncing AND not yet shown in this session
+      if (next.isInitialSyncDone == false && !_dialogShown && !next.isSyncing && next.error == null) {
+         _showSyncPrompt();
+      }
+    });
 
     return authState.when(
       data: (user) {
         if (user == null) {
+          _dialogShown = false;
           return const LoginPage();
         }
         
@@ -52,18 +67,6 @@ class AuthGate extends ConsumerWidget {
            );
         }
 
-        // --- IMPROVEMENT: Sync Trigger point ---
-        // We trigger sync once settings are loaded.
-        final syncState = ref.watch(initialSyncProvider);
-        
-        if (!syncState.isCompleted && syncState.progress < 1.0) {
-          Future.microtask(() => ref.read(initialSyncProvider.notifier).performInitialSync());
-        }
-
-        if (syncState.isSyncing) {
-          return const InitialSyncScreen();
-        }
-
         if (settings.securityPin == null) {
           return const SetupPinPage();
         }
@@ -76,4 +79,73 @@ class AuthGate extends ConsumerWidget {
       ),
     );
   }
+
+  void _showSyncPrompt() {
+    setState(() => _dialogShown = true);
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const _SyncPromptDialog(),
+    );
+  }
 }
+
+class _SyncPromptDialog extends ConsumerWidget {
+  const _SyncPromptDialog();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final syncState = ref.watch(initialSyncProvider);
+
+    return AlertDialog(
+      backgroundColor: AppTheme.surface,
+      title: Text(
+        syncState.isInitialSyncDone ? 'Sinkronisasi Selesai' : 'Sinkronisasi Data',
+        style: const TextStyle(color: Colors.white),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (syncState.isInitialSyncDone)
+            const Text(
+              'Seluruh data Anda telah berhasil diunduh dari cloud. Anda sekarang dapat menggunakan aplikasi dengan data terbaru.',
+              style: TextStyle(color: AppTheme.textSecondary),
+            )
+          else
+            const Text(
+              'Perangkat baru terdeteksi. Silakan unduh data Anda dari cloud untuk melanjutkan.',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+          if (syncState.isSyncing) ...[
+            const SizedBox(height: 24),
+            const CircularProgressIndicator(color: AppTheme.accent),
+            const SizedBox(height: 16),
+            const Text('Mengunduh data...', style: TextStyle(color: AppTheme.accent, fontSize: 12)),
+          ],
+          if (syncState.error != null) ...[
+            const SizedBox(height: 16),
+            Text('Error: ${syncState.error}', style: const TextStyle(color: AppTheme.danger, fontSize: 12)),
+          ],
+        ],
+      ),
+      actions: [
+        if (!syncState.isSyncing && !syncState.isInitialSyncDone)
+          TextButton(
+            onPressed: () => ref.read(initialSyncProvider.notifier).performInitialSync(),
+            child: const Text('Unduh Sekarang', style: TextStyle(color: AppTheme.accent)),
+          ),
+        if (syncState.isInitialSyncDone)
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.accent,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Lanjutkan ke Aplikasi'),
+          ),
+      ],
+    );
+  }
+}
+

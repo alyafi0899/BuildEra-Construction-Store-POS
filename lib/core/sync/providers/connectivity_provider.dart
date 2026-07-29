@@ -14,6 +14,9 @@ final connectivityProvider = StreamProvider<ConnectivityStatus>((ref) {
 });
 
 final isOnlineProvider = Provider<bool>((ref) {
-  final status = ref.watch(connectivityProvider).value;
-  return status == ConnectivityStatus.online;
+  final asyncStatus = ref.watch(connectivityProvider);
+  return asyncStatus.maybeWhen(
+    data: (status) => status == ConnectivityStatus.online,
+    orElse: () => true, // Assume online until connectivity_plus says otherwise
+  );
 });
