@@ -361,6 +361,18 @@ Future<bool> showConfirmDialog(
       false;
 }
 
+// ── Logout Dialog ──────────────────────────────────────────────────────────
+
+Future<bool> showLogoutDialog(BuildContext context) async {
+  return await showConfirmDialog(
+    context,
+    title: 'Konfirmasi Keluar',
+    content: 'Apakah Anda yakin ingin keluar dari akun Anda? Anda perlu masuk kembali untuk mengakses data.',
+    confirmLabel: 'KELUAR',
+    confirmColor: AppTheme.danger,
+  );
+}
+
 // ── Snack helpers ─────────────────────────────────────────────────────────
 
 void showSuccess(BuildContext context, String msg) {
