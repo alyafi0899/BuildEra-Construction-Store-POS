@@ -65,58 +65,61 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
       backgroundColor: AppTheme.bg,
       appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
       body: Center(
-        child: Container(
-          width: 400,
-          padding: const EdgeInsets.all(32),
-          decoration: BoxDecoration(
-            color: AppTheme.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.border),
-          ),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.lock_reset_rounded, size: 64, color: AppTheme.accent),
-                const SizedBox(height: 16),
-                Text('Lupa Password', style: Theme.of(context).textTheme.headlineMedium),
-                const SizedBox(height: 16),
-                const Text(
-                  'Untuk keamanan, masukkan Email Login dan Nomor HP Pemilik yang terdaftar.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: AppTheme.textSecondary),
-                ),
-                const SizedBox(height: 32),
-                TextFormField(
-                  controller: _emailCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Email Login',
-                    prefixIcon: Icon(Icons.email_outlined),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Container(
+            width: 400,
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: AppTheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppTheme.border),
+            ),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.lock_reset_rounded, size: 64, color: AppTheme.accent),
+                  const SizedBox(height: 16),
+                  Text('Lupa Password', style: Theme.of(context).textTheme.headlineMedium),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Untuk keamanan, masukkan Email Login dan Nomor HP Pemilik yang terdaftar.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: AppTheme.textSecondary),
                   ),
-                  keyboardType: TextInputType.emailAddress,
-                  validator: (v) => v!.isEmpty ? 'Email wajib diisi' : null,
-                ),
-                const SizedBox(height: 20),
-                TextFormField(
-                  controller: _phoneCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Nomor HP Pemilik',
-                    prefixIcon: Icon(Icons.phone_android_rounded),
+                  const SizedBox(height: 32),
+                  TextFormField(
+                    controller: _emailCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Email Login',
+                      prefixIcon: Icon(Icons.email_outlined),
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (v) => v!.isEmpty ? 'Email wajib diisi' : null,
                   ),
-                  keyboardType: TextInputType.phone,
-                  validator: (v) => v!.isEmpty ? 'Nomor HP wajib diisi' : null,
-                ),
-                const SizedBox(height: 32),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: _loading ? null : _reset,
-                    child: _loading ? const AppLoading() : const Text('VERIFIKASI & KIRIM LINK'),
+                  const SizedBox(height: 20),
+                  TextFormField(
+                    controller: _phoneCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Nomor HP Pemilik',
+                      prefixIcon: Icon(Icons.phone_android_rounded),
+                    ),
+                    keyboardType: TextInputType.phone,
+                    validator: (v) => v!.isEmpty ? 'Nomor HP wajib diisi' : null,
                   ),
-                ),
-              ],
+                  const SizedBox(height: 32),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: _loading ? null : _reset,
+                      child: _loading ? const AppLoading() : const Text('VERIFIKASI & KIRIM LINK'),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

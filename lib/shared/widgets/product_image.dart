@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/image_helper.dart';
 
 class ProductImage extends StatelessWidget {
   final String? imagePath;
@@ -45,18 +46,23 @@ class ProductImage extends StatelessWidget {
       );
     }
 
-    // New local file images
-    final file = File(imagePath!);
-    if (!file.existsSync()) {
-      return Icon(Icons.broken_image_rounded, color: AppTheme.danger, size: size * 0.5);
-    }
+    // New local file images (with platform-safe path resolution)
+    return FutureBuilder<String?>(
+      future: ImageHelper.resolveLocalPath(imagePath),
+      builder: (context, snapshot) {
+        final resolvedPath = snapshot.data;
+        if (resolvedPath == null) {
+          return Icon(Icons.broken_image_rounded, color: AppTheme.danger, size: size * 0.5);
+        }
 
-    return Image.file(
-      file,
-      fit: BoxFit.cover,
-      cacheWidth: cacheSize,
-      cacheHeight: cacheSize,
-      errorBuilder: (_, __, ___) => Icon(Icons.broken_image_rounded, color: AppTheme.danger, size: size * 0.5),
+        return Image.file(
+          File(resolvedPath),
+          fit: BoxFit.cover,
+          cacheWidth: cacheSize,
+          cacheHeight: cacheSize,
+          errorBuilder: (_, __, ___) => Icon(Icons.broken_image_rounded, color: AppTheme.danger, size: size * 0.5),
+        );
+      },
     );
   }
 }

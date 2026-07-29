@@ -66,11 +66,11 @@ class ImageHelper {
     return Uint8List.fromList(img.encodeJpg(resized, quality: 80));
   }
 
-  /// Saves image to local Documents directory under user-specific folder
+  /// Saves image to local Storage directory under user-specific folder
   static Future<String?> saveLocally(String uid, String fileName, Uint8List bytes, {String subFolder = 'product_images'}) async {
     try {
-      final docDir = await getApplicationDocumentsDirectory();
-      final userDir = Directory(path.join(docDir.path, 'KonstruksiPOS', uid, subFolder));
+      final baseDir = await getApplicationSupportDirectory();
+      final userDir = Directory(path.join(baseDir.path, 'BuildEra_Offline', uid, subFolder));
       
       if (!await userDir.exists()) {
         await userDir.create(recursive: true);
@@ -84,6 +84,42 @@ class ImageHelper {
       debugPrint('Error saving image locally: $e');
       return null;
     }
+  }
+
+  /// Resolves a stored path that might be from a different platform or legacy version
+  static Future<String?> resolveLocalPath(String? storedPath) async {
+    if (storedPath == null || storedPath.isEmpty) return null;
+    
+    try {
+      // 1. Check if the path is already valid for the current platform
+      if (await File(storedPath).exists()) return storedPath;
+
+      // 2. Resolve based on markers (New & Legacy support)
+      final markers = ['BuildEra_Offline', 'KonstruksiPOS'];
+      
+      for (final marker in markers) {
+        if (storedPath.contains(marker)) {
+          final index = storedPath.indexOf(marker);
+          String relative = storedPath.substring(index);
+          
+          relative = relative.replaceAll('\\', path.separator).replaceAll('/', path.separator);
+          
+          // Check in Support Dir (New)
+          final supportDir = await getApplicationSupportDirectory();
+          final resolvedSupport = path.join(supportDir.path, relative);
+          if (await File(resolvedSupport).exists()) return resolvedSupport;
+
+          // Check in Documents Dir (Legacy)
+          final docDir = await getApplicationDocumentsDirectory();
+          final resolvedDoc = path.join(docDir.path, relative);
+          if (await File(resolvedDoc).exists()) return resolvedDoc;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error resolving local path: $e');
+    }
+    
+    return null;
   }
 
   /// Deletes local image file

@@ -35,13 +35,16 @@ class ProductRepository {
 
   // ── Sync Logic ────────────────────────────────────────────────────────────
 
-  Future<void> bootstrap() async {
+  Future<void> bootstrap({bool force = false}) async {
     final box = await _getBox();
-    if (box.isNotEmpty) return; // Already cached
+    if (box.isNotEmpty && !force) return; // Already cached
 
-    final snapshot = await _productsCol.get();
+    final snapshot = await _productsCol.get().timeout(const Duration(seconds: 15));
+    if (force) await box.clear();
+
     for (final doc in snapshot.docs) {
-      await box.put(doc.id, doc.data());
+      final data = Map<String, dynamic>.from(doc.data() as Map);
+      await box.put(doc.id, LocalDatabase.sanitize(data));
     }
   }
 

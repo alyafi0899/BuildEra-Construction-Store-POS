@@ -19,6 +19,20 @@ class BarcodeHistoryRepository {
 
   Future<Box> _getBox() => LocalDatabase.openBox(_uid, 'barcode_history');
 
+  // ── Sync Logic ────────────────────────────────────────────────────────────
+
+  Future<void> bootstrap({bool force = false}) async {
+    final box = await _getBox();
+    if (box.isNotEmpty && !force) return;
+
+    final snapshot = await _historyCol.get().timeout(const Duration(seconds: 15));
+    if (force) await box.clear();
+    for (final doc in snapshot.docs) {
+      final data = Map<String, dynamic>.from(doc.data() as Map);
+      await box.put(doc.id, LocalDatabase.sanitize(data));
+    }
+  }
+
   /// Checks if a barcode was EVER used (even in deleted products)
   Future<bool> isBarcodeUsed(String barcode) async {
     final normalized = barcode.trim();
@@ -33,7 +47,8 @@ class BarcodeHistoryRepository {
       final historyDoc = await _historyCol.doc(normalized).get().timeout(const Duration(seconds: 2));
       if (historyDoc.exists) {
         // Cache it locally if we found it on server
-        await box.put(normalized, historyDoc.data());
+        final data = LocalDatabase.sanitize(historyDoc.data() as Map<String, dynamic>);
+        await box.put(normalized, data);
         return true;
       }
     } catch (_) {

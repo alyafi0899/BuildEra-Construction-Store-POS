@@ -348,6 +348,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                     flex: 3,
                                     child: TextFormField(
                                       controller: _name,
+                                      keyboardType: TextInputType.text,
                                       decoration: const InputDecoration(labelText: 'Nama Produk *'),
                                       validator:  (v) => v!.trim().isEmpty ? 'Nama wajib diisi' : null,
                                     ),
@@ -357,6 +358,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                     flex: 2,
                                     child: TextFormField(
                                       controller: _barcode,
+                                      keyboardType: TextInputType.text,
                                       decoration: InputDecoration(
                                         labelText:  'Barcode',
                                         hintText:   'Scan atau ketik barcode',
@@ -377,6 +379,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                 TextFormField(
                                   controller: _description,
                                   maxLines: 2,
+                                  keyboardType: TextInputType.multiline,
                                   decoration: const InputDecoration(
                                     labelText: 'Deskripsi Produk',
                                     hintText: 'Tambahkan keterangan detail mengenai produk ini...',
@@ -410,10 +413,11 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                             if (controller.text.isEmpty && _categoryCtrl.text.isNotEmpty) {
                                               controller.text = _categoryCtrl.text;
                                             }
-                                            return TextFormField(
+                                  return TextFormField(
                                     controller: controller,
                                     focusNode: focusNode,
                                     onChanged: (v) => _categoryCtrl.text = v,
+                                    keyboardType: TextInputType.text,
                                     decoration: const InputDecoration(
                                       labelText: 'Kategori Produk *',
                                       hintText: 'Pilih atau ketik baru...',
@@ -452,6 +456,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                 controller: controller,
                                 focusNode: focusNode,
                                 onChanged: (v) => setState(() => _baseUnitCtrl.text = v),
+                                keyboardType: TextInputType.text,
                                 decoration: const InputDecoration(
                                   labelText: 'Satuan Dasar *',
                                   hintText: 'e.g. pcs, kg, m',
@@ -463,15 +468,15 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                           ),
                         ),
                         const SizedBox(width: 16),
-                        Expanded(
-                          child: TextFormField(
-                            controller:   _stock,
-                            decoration:   const InputDecoration(labelText: 'Jumlah Barang *'),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            onChanged: (_) => _updateCalculatedCost(),
-                            validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
-                          ),
-                        ),
+                            Expanded(
+                              child: TextFormField(
+                                controller:   _stock,
+                                decoration:   const InputDecoration(labelText: 'Jumlah Barang *'),
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                onChanged: (_) => _updateCalculatedCost(),
+                                validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+                              ),
+                            ),
                       ]),
                               ],
                             ),
@@ -1295,12 +1300,12 @@ class _UnitRowWidgetState extends State<_UnitRowWidget> {
         Expanded(
           flex: 2,
           child: TextFormField(
-            controller:   _priceCtrl,
-            onChanged:    (_) => _notify(),
+            controller: _priceCtrl,
+            onChanged: (_) => _notify(),
             keyboardType: TextInputType.number,
-            decoration:   const InputDecoration(
-              isDense:     true,
-              prefixText:  'Rp ',
+            decoration: const InputDecoration(
+              isDense: true,
+              prefixText: 'Rp ',
             ),
           ),
         ),

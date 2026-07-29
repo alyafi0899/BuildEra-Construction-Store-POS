@@ -8,7 +8,6 @@ import 'core/theme/theme_provider.dart';
 import 'shared/widgets/sidebar.dart';
 import 'features/cashier/presentation/pages/cashier_page.dart';
 import 'features/products/presentation/pages/products_page.dart';
-import 'features/inventory/presentation/pages/inventory_page.dart';
 import 'features/payment/presentation/pages/transactions_page.dart';
 import 'features/analytics/presentation/pages/analytics_page.dart';
 import 'features/settings/presentation/pages/settings_page.dart';
@@ -33,11 +32,18 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 
 import 'shared/widgets/splash_screen.dart';
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // 0. Force Landscape Orientation (Mobile)
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ]);
   
   // 1. Handle Secondary Windows (Customer Display) ASAP
   // Use more flexible check for arguments
@@ -90,10 +96,12 @@ Future<void> main(List<String> args) async {
   await LocalDatabase.init();
 
   // 1. Initialize Window Manager ASAP for Windows/Desktop
-  if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+  final isDesktop = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+  if (isDesktop) {
     await windowManager.ensureInitialized();
     WindowOptions windowOptions = const WindowOptions(
       size: Size(1280, 800),
+      minimumSize: Size(1024, 700), // Enforce landscape minimum
       center: true,
       backgroundColor: Color(0xFF0F1117),
       skipTaskbar: false,
@@ -103,6 +111,11 @@ Future<void> main(List<String> args) async {
     await windowManager.waitUntilReadyToShow(windowOptions);
     await windowManager.show();
     await windowManager.focus();
+    
+    // Ensure it's not starting in portrait-like dimensions if maximized
+    if (Platform.isWindows) {
+      await windowManager.setAspectRatio(1.6); // Lock aspect ratio to landscape (16:10 or 16:9)
+    }
   }
 
   // 2. Start initialization timer for Brand Identity (Min 3.0s)
@@ -164,6 +177,12 @@ class KonstruksiPosApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Re-enforce orientation lock on app build
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+
     final mode = ref.watch(themeProvider);
     return MaterialApp(
       title: 'BuildEra',
@@ -184,7 +203,6 @@ class _MainShellState extends ConsumerState<MainShell> {
   final _pages = [
     const CashierPage(),
     const ProductsPage(),
-    const InventoryPage(),
     const TransactionsPage(),
     const PiutangDashboard(),
     const CustomerListPage(),
@@ -227,12 +245,17 @@ class _MainShellState extends ConsumerState<MainShell> {
         onItemSelected: (i) => ref.read(navigationIndexProvider.notifier).setIndex(i),
       ),
       Expanded(
-        child: IndexedStack(index: idx, children: _pages),
+        child: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (_) => ref.read(sidebarCollapsedProvider.notifier).collapse(),
+          child: IndexedStack(index: idx, children: _pages),
+        ),
       ),
     ]);
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
+      resizeToAvoidBottomInset: false, // Prevent UI jumping on keyboard
       body: shell,
     );
   }

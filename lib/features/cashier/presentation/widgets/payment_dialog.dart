@@ -11,6 +11,7 @@ import '../../../../shared/models/transaction.dart';
 import '../../providers/cart_provider.dart';
 import '../../../payment/providers/transaction_provider.dart';
 import '../../../../core/utils/invoice_helper.dart';
+import '../../../../core/utils/image_helper.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../debts/providers/debt_repository.dart';
 import '../../../debts/models/customer.dart';
@@ -116,9 +117,9 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
           ),
         },
         child: Dialog(
-          insetPadding: const EdgeInsets.all(60),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
           child: SizedBox(
-            width: 640,
+            width: 1200, // Increased width for 3-column layout
             child: _success ? _successPanel(context) : _formPanel(context, cart),
           ),
         ),
@@ -193,26 +194,120 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
       // Header
       _header(context),
 
-      // Body — two columns
+      // Body — 3-column horizontal layout
       Flexible(
-        child: Scrollbar(
-          controller: _scrollController,
-          thumbVisibility: true,
-          child: SingleChildScrollView(
-            controller: _scrollController,
-            padding: const EdgeInsets.all(24),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(child: _orderSummary(context, cart)),
-              const SizedBox(width: 32),
-              Expanded(child: _paymentPanel(context, cart, change)),
-            ]),
-          ),
+        child: IntrinsicHeight(
+          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            // 1. Column Left: Order Summary
+            Expanded(
+              flex: 3,
+              child: Scrollbar(
+                controller: _scrollController,
+                thumbVisibility: true,
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(24),
+                  child: _orderSummary(context, cart),
+                ),
+              ),
+            ),
+            
+            const VerticalDivider(width: 1, color: AppTheme.border),
+
+            // 2. Column Middle: Payment Method
+            Expanded(
+              flex: 2,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: _methodSection(context),
+              ),
+            ),
+
+            const VerticalDivider(width: 1, color: AppTheme.border),
+
+            // 3. Column Right: Payment Input, Denominations & Suggestions
+            Expanded(
+              flex: 4,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: _paymentPanel(context, cart, change),
+              ),
+            ),
+          ]),
         ),
       ),
 
       // Footer
       _footer(context),
     ]);
+  }
+
+  Widget _methodSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Metode Pembayaran',
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(color: AppTheme.accent)),
+        const SizedBox(height: 16),
+        ...AppConstants.paymentMethods.map((m) => Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _methodTileWide(context, m),
+        )),
+      ],
+    );
+  }
+
+  Widget _methodTileWide(BuildContext context, String m) {
+    final active = _method == m;
+    return InkWell(
+      onTap: () => setState(() {
+        _method = m;
+        if (_method != AppConstants.paymentCash && _method != AppConstants.paymentPiutang) {
+          _amountCtrl.clear();
+        }
+      }),
+      borderRadius: BorderRadius.circular(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: active ? AppTheme.accent : AppTheme.surfaceAlt,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: active ? AppTheme.accent : AppTheme.border, width: 1.5),
+          boxShadow: active ? [
+            BoxShadow(color: AppTheme.accent.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 4))
+          ] : null,
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: active ? Colors.white.withValues(alpha: 0.2) : AppTheme.bg,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(_icon(m),
+                  color: active ? Colors.white : AppTheme.textSecondary,
+                  size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(m,
+                  style: TextStyle(
+                    color: active ? Colors.white : AppTheme.textPrimary,
+                    fontWeight: active ? FontWeight.w900 : FontWeight.w600,
+                    fontSize: 14,
+                  )),
+            ),
+            if (active)
+              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _header(BuildContext context) => Container(
@@ -311,6 +406,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
       TextField(
         controller: _notesCtrl,
         maxLines: 2,
+        keyboardType: TextInputType.multiline,
         style: const TextStyle(fontSize: 13),
         decoration: const InputDecoration(
           labelText: 'Keterangan Transaksi',
@@ -324,20 +420,10 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   Widget _paymentPanel(BuildContext context, CartState cart, double change) {
     final settings = ref.watch(settingsProvider);
     final customersAsync = ref.watch(customersProvider);
+    final finalTotal = cart.total + _shippingFee;
     
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Metode Pembayaran',
-          style: Theme.of(context)
-              .textTheme
-              .titleMedium
-              ?.copyWith(color: AppTheme.accent)),
-      const SizedBox(height: 12),
-      ...AppConstants.paymentMethods.map((m) => _methodTile(context, m)),
-      
-      const SizedBox(height: 16),
-      
       if (_method == AppConstants.paymentCash || _method == AppConstants.paymentPiutang) ...[
-        const SizedBox(height: 16),
         if (_method == AppConstants.paymentPiutang) ...[
           // Customer Selection Header with Add Button
           Row(
@@ -398,125 +484,113 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
               child: Text(Formatters.date(_dueDate), style: const TextStyle(fontSize: 14)),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
         ],
         
         TextFormField(
           controller:   _amountCtrl,
           keyboardType: TextInputType.number,
-          autofocus: true, // Auto focus for instant typing
+          autofocus: true,
           style: const TextStyle(
               color: AppTheme.textPrimary,
-              fontSize:   18,
-              fontWeight: FontWeight.w700),
+              fontSize:   28,
+              fontWeight: FontWeight.w900),
           decoration: InputDecoration(
             labelText:  _method == AppConstants.paymentPiutang ? 'Jumlah Bayar (DP/Cicilan)' : 'Jumlah Bayar',
-            hintText: _method == AppConstants.paymentPiutang ? 'Isi 0 jika belum bayar sama sekali' : null,
+            hintText: _method == AppConstants.paymentPiutang ? 'Isi 0 jika belum bayar sama sekali' : 'Ketik nominal bayar...',
             prefixText: 'Rp ',
+            prefixStyle: const TextStyle(fontSize: 18, color: AppTheme.textMuted),
           ),
           onChanged: (_) => setState(() {}),
-          onFieldSubmitted: (_) => _confirm(), // Enable enter key to confirm
+          onFieldSubmitted: (_) => _confirm(),
         ),
         
-        if (_method == AppConstants.paymentCash && _paid > 0) ...[
-          const SizedBox(height: 12),
-          // Change display
+        if (_paid > 0) ...[
+          const SizedBox(height: 16),
+          // Change / Debt display
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: (change >= 0 ? AppTheme.success : AppTheme.danger)
+              color: (_method == AppConstants.paymentCash 
+                      ? (change >= 0 ? AppTheme.success : AppTheme.danger)
+                      : AppTheme.warning)
                   .withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                  color: (change >= 0 ? AppTheme.success : AppTheme.danger)
+                  color: (_method == AppConstants.paymentCash 
+                          ? (change >= 0 ? AppTheme.success : AppTheme.danger)
+                          : AppTheme.warning)
                       .withValues(alpha: 0.4)),
             ),
             child: Row(children: [
-              Text('Kembalian',
-                  style: Theme.of(context).textTheme.bodyMedium),
+              Text(_method == AppConstants.paymentCash ? 'Kembalian' : 'Total Piutang',
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
               const Spacer(),
               Text(
-                change >= 0
-                    ? Formatters.currency(change)
-                    : '− ${Formatters.currency(-change)}',
+                _method == AppConstants.paymentCash
+                    ? (change >= 0 ? Formatters.currency(change) : '− ${Formatters.currency(-change)}')
+                    : Formatters.currency(finalTotal - _paid < 0 ? 0 : finalTotal - _paid),
                 style: TextStyle(
-                  color: change >= 0 ? AppTheme.success : AppTheme.danger,
-                  fontSize:   18,
-                  fontWeight: FontWeight.w700,
+                  color: _method == AppConstants.paymentCash
+                      ? (change >= 0 ? AppTheme.success : AppTheme.danger)
+                      : AppTheme.warning,
+                  fontSize:   24,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
             ]),
           ),
         ],
 
-        if (_method == AppConstants.paymentPiutang) ...[
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppTheme.warning.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.warning.withValues(alpha: 0.4)),
-            ),
-            child: Row(children: [
-              const Text('Total Piutang', style: TextStyle(fontSize: 13)),
-              const Spacer(),
-              Text(
-                Formatters.currency((cart.total + _shippingFee) - _paid < 0 ? 0 : (cart.total + _shippingFee) - _paid),
-                style: const TextStyle(color: AppTheme.warning, fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-            ]),
-          ),
-        ],
-
         // Quick cash buttons
-        if (_paid == 0 || _method == AppConstants.paymentCash) ...[
-          const SizedBox(height: 16),
-          const Text('Pecahan Uang', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textMuted)),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _denomBtn(1000),
-              _denomBtn(2000),
-              _denomBtn(5000),
-              _denomBtn(10000),
-              _denomBtn(20000),
-              _denomBtn(50000),
-              _denomBtn(100000),
-              _exactAmountBtn(cart.total + _shippingFee),
-            ],
-          ),
-          const SizedBox(height: 16),
-          const Text('Saran Nominal', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textMuted)),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [50000, 100000, 150000, 200000, 500000]
-                .where((v) => v >= (cart.total + _shippingFee))
-                .map((v) => OutlinedButton(
-                      onPressed: () =>
-                          setState(() => _amountCtrl.text = v.toString()),
-                      style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6)),
-                      child: Text(Formatters.currency(v.toDouble()),
-                          style: const TextStyle(fontSize: 11)),
-                    ))
-                .toList(),
-          ),
-        ],
+        const SizedBox(height: 24),
+        const Text('Pecahan Uang', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textMuted)),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            _denomBtn(1000),
+            _denomBtn(2000),
+            _denomBtn(5000),
+            _denomBtn(10000),
+            _denomBtn(20000),
+            _denomBtn(50000),
+            _denomBtn(100000),
+            _exactAmountBtn(finalTotal),
+          ],
+        ),
+        
+        const SizedBox(height: 24),
+        const Text('Saran Nominal', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textMuted)),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [50000, 100000, 150000, 200000, 500000]
+              .where((v) => v >= finalTotal)
+              .map((v) => OutlinedButton(
+                    onPressed: () =>
+                        setState(() => _amountCtrl.text = v.toString()),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      side: const BorderSide(color: AppTheme.border),
+                    ),
+                    child: Text(Formatters.currency(v.toDouble()),
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                  ))
+              .toList(),
+        ),
       ],
       
       if (_method == AppConstants.paymentTransfer) ...[
+        // ... (existing transfer panel code, but maybe slightly adjusted for right side)
         const SizedBox(height: 16),
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: AppTheme.surfaceAlt,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(color: AppTheme.border),
           ),
           child: Column(
@@ -524,58 +598,70 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
             children: [
               const Row(
                 children: [
-                  Icon(Icons.account_balance_wallet_rounded, color: AppTheme.accent, size: 18),
-                  SizedBox(width: 8),
-                  Text('Tujuan Transfer:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  Icon(Icons.account_balance_wallet_rounded, color: AppTheme.accent, size: 22),
+                  SizedBox(width: 12),
+                  Text('Tujuan Transfer:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 20),
               if (settings.bankAccounts.isEmpty)
                 const Text('Belum ada rekening diatur di Pengaturan', 
-                  style: TextStyle(color: AppTheme.danger, fontSize: 11, fontStyle: FontStyle.italic))
+                  style: TextStyle(color: AppTheme.danger, fontSize: 12, fontStyle: FontStyle.italic))
               else
                 ...settings.bankAccounts.map((acc) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.only(bottom: 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(acc.bankName, style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold, fontSize: 12)),
-                      Text(acc.accountNumber, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                      Text('a/n ${acc.accountHolder}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
-                      const Divider(height: 16, color: AppTheme.border),
+                      Text(acc.bankName, style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold, fontSize: 13)),
+                      Text(acc.accountNumber, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                      Text('a/n ${acc.accountHolder}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                      const Divider(height: 24, color: AppTheme.border),
                     ],
                   ),
                 )),
               const Text('Pastikan dana sudah diterima sebelum konfirmasi', 
-                style: TextStyle(color: AppTheme.warning, fontSize: 11, fontWeight: FontWeight.w600)),
+                style: TextStyle(color: AppTheme.warning, fontSize: 12, fontWeight: FontWeight.w600)),
             ],
           ),
         ),
       ],
       
-      // QRIS / Debit mock panel
       if (_method == AppConstants.paymentQris || _method == AppConstants.paymentDebit)
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
+          padding: const EdgeInsets.symmetric(vertical: 0),
           child: Container(
-            padding:     const EdgeInsets.all(20),
+            width: double.infinity,
+            padding:     const EdgeInsets.all(24),
             decoration:  BoxDecoration(
               color:        AppTheme.surfaceAlt,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(16),
               border:       Border.all(color: AppTheme.border),
             ),
             child: Column(children: [
               if (_method == AppConstants.paymentQris && settings.qrisImagePath != null)
-                AspectRatio(
-                  aspectRatio: 5 / 8,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppTheme.border),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(7),
-                      child: Image.file(File(settings.qrisImagePath!), fit: BoxFit.cover),
+                SizedBox(
+                  height: 300,
+                  child: AspectRatio(
+                    aspectRatio: 5 / 8,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.border),
+                      ),
+                      child: FutureBuilder<String?>(
+                        future: ImageHelper.resolveLocalPath(settings.qrisImagePath),
+                        builder: (context, snapshot) {
+                          final resolvedPath = snapshot.data;
+                          if (resolvedPath != null) {
+                            return ClipRRect(
+                              borderRadius: BorderRadius.circular(11),
+                              child: Image.file(File(resolvedPath), fit: BoxFit.cover),
+                            );
+                          }
+                          return Icon(Icons.qr_code_rounded, size: 80, color: AppTheme.textSecondary);
+                        },
+                      ),
                     ),
                   ),
                 )
@@ -584,60 +670,24 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
                   _method == AppConstants.paymentQris
                       ? Icons.qr_code_rounded
                       : Icons.credit_card_rounded,
-                  size:  72,
+                  size:  80,
                   color: AppTheme.textSecondary,
                 ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 16),
               Text(_method == AppConstants.paymentQris
                   ? 'Scan QR untuk membayar'
-                  : 'Tap / Insert kartu debit'),
-              const SizedBox(height: 4),
-              Text(Formatters.currency(cart.total + _shippingFee),
+                  : 'Tap / Insert kartu debit',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 8),
+              Text(Formatters.currency(finalTotal),
                   style: Theme.of(context)
                       .textTheme
                       .headlineMedium
-                      ?.copyWith(color: AppTheme.accent)),
+                      ?.copyWith(color: AppTheme.accent, fontWeight: FontWeight.w900, fontSize: 32)),
             ]),
           ),
         ),
     ]);
-  }
-
-  Widget _methodTile(BuildContext context, String m) {
-    final active = _method == m;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        onTap:        () => setState(() => _method = m),
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: active
-                ? AppTheme.accent.withValues(alpha: 0.12)
-                : AppTheme.surfaceAlt,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-                color: active ? AppTheme.accent : AppTheme.border),
-          ),
-          child: Row(children: [
-            Icon(_icon(m),
-                color: active ? AppTheme.accent : AppTheme.textSecondary,
-                size:  20),
-            const SizedBox(width: 12),
-            Text(m,
-                style: TextStyle(
-                  color:      active ? AppTheme.accent : AppTheme.textPrimary,
-                  fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-                )),
-            const Spacer(),
-            if (active)
-              const Icon(Icons.check_circle_rounded,
-                  color: AppTheme.accent, size: 18),
-          ]),
-        ),
-      ),
-    );
   }
 
   Widget _footer(BuildContext context) => Container(
@@ -708,12 +758,14 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
             children: [
               TextFormField(
                 controller: nameCtrl,
+                keyboardType: TextInputType.name,
                 decoration: const InputDecoration(labelText: 'Nama Lengkap *', isDense: true),
                 validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: phoneCtrl,
+                keyboardType: TextInputType.phone,
                 decoration: const InputDecoration(labelText: 'Nomor HP *', isDense: true),
                 validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
               ),
