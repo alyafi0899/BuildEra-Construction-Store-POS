@@ -100,8 +100,8 @@ Future<void> main(List<String> args) async {
   if (isDesktop) {
     await windowManager.ensureInitialized();
     WindowOptions windowOptions = const WindowOptions(
-      size: Size(1280, 800),
-      minimumSize: Size(1024, 700), // Enforce landscape minimum
+      size: Size(1500, 800),
+      minimumSize: Size(1500, 700), // Enforce landscape minimum
       center: true,
       backgroundColor: Color(0xFF0F1117),
       skipTaskbar: false,

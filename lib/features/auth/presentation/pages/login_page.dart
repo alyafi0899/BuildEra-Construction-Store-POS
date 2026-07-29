@@ -5,6 +5,7 @@ import '../../../../shared/widgets/common_widgets.dart';
 import '../../providers/auth_provider.dart';
 import 'register_page.dart';
 import 'forgot_password_page.dart';
+import '../../../../core/sync/providers/connectivity_provider.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -29,6 +30,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
+    if (!ref.read(isOnlineProvider)) {
+      showError(context, 'Tidak ada koneksi internet. Silakan hubungkan perangkat ke jaringan.');
+      return;
+    }
 
     setState(() => _loading = true);
     try {
@@ -51,6 +56,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isOnline = ref.watch(isOnlineProvider);
+
     return Scaffold(
       backgroundColor: AppTheme.bg,
       body: Center(
@@ -69,6 +76,31 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Connectivity Badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isOnline ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: isOnline ? Colors.green : Colors.red, width: 0.5),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(isOnline ? Icons.wifi : Icons.wifi_off, size: 14, color: isOnline ? Colors.green : Colors.red),
+                        const SizedBox(width: 8),
+                        Text(
+                          isOnline ? 'ONLINE' : 'OFFLINE',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: isOnline ? Colors.green : Colors.red,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   Image.asset('assets/images/logo.png', width: 80, height: 80),
                   const SizedBox(height: 16),
                   Text('Masuk ke BuildEra', style: Theme.of(context).textTheme.headlineMedium),
@@ -110,7 +142,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     width: double.infinity,
                     height: 48,
                     child: ElevatedButton(
-                      onPressed: _loading ? null : _login,
+                      onPressed: _loading || !isOnline ? null : _login,
                       child: _loading ? const AppLoading() : const Text('MASUK'),
                     ),
                   ),

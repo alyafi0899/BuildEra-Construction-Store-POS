@@ -5,6 +5,8 @@ import '../../../../shared/widgets/common_widgets.dart';
 import '../../providers/auth_provider.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../settings/models/store_settings.dart';
+import '../../../../core/sync/services/local_database.dart';
+import '../../../../core/sync/providers/connectivity_provider.dart';
 
 class RegisterPage extends ConsumerStatefulWidget {
   const RegisterPage({super.key});
@@ -42,6 +44,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
   Future<void> _register() async {
     if (!_formKey2.currentState!.validate()) return;
+    if (!ref.read(isOnlineProvider)) {
+      showError(context, 'Tidak ada koneksi internet. Silakan hubungkan perangkat ke jaringan.');
+      return;
+    }
 
     setState(() => _loading = true);
     try {
@@ -65,10 +71,14 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       // 3. Save profile using the explicit UID
       await ref.read(settingsProvider.notifier).updateSettings(settings, uid: user.uid);
 
+      // 4. Mark initial sync as done for new users (nothing to download)
+      final box = await LocalDatabase.openBox(user.uid, 'sync_meta');
+      await box.put('initial_sync_done', true);
+
       if (mounted) {
-        // Pop back to the LoginPage, which is the child of AuthGate.
-        // AuthGate will then detect the new auth state and switch to VerifyEmailPage.
-        Navigator.of(context).pop();
+        // Pop back to the root (LoginPage), AuthGate will detect the state change
+        // and show VerifyEmailPage automatically.
+        Navigator.of(context).popUntil((route) => route.isFirst);
       }
 
     } catch (e) {
@@ -81,6 +91,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width > 800;
+    final isOnline = ref.watch(isOnlineProvider);
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -89,6 +100,20 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         backgroundColor: Colors.transparent,
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Chip(
+              backgroundColor: isOnline ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
+              side: BorderSide(color: isOnline ? Colors.green : Colors.red),
+              label: Text(
+                isOnline ? 'ONLINE' : 'OFFLINE',
+                style: TextStyle(color: isOnline ? Colors.green : Colors.red, fontSize: 10, fontWeight: FontWeight.bold),
+              ),
+              avatar: Icon(isOnline ? Icons.wifi : Icons.wifi_off, size: 12, color: isOnline ? Colors.green : Colors.red),
+            ),
+          ),
+        ],
       ),
       body: Center(
         child: Container(
@@ -136,7 +161,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                     children: [
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: _loading ? null : details.onStepContinue,
+                          onPressed: _loading || !isOnline ? null : details.onStepContinue,
                           child: _loading 
                               ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
                               : Text(_currentStep == 0 ? 'LANJUT KE INFO BISNIS' : 'DAFTAR SEKARANG'),
