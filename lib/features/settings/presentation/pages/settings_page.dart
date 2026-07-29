@@ -162,7 +162,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             icon: Icons.settings_rounded,
             actions: [
               OutlinedButton.icon(
-                onPressed: () => ref.read(authRepositoryProvider).logout(),
+                onPressed: () async {
+                  if (await showLogoutDialog(context)) {
+                    if (mounted) ref.read(authRepositoryProvider).logout();
+                  }
+                },
                 icon: const Icon(Icons.logout, size: 18),
                 label: const Text('Keluar (Logout)'),
                 style: OutlinedButton.styleFrom(foregroundColor: AppTheme.danger, side: const BorderSide(color: AppTheme.danger)),
@@ -659,6 +663,27 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.danger.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.danger.withValues(alpha: 0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: AppTheme.danger, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'KHUSUS PEMILIK TOKO',
+                      style: TextStyle(color: AppTheme.danger, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
             const Text('Gunakan 4-6 digit angka yang mudah diingat namun aman.', 
                 style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
             const SizedBox(height: 20),
@@ -693,19 +718,49 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 showError(context, 'PIN konfirmasi tidak cocok');
                 return;
               }
-              
-              final settings = ref.read(settingsProvider);
-              final updated = settings.copyWith(securityPin: pinCtrl.text);
-              ref.read(settingsProvider.notifier).updateSettings(updated);
-              
-              Navigator.pop(context);
-              showSuccess(context, 'PIN Keamanan berhasil diperbarui');
+
+              _confirmAndSavePin(context, ref, pinCtrl.text);
             },
             child: const Text('Simpan PIN'),
           ),
         ],
       ),
     );
+  }
+
+  void _confirmAndSavePin(BuildContext context, WidgetRef ref, String newPin) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Konfirmasi Perubahan PIN'),
+        content: const Text(
+          'PIN ini bersifat sangat rahasia dan HANYA boleh diketahui oleh PEMILIK TOKO. '
+          'Apakah Anda yakin ingin menyimpan PIN baru ini?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('BATAL'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
+            child: const Text('SAYA MENGERTI & SIMPAN'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final settings = ref.read(settingsProvider);
+      final updated = settings.copyWith(securityPin: newPin);
+      ref.read(settingsProvider.notifier).updateSettings(updated);
+      
+      if (context.mounted) {
+        Navigator.pop(context); // Close the entry dialog
+        showSuccess(context, 'PIN Keamanan berhasil diperbarui');
+      }
+    }
   }
 
   Widget _buildAppSettings(WidgetRef ref) {

@@ -35,6 +35,30 @@ class _SetupPinPageState extends ConsumerState<SetupPinPage> {
       return;
     }
 
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Konfirmasi PIN Keamanan'),
+        content: const Text(
+          'PIN ini bersifat sangat rahasia dan HANYA boleh diketahui oleh PEMILIK TOKO. '
+          'Apakah Anda yakin telah mengingat PIN ini dan menjaganya tetap rahasia?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('BATAL'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
+            child: const Text('SAYA MENGERTI & SIMPAN'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
     setState(() => _loading = true);
     try {
       final settings = ref.read(settingsProvider);
@@ -67,11 +91,38 @@ class _SetupPinPageState extends ConsumerState<SetupPinPage> {
               const Icon(Icons.security_rounded, size: 64, color: AppTheme.accent),
               const SizedBox(height: 24),
               Text('Setel PIN Keamanan', style: Theme.of(context).textTheme.headlineMedium),
-              const SizedBox(height: 8),
-              const Text(
-                'Buat PIN Keamanan untuk melindungi data finansial dan laporan toko Anda.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppTheme.danger.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.danger.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.warning_amber_rounded, color: AppTheme.danger, size: 24),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'PENTING: KHUSUS PEMILIK',
+                          style: TextStyle(
+                            color: AppTheme.danger,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'PIN ini HANYA boleh diketahui oleh PEMILIK TOKO. '
+                      'Digunakan untuk memproteksi data sensitif dan laporan toko.',
+                      style: TextStyle(color: AppTheme.textPrimary, fontSize: 12, height: 1.4),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 32),
               TextField(
@@ -110,7 +161,11 @@ class _SetupPinPageState extends ConsumerState<SetupPinPage> {
               ),
               const SizedBox(height: 16),
               TextButton(
-                onPressed: () => ref.read(authRepositoryProvider).logout(),
+                onPressed: () async {
+                  if (await showLogoutDialog(context)) {
+                    if (mounted) ref.read(authRepositoryProvider).logout();
+                  }
+                },
                 child: const Text('Keluar (Logout)', style: TextStyle(color: AppTheme.danger)),
               ),
             ],
