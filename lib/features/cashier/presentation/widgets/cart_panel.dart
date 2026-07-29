@@ -580,7 +580,7 @@ class _ItemEditDialogState extends ConsumerState<ItemEditDialog> {
                 child: SizedBox(
                   height: 48,
                   child: DropdownButtonFormField<DiscountType>(
-                    value: _discountType,
+                    initialValue: _discountType,
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Tipe', isDense: true),
                     items: const [

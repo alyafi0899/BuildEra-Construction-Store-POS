@@ -673,7 +673,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               child: const Row(
                 children: [
                   Icon(Icons.warning_amber_rounded, color: AppTheme.danger, size: 20),
-                  const SizedBox(width: 8),
+                  SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'KHUSUS PEMILIK TOKO',

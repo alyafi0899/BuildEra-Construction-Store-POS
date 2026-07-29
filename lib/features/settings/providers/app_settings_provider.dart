@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/app_settings.dart';
 import '../../auth/providers/auth_provider.dart';
 
@@ -37,13 +36,17 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
       // Auto-launch customer display if enabled
       if (isCust) {
         // We delay slightly to ensure main window and auth state are ready
-        Future.delayed(const Duration(seconds: 3), () {
+        Future.delayed(const Duration(seconds: 3), () async {
           final user = ref.read(authStateProvider).value;
-          Process.start(
-            Platform.resolvedExecutable, 
-            ['multi_window', 'uid=${user?.uid ?? 'unknown'}'],
-            mode: ProcessStartMode.detached,
-          ).catchError((e) => debugPrint('DEBUG: Failed to auto-launch customer display: $e'));
+          try {
+            await Process.start(
+              Platform.resolvedExecutable, 
+              ['multi_window', 'uid=${user?.uid ?? 'unknown'}'],
+              mode: ProcessStartMode.detached,
+            );
+          } catch (e) {
+            debugPrint('DEBUG: Failed to auto-launch customer display: $e');
+          }
         });
       }
     }
@@ -65,11 +68,15 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     
     if (value && !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
       final user = ref.read(authStateProvider).value;
-      await Process.start(
-        Platform.resolvedExecutable, 
-        ['multi_window', 'uid=${user?.uid ?? 'unknown'}'],
-        mode: ProcessStartMode.detached,
-      ).catchError((e) => debugPrint('DEBUG: Failed to launch customer display: $e'));
+      try {
+        await Process.start(
+          Platform.resolvedExecutable, 
+          ['multi_window', 'uid=${user?.uid ?? 'unknown'}'],
+          mode: ProcessStartMode.detached,
+        );
+      } catch (e) {
+        debugPrint('DEBUG: Failed to launch customer display: $e');
+      }
     }
   }
 }
