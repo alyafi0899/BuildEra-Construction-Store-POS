@@ -1,25 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/formatters.dart';
-import '../../../../shared/models/product.dart';
-import '../../../../shared/widgets/common_widgets.dart';
-import '../../../../shared/widgets/product_image.dart';
-import '../../../products/providers/product_provider.dart';
-<<<<<<< HEAD
-import '../../providers/cart_provider.dart';
-import '../../providers/barcode_event_provider.dart';
-=======
-
+import '../../../../../../core/theme/app_theme.dart';
+import '../../../../../../core/utils/formatters.dart';
+import '../../../../../../shared/models/product.dart';
+import '../../../../../../shared/widgets/common_widgets.dart';
+import '../../../../../../shared/widgets/product_detail_dialog.dart';
+import '../../../../../../shared/widgets/product_image.dart';
+import '../../../../../products/providers/product_provider.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/barcode_event_provider.dart';
 import '../widgets/cart_panel.dart';
->>>>>>> 9e3c0fa (fixing fix)
 import '../widgets/barcode_listener.dart';
-import '../widgets/cart_panel.dart';
-import 'scanner_page.dart';
 
-import '../../../../shared/widgets/product_detail_dialog.dart';
 
 class CashierPage extends ConsumerStatefulWidget {
   const CashierPage({super.key});
@@ -44,9 +36,9 @@ class _CashierPageState extends ConsumerState<CashierPage> {
     // Listen to global barcode events to update the local search field
     ref.listen<BarcodeEvent?>(barcodeEventProvider, (prev, next) {
       if (next == null) return;
-      
-      // If a barcode was scanned while the field was focused, it likely wrote 
-      // the barcode into the field. We clear it to prevent the scanner's 'Enter' 
+
+      // If a barcode was scanned while the field was focused, it likely wrote
+      // the barcode into the field. We clear it to prevent the scanner's 'Enter'
       // from triggering the payment dialog.
       if (next.wasFocused) {
         _searchCtrl.text = next.barcode;
@@ -72,71 +64,46 @@ class _CashierPageState extends ConsumerState<CashierPage> {
         Expanded(
           flex: 6,
           child: Column(
-            children: [
-              // Header
-              PageHeader(
-              title: 'Kasir',
-              icon: Icons.point_of_sale_rounded,
-              actions: [
-                const SizedBox(width: 16),
-                Text(Formatters.date(DateTime.now()),
-                    style: Theme.of(context).textTheme.bodyMedium),
-              ],
-            ),
-            
-            // Search Field (Separated from Header for consistency)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              color: AppTheme.surface,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: AppSearchField(
-                      controller: _searchCtrl,
-                      hintText: 'Cari produk atau scan barcode...',
-                      onChanged: (v) => ref.read(productSearchQueryProvider.notifier).set(v),
-                      onClear: () {
-                        _searchCtrl.clear();
-                        ref.read(productSearchQueryProvider.notifier).set('');
-                      },
-                      onSubmitted: (v) => ref.read(productSearchQueryProvider.notifier).set(v),
-                    ),
+              children: [
+                // Header
+                PageHeader(
+                  title: 'Kasir',
+                  icon: Icons.point_of_sale_rounded,
+                  actions: [
+                    const SizedBox(width: 16),
+                    Text(Formatters.date(DateTime.now()),
+                        style: Theme.of(context).textTheme.bodyMedium),
+                  ],
+                ),
+
+                // Search Field (Separated from Header for consistency)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  color: AppTheme.surface,
+                  child: AppSearchField(
+                    controller: _searchCtrl,
+                    hintText: 'Cari produk atau scan barcode...',
+                    onChanged: (v) => ref.read(productSearchQueryProvider.notifier).set(v),
+                    onClear: () {
+                      _searchCtrl.clear();
+                      ref.read(productSearchQueryProvider.notifier).set('');
+                    },
+                    onSubmitted: (v) => ref.read(productSearchQueryProvider.notifier).set(v),
                   ),
-                  const SizedBox(width: 12),
-                  Material(
-                    color: AppTheme.accent,
-                    borderRadius: BorderRadius.circular(8),
-                    child: InkWell(
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(builder: (context) => const ScannerPage()),
-                        );
-                      },
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        height: 48,
-                        width: 48,
-                        alignment: Alignment.center,
-                        child: const Icon(Icons.qr_code_scanner_rounded, color: Colors.white),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-  
-            // Category filter chips
-            _CategoryFilter(
-              selected: category,
-              onSelected: (c) => ref.read(productCategoryFilterProvider.notifier).set(c),
-            ),
-  
-            // Product grid
-            const Expanded(
-                child: _ProductGrid()),
-          ]),
+                ),
+
+                // Category filter chips
+                _CategoryFilter(
+                  selected: category,
+                  onSelected: (c) => ref.read(productCategoryFilterProvider.notifier).set(c),
+                ),
+
+                // Product grid
+                const Expanded(
+                    child: _ProductGrid()),
+              ]),
         ),
-  
+
         // ── Right: Cart Panel ────────────────────────────────────────────
         Container(
           width: 380,
@@ -204,7 +171,7 @@ class _Chip extends StatelessWidget {
             color: selected ? AppTheme.accent : AppTheme.surfaceAlt,
             borderRadius: BorderRadius.circular(20),
             border:
-                Border.all(color: selected ? AppTheme.accent : AppTheme.border),
+            Border.all(color: selected ? AppTheme.accent : AppTheme.border),
           ),
           child: Text(
             label,
@@ -372,3 +339,4 @@ class _ProductCard extends ConsumerWidget {
     );
   }
 }
+

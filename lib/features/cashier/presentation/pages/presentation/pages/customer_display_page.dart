@@ -1,11 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/formatters.dart';
-import '../../../../core/utils/image_helper.dart';
+import '../../../../../../core/theme/app_theme.dart';
+import '../../../../../../core/utils/formatters.dart';
+import '../../../../../settings/providers/settings_provider.dart';
 import '../../providers/customer_display_provider.dart';
-import '../../../settings/providers/settings_provider.dart';
 
 class CustomerDisplayPage extends ConsumerWidget {
   const CustomerDisplayPage({super.key});

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
+import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -40,10 +40,9 @@ final analyticsPeriodProvider = NotifierProvider<AnalyticsPeriodNotifier, Analyt
 
 class TransactionRepository {
   final String _uid;
-  final supabase.SupabaseClient _supabase;
   final Ref _ref;
 
-  TransactionRepository(this._uid, this._supabase, this._ref);
+  TransactionRepository(this._uid, this._ref);
 
   Future<Box> _getBox() => LocalDatabase.openBox(_uid, 'transactions');
 
@@ -65,11 +64,17 @@ class TransactionRepository {
     final box = await _getBox();
     if (box.isNotEmpty && !force) return;
 
-    final response = await _supabase.from('transactions').select().eq('user_id', _uid);
+    final snapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(_uid)
+        .collection('transactions')
+        .get()
+        .timeout(const Duration(seconds: 15));
 
     if (force) await box.clear();
-    for (final data in response) {
-      await box.put(data['id'], LocalDatabase.sanitize(data));
+    for (final doc in snapshot.docs) {
+      final data = Map<String, dynamic>.from(doc.data() as Map);
+      await box.put(doc.id, LocalDatabase.sanitize(data));
     }
   }
 
@@ -121,7 +126,6 @@ class TransactionRepository {
     );
 
     final data = t.toMap();
-    data['user_id'] = _uid;
     data['items'] = cart.items.map((item) {
       return TransactionItem(
         id:             _uuid.v4(),
@@ -450,8 +454,7 @@ class _ProductAggregator {
 
 final transactionRepositoryProvider = Provider<TransactionRepository>((ref) {
   final user = ref.watch(authStateProvider).value;
-  final supabaseClient = ref.watch(supabaseClientProvider);
-  return TransactionRepository(user?.uid ?? 'unknown', supabaseClient, ref);
+  return TransactionRepository(user?.uid ?? 'unknown', ref);
 });
 
 final transactionsProvider = StreamProvider<List<Transaction>>((ref) {

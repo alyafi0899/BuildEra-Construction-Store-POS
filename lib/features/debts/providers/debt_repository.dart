@@ -1,4 +1,4 @@
-import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -14,43 +14,47 @@ final _uuid = const Uuid();
 
 class DebtRepository {
   final String _uid;
-  final supabase.SupabaseClient _supabase;
   final Ref _ref;
 
-  DebtRepository(this._uid, this._supabase, this._ref);
+  DebtRepository(this._uid, this._ref);
 
   Future<Box> _getBox(String col) => LocalDatabase.openBox(_uid, col);
 
   // ── Sync Logic ────────────────────────────────────────────────────────────
 
   Future<void> bootstrap({bool force = false}) async {
+    final userDoc = FirebaseFirestore.instance.collection('users').doc(_uid);
+
     // 1. Bootstrap Customers
     final cBox = await _getBox('customers');
     if (cBox.isEmpty || force) {
-      final snap = await _supabase.from('customers').select().eq('user_id', _uid);
+      final snap = await userDoc.collection('customers').get().timeout(const Duration(seconds: 15));
       if (force) await cBox.clear();
-      for (final d in snap) {
-        await cBox.put(d['id'], LocalDatabase.sanitize(d));
+      for (final d in snap.docs) {
+        final data = Map<String, dynamic>.from(d.data() as Map);
+        await cBox.put(d.id, LocalDatabase.sanitize(data));
       }
     }
 
     // 2. Bootstrap Debts
     final dBox = await _getBox('debts');
     if (dBox.isEmpty || force) {
-      final snap = await _supabase.from('debts').select().eq('user_id', _uid);
+      final snap = await userDoc.collection('debts').get().timeout(const Duration(seconds: 15));
       if (force) await dBox.clear();
-      for (final d in snap) {
-        await dBox.put(d['id'], LocalDatabase.sanitize(d));
+      for (final d in snap.docs) {
+        final data = Map<String, dynamic>.from(d.data() as Map);
+        await dBox.put(d.id, LocalDatabase.sanitize(data));
       }
     }
 
     // 3. Bootstrap Payments
     final pBox = await _getBox('debt_payments');
     if (pBox.isEmpty || force) {
-      final snap = await _supabase.from('debt_payments').select().eq('user_id', _uid);
+      final snap = await userDoc.collection('debt_payments').get().timeout(const Duration(seconds: 15));
       if (force) await pBox.clear();
-      for (final d in snap) {
-        await pBox.put(d['id'], LocalDatabase.sanitize(d));
+      for (final d in snap.docs) {
+        final data = Map<String, dynamic>.from(d.data() as Map);
+        await pBox.put(d.id, LocalDatabase.sanitize(data));
       }
     }
   }
@@ -72,7 +76,6 @@ class DebtRepository {
   Future<void> saveCustomer(Customer c) async {
     final box = await _getBox('customers');
     final data = c.toMap();
-    data['user_id'] = _uid;
     await box.put(c.id, data);
 
     await _ref.read(syncProvider.notifier).addToQueue(
@@ -116,24 +119,27 @@ class DebtRepository {
     return list;
   }
 
+  Future<List<Debt>> getDebts({String? customerId}) async {
+    final box = await _getBox('debts');
+    return _debtsFromBox(box, customerId);
+  }
+
   Future<void> createDebt(Debt debt) async {
     final debtBox = await _getBox('debts');
     final custBox = await _getBox('customers');
 
     final now = DateTime.now();
     final d = debt.updatedAt == debt.createdAt ? debt.copyWith(updatedAt: now) : debt;
-    final data = d.toMap();
-    data['user_id'] = _uid;
 
     // 1. Update Debts Local
-    await debtBox.put(d.id, data);
+    await debtBox.put(d.id, d.toMap());
 
     // 2. Queue Debt Sync
     await _ref.read(syncProvider.notifier).addToQueue(
       collection: 'debts',
       documentId: d.id,
       action:     SyncAction.create,
-      data:       data,
+      data:       d.toMap(),
     );
 
     // 3. Update Customer Local & Queue Sync
@@ -141,14 +147,13 @@ class DebtRepository {
     if (custData != null) {
       final m = Map<String, dynamic>.from(custData as Map);
       m['total_outstanding'] = (m['total_outstanding'] as num? ?? 0) + debt.remainingBalance;
-      m['user_id'] = _uid;
       await custBox.put(debt.customerId, m);
 
       await _ref.read(syncProvider.notifier).addToQueue(
         collection: 'customers',
         documentId: debt.customerId,
         action:     SyncAction.update,
-        data:       {'total_outstanding': m['total_outstanding'], 'user_id': _uid},
+        data:       {'total_outstanding': m['total_outstanding']},
       );
     }
   }
@@ -167,6 +172,11 @@ class DebtRepository {
     if (debtId != null)     list = list.where((p) => p.debtId == debtId).toList();
     list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return list;
+  }
+
+  Future<List<DebtPayment>> getPayments({String? customerId, String? debtId}) async {
+    final box = await _getBox('debt_payments');
+    return _paymentsFromBox(box, customerId, debtId);
   }
 
   Future<void> recordPayment({
@@ -195,9 +205,7 @@ class DebtRepository {
       status: status,
       updatedAt: now,
     );
-    final updatedDebtData = updatedDebt.toMap();
-    updatedDebtData['user_id'] = _uid;
-    await debtBox.put(debtId, updatedDebtData);
+    await debtBox.put(debtId, updatedDebt.toMap());
 
     // 2. Create Payment Local
     final payId = _uuid.v4();
@@ -205,21 +213,18 @@ class DebtRepository {
       id: payId, debtId: debtId, customerId: customerId, 
       amount: amount, createdAt: now, notes: notes,
     );
-    final paymentData = payment.toMap();
-    paymentData['user_id'] = _uid;
-    await payBox.put(payId, paymentData);
+    await payBox.put(payId, payment.toMap());
 
     // 3. Update Customer Local & Queue Sync
     final cData = custBox.get(customerId);
     if (cData != null) {
       final m = Map<String, dynamic>.from(cData as Map);
       m['total_outstanding'] = (m['total_outstanding'] as num? ?? 0) - amount;
-      m['user_id'] = _uid;
       await custBox.put(customerId, m);
 
       await _ref.read(syncProvider.notifier).addToQueue(
         collection: 'customers', documentId: customerId, action: SyncAction.update,
-        data: {'total_outstanding': m['total_outstanding'], 'user_id': _uid},
+        data: {'total_outstanding': m['total_outstanding']},
       );
     }
 
@@ -231,12 +236,11 @@ class DebtRepository {
         'remaining_balance': updatedDebt.remainingBalance, 
         'status': updatedDebt.status.name,
         'updated_at': updatedDebt.updatedAt.toIso8601String(),
-        'user_id': _uid,
       },
     );
     await _ref.read(syncProvider.notifier).addToQueue(
       collection: 'debt_payments', documentId: payId, action: SyncAction.create,
-      data: paymentData,
+      data: payment.toMap(),
     );
   }
 
@@ -254,7 +258,6 @@ class DebtRepository {
     if (cData != null) {
       final m = Map<String, dynamic>.from(cData as Map);
       m['total_outstanding'] = (m['total_outstanding'] as num? ?? 0) - debt.remainingBalance;
-      m['user_id'] = _uid;
       await custBox.put(debt.customerId, m);
       
       // Sync Customer Update
@@ -262,7 +265,7 @@ class DebtRepository {
         collection: 'customers',
         documentId: debt.customerId,
         action: SyncAction.update,
-        data: {'total_outstanding': m['total_outstanding'], 'user_id': _uid},
+        data: {'total_outstanding': m['total_outstanding']},
       );
     }
 
@@ -297,8 +300,7 @@ class DebtRepository {
 
 final debtRepositoryProvider = Provider<DebtRepository>((ref) {
   final user = ref.watch(authStateProvider).value;
-  final supabaseClient = ref.watch(supabaseClientProvider);
-  return DebtRepository(user?.uid ?? 'unknown', supabaseClient, ref);
+  return DebtRepository(user?.uid ?? 'unknown', ref);
 });
 
 final customersProvider = StreamProvider<List<Customer>>((ref) {

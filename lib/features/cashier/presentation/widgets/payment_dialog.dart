@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -11,10 +12,15 @@ import '../../../../shared/models/transaction.dart';
 import '../../providers/cart_provider.dart';
 import '../../../payment/providers/transaction_provider.dart';
 import '../../../../core/utils/invoice_helper.dart';
+import '../../../debts/utils/debt_invoice_helper.dart';
 import '../../../../core/utils/image_helper.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../debts/providers/debt_repository.dart';
 import '../../../debts/models/customer.dart';
+import '../../../debts/models/debt.dart';
+import '../../../debts/models/debt_payment.dart';
+import '../../../settings/models/store_settings.dart';
+import 'package:printing/printing.dart';
 import 'package:uuid/uuid.dart';
 
 final _uuid = Uuid();
@@ -105,6 +111,18 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   @override
   Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider);
+    
+    // If successful, show success panel without shortcuts to avoid interference
+    if (_success) {
+      return Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+        child: SizedBox(
+          width: 1200,
+          child: _successPanel(context),
+        ),
+      );
+    }
+
     return Shortcuts(
       shortcuts: {
         LogicalKeySet(LogicalKeyboardKey.enter): const ActivateIntent(),
@@ -120,7 +138,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
           insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
           child: SizedBox(
             width: 1200, // Increased width for 3-column layout
-            child: _success ? _successPanel(context) : _formPanel(context, cart),
+            child: _formPanel(context, cart),
           ),
         ),
       ),
@@ -147,26 +165,29 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
         Text(tx.invoiceNumber, style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold, letterSpacing: 1)),
         const SizedBox(height: 32),
         
-        // Actions
+  // Actions
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             _ActionBtn(
               icon: Icons.print_rounded, 
               label: 'Print', 
-              onTap: () => InvoiceHelper.printInvoice(tx, settings)
+              onTap: () => _handlePiutangAction(tx, settings, (c, d, p, s) => DebtInvoiceHelper.printDebtInvoice(c, d, p, s), InvoiceHelper.printInvoice)
             ),
             const SizedBox(width: 12),
             _ActionBtn(
               icon: Icons.share_rounded, 
               label: 'Share', 
-              onTap: () => InvoiceHelper.shareInvoice(tx, settings)
+              onTap: () => _handlePiutangAction(tx, settings, (c, d, p, s) async {
+                final pdfBytes = await DebtInvoiceHelper.generateDebtPdf(customer: c, debt: d, payments: p, settings: s);
+                await Printing.sharePdf(bytes: pdfBytes, filename: 'Piutang-${c.name}-${tx.invoiceNumber}.pdf');
+              }, InvoiceHelper.shareInvoice)
             ),
             const SizedBox(width: 12),
             _ActionBtn(
               icon: Icons.download_rounded, 
               label: 'Simpan', 
-              onTap: () => InvoiceHelper.saveInvoice(tx, settings)
+              onTap: () => _handlePiutangAction(tx, settings, (c, d, p, s) => DebtInvoiceHelper.downloadDebtInvoice(c, d, p, s), InvoiceHelper.saveInvoice)
             ),
           ],
         ),
@@ -813,8 +834,6 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
     );
   }
 
-<<<<<<< HEAD
-=======
   Future<void> _handlePiutangAction(
     Transaction tx, 
     StoreSettings settings, 
@@ -863,7 +882,6 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
     return customers.firstWhereOrNull((c) => c.id == customerId);
   }
 
->>>>>>> 9e3c0fa (fixing fix)
   Widget _exactAmountBtn(double total) {
     return ElevatedButton(
       onPressed: () {
@@ -890,22 +908,25 @@ class _ActionBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
+    return Material(
+      color: AppTheme.surfaceAlt,
       borderRadius: BorderRadius.circular(12),
-      child: Container(
-        width: 80,
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: AppTheme.surfaceAlt,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.border),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 80,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.border),
+          ),
+          child: Column(children: [
+            Icon(icon, color: AppTheme.accent, size: 24),
+            const SizedBox(height: 4),
+            Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+          ]),
         ),
-        child: Column(children: [
-          Icon(icon, color: AppTheme.accent, size: 24),
-          const SizedBox(height: 4),
-          Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-        ]),
       ),
     );
   }

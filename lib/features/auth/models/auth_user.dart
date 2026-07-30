@@ -1,4 +1,4 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class AuthUser {
   final String uid;
@@ -13,12 +13,12 @@ class AuthUser {
     this.displayName,
   });
 
-  factory AuthUser.fromSupabase(User user) {
+  factory AuthUser.fromFirebase(User user) {
     return AuthUser(
-      uid:             user.id,
+      uid:             user.uid,
       email:           user.email ?? '',
-      isEmailVerified: user.emailConfirmedAt != null,
-      displayName:     user.userMetadata?['display_name']?.toString(),
+      isEmailVerified: user.emailVerified,
+      displayName:     user.displayName,
     );
   }
 }

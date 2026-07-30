@@ -3,7 +3,9 @@ import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
+import 'package:cloud_firestore/cloud_firestore.dart' as firestore
+    hide Transaction;
+import 'package:firebase_storage/firebase_storage.dart' as storage;
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../../core/sync/models/sync_task.dart';
 import '../../../core/sync/providers/sync_provider.dart';
@@ -19,11 +21,15 @@ final _uuid = Uuid();
 
 class ProductRepository {
   final String _uid;
-  final supabase.SupabaseClient _supabase;
+  final firestore.FirebaseFirestore _db = firestore.FirebaseFirestore.instance;
+  final storage.FirebaseStorage _storage = storage.FirebaseStorage.instance;
   final BarcodeHistoryRepository _historyRepo;
   final Ref _ref;
 
-  ProductRepository(this._uid, this._supabase, this._historyRepo, this._ref);
+  ProductRepository(this._uid, this._historyRepo, this._ref);
+
+  firestore.CollectionReference get _productsCol => 
+      _db.collection('users').doc(_uid).collection('products');
 
   Future<Box> _getBox() => LocalDatabase.openBox(_uid, 'products');
 
@@ -33,11 +39,12 @@ class ProductRepository {
     final box = await _getBox();
     if (box.isNotEmpty && !force) return; // Already cached
 
-    final response = await _supabase.from('products').select().eq('user_id', _uid);
+    final snapshot = await _productsCol.get().timeout(const Duration(seconds: 15));
     if (force) await box.clear();
 
-    for (final data in response) {
-      await box.put(data['id'], LocalDatabase.sanitize(data));
+    for (final doc in snapshot.docs) {
+      final data = Map<String, dynamic>.from(doc.data() as Map);
+      await box.put(doc.id, LocalDatabase.sanitize(data));
     }
   }
 
@@ -74,7 +81,6 @@ class ProductRepository {
     // Create the final product object with units attached
     final finalProduct = product.copyWith(units: units);
     final data = finalProduct.toMap();
-    data['user_id'] = _uid; // Ensure user_id is set for Supabase
 
     await box.put(product.id, data);
 
@@ -149,7 +155,6 @@ class ProductRepository {
 
     for (final p in toProcess) {
       final data = p.toMap();
-      data['user_id'] = _uid;
       // We assume units are handled elsewhere or empty for simple import
       data['units'] = p.units.map((u) => u.toMap()).toList();
 
@@ -184,7 +189,6 @@ class ProductRepository {
 
     for (final p in products) {
       final data = p.toMap();
-      data['user_id'] = _uid;
       data['units'] = p.units.map((u) => u.toMap()).toList();
       
       await box.put(p.id, data);
@@ -204,13 +208,10 @@ class ProductRepository {
 
   Future<String?> uploadProductImage(String productId, Uint8List bytes) async {
     try {
-      final path = 'products/$productId.jpg';
-      await _supabase.storage.from('users').uploadBinary(
-        '$_uid/$path',
-        bytes,
-        fileOptions: const supabase.FileOptions(contentType: 'image/jpeg', upsert: true),
-      );
-      return _supabase.storage.from('users').getPublicUrl('$_uid/$path');
+      final ref = _storage.ref().child('users/$_uid/products/$productId.jpg');
+      final metadata = storage.SettableMetadata(contentType: 'image/jpeg');
+      await ref.putData(bytes, metadata);
+      return await ref.getDownloadURL();
     } catch (e) {
       debugPrint('Error uploading image: $e');
       return null;
@@ -239,6 +240,9 @@ class ProductRepository {
       action: SyncAction.delete,
       data: {},
     );
+
+    // 3. Delete linked image from Storage if online? 
+    // We typically don't delete images instantly for sync safety, or handle it via Cloud Functions
   }
 
   Future<void> deleteProductsBatch(List<String> ids) async {
@@ -273,16 +277,14 @@ class ProductRepository {
 
     final p = Product.fromMap(Map<String, dynamic>.from(data as Map));
     final updated = p.copyWith(stock: p.stock + delta);
-    final finalData = updated.toMap();
-    finalData['user_id'] = _uid;
 
-    await box.put(productId, finalData);
+    await box.put(productId, updated.toMap());
 
     await _ref.read(syncProvider.notifier).addToQueue(
       collection: 'products',
       documentId: productId,
       action: SyncAction.update,
-      data: finalData,
+      data: updated.toMap(),
     );
   }
 
@@ -294,16 +296,13 @@ class ProductRepository {
         shippingPaymentStatus: !isSupplier ? PaymentStatus.notApplicable : p.financials.shippingPaymentStatus,
       ),
     );
-    final data = updated.toMap();
-    data['user_id'] = _uid;
-
-    await box.put(p.id, data);
+    await box.put(p.id, updated.toMap());
 
     await _ref.read(syncProvider.notifier).addToQueue(
       collection: 'products',
       documentId: p.id,
       action:     SyncAction.update,
-      data:       data,
+      data:       updated.toMap(),
     );
   }
 
@@ -462,9 +461,8 @@ final sortedProductsProvider = Provider<List<Product>>((ref) {
 
 final productRepositoryProvider = Provider<ProductRepository>((ref) {
   final user = ref.watch(authStateProvider).value;
-  final supabaseClient = ref.watch(supabaseClientProvider);
   final historyRepo = ref.read(barcodeHistoryRepositoryProvider);
-  return ProductRepository(user?.uid ?? 'unknown', supabaseClient, historyRepo, ref);
+  return ProductRepository(user?.uid ?? 'unknown', historyRepo, ref);
 });
 
 final productsProvider = StreamProvider<List<Product>>((ref) {

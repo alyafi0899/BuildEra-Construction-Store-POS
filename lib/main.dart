@@ -33,7 +33,6 @@ import 'package:window_manager/window_manager.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'shared/widgets/splash_screen.dart';
 
@@ -150,12 +149,6 @@ Future<void> main(List<String> args) async {
     }
 
     await initializeDateFormatting('id_ID', null);
-
-    // Initialize Supabase
-    await Supabase.initialize(
-      url: 'https://xlkncjimgriwrxxpweue.supabase.co',
-      anonKey: 'sb_publishable_RfxfRsQv2zm-Gt0rdTQP0w_23dkq2Zh',
-    );
 
     // Ensure splash shows for at least 3 seconds
     final elapsed = stopwatch.elapsedMilliseconds;

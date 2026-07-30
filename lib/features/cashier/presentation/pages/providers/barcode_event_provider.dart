@@ -1,0 +1,27 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../shared/models/product.dart';
+
+class BarcodeEvent {
+  final String barcode;
+  final Product? product;
+  final DateTime timestamp;
+  final bool wasFocused;
+
+  BarcodeEvent({
+    required this.barcode, 
+    this.product,
+    this.wasFocused = false,
+  }) : timestamp = DateTime.now();
+}
+
+/// Use Notifier instead of StateProvider for better compatibility on Windows
+final barcodeEventProvider = NotifierProvider<BarcodeEventNotifier, BarcodeEvent?>(BarcodeEventNotifier.new);
+
+class BarcodeEventNotifier extends Notifier<BarcodeEvent?> {
+  @override
+  BarcodeEvent? build() => null;
+
+  void emit(BarcodeEvent event) {
+    state = event;
+  }
+}

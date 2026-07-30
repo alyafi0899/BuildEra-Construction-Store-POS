@@ -250,7 +250,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                 final totalSKU  = products.length;
                 final outOfStock = products.where((p) => p.stock <= 0).length;
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
                   color: AppTheme.surface,
                   child: Row(children: [
                     Expanded(child: StatCard(label: 'Total SKU',     value: totalSKU.toString(),  icon: Icons.inventory_2_rounded)),
@@ -265,7 +265,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
 
             // Filters & Sorting
             Container(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
               color:   AppTheme.surface,
               child:   Column(
                 children: [
@@ -428,13 +428,13 @@ class _ProductTableState extends State<_ProductTable> {
       trackVisibility: true,
       child: ListView.builder(
         controller: _scrollController,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
+        padding: const EdgeInsets.all(24),
         itemCount: widget.products.length + 1, // Header + rows
         itemBuilder: (context, index) {
           if (index == 0) {
             // Table header
             return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color:        AppTheme.surfaceAlt,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
@@ -450,12 +450,16 @@ class _ProductTableState extends State<_ProductTable> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                   ),
                 ),
-                const SizedBox(width: 32),
-                _th('Produk & Info', flex: 6),
+                const SizedBox(width: 32), // Added space for expand icon
+                _th('Produk',    flex: 4),
                 _th('Kategori',  flex: 1),
+                _th('Supplier & Ongkir', flex: 1),
                 _th('Stok',      flex: 1, align: TextAlign.right),
-                _th('Harga & Margin', flex: 3, align: TextAlign.right),
-                _th('Operasi',   flex: 8, align: TextAlign.center),
+                _th('Modal', flex: 1, align: TextAlign.right),
+                _th('Harga Jual',  flex: 1, align: TextAlign.right),
+                _th('Profit', flex: 1, align: TextAlign.right),
+                _th('Update Stok', flex: 1, align: TextAlign.center),
+                _th('Aksi',      flex: 2, align: TextAlign.center),
               ]),
             );
           }
@@ -572,14 +576,14 @@ class _ProductRowState extends ConsumerState<_ProductRow> {
             ),
             const SizedBox(width: 12),
 
-            // Product name + icon + Badges (Consolidated)
-            Expanded(flex: 6, child: InkWell(
+            // Product name + icon
+            Expanded(flex: 4, child: InkWell(
               onTap: () => ProductDetailDialog.show(context, widget.product),
               child: Row(children: [
                 ProductImage(imagePath: widget.product.imagePath, size: 36),
                 const SizedBox(width: 12),
                 Flexible(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(widget.product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  Text(widget.product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
                   Row(
                     children: [
                       Text(widget.product.baseUnit, style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
@@ -589,23 +593,23 @@ class _ProductRowState extends ConsumerState<_ProductRow> {
                       ],
                     ],
                   ),
-                  if (f.supplierName != null || f.shippingServiceName != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Wrap(
-                        spacing: 8,
-                        children: [
-                          if (f.supplierName != null)
-                            _statusBadge(Icons.business_rounded, f.supplierName!, f.supplierPaymentStatus),
-                          if (f.shippingServiceName != null)
-                            _statusBadge(Icons.local_shipping_rounded, f.shippingServiceName!, f.shippingPaymentStatus),
-                        ],
-                      ),
-                    ),
                 ])),
               ]),
             )),
             Expanded(flex: 1, child: Text(widget.product.category, style: const TextStyle(fontSize: 12))),
+
+            // Supplier & Shipping Info
+            Expanded(flex: 1, child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (f.supplierName != null)
+                  _statusBadge(Icons.business_rounded, f.supplierName!, f.supplierPaymentStatus),
+                if (f.shippingServiceName != null)
+                  _statusBadge(Icons.local_shipping_rounded, f.shippingServiceName!, f.shippingPaymentStatus),
+                if (f.supplierName == null && f.shippingServiceName == null)
+                  const Text('—', style: TextStyle(color: AppTheme.textMuted)),
+              ],
+            )),
 
             Expanded(flex: 1, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
               if (widget.product.isLowStock)
@@ -623,28 +627,14 @@ class _ProductRowState extends ConsumerState<_ProductRow> {
                 ),
               ),
             ])),
+            Expanded(flex: 1, child: BlurGate(child: Text(Formatters.currency(widget.product.costPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)))),
+            Expanded(flex: 1, child: Text(Formatters.currency(widget.product.basePrice), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+            Expanded(flex: 1, child: BlurGate(child: Text(Formatters.currency(profit), textAlign: TextAlign.right, style: TextStyle(color: profit >= 0 ? AppTheme.success : AppTheme.danger, fontWeight: FontWeight.bold, fontSize: 12)))),
 
-            // Consolidated Financials
-            Expanded(flex: 3, child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(Formatters.currency(widget.product.basePrice), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    BlurGate(child: Text(Formatters.currency(widget.product.costPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary))),
-                    const Text(' • ', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
-                    BlurGate(child: Text(Formatters.currency(profit), textAlign: TextAlign.right, style: TextStyle(color: profit >= 0 ? AppTheme.success : AppTheme.danger, fontWeight: FontWeight.bold, fontSize: 10))),
-                  ],
-                ),
-              ],
-            )),
-
-            // Consolidated Operations
-            Expanded(flex: 8, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            // Update Stok Cepat (Dedicated Column)
+            Expanded(flex: 1, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
               SizedBox(
-                width: 75,
+                width: 60,
                 child: TextField(
                   controller: _adjCtrl,
                   keyboardType: const TextInputType.numberWithOptions(signed: true, decimal: true),
@@ -652,25 +642,29 @@ class _ProductRowState extends ConsumerState<_ProductRow> {
                     final val = double.tryParse(v);
                     if (val != null) _adjust(val);
                   },
-                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
                   decoration: const InputDecoration(
                     hintText: '±Qty',
                     isDense: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                   ),
                 ),
               ),
+              const SizedBox(width: 4),
               IconButton(
                 onPressed: () {
                   final v = double.tryParse(_adjCtrl.text);
                   if (v != null) _adjust(v);
                 },
-                icon: const Icon(Icons.check_circle_outline_rounded, color: AppTheme.accent, size: 18),
+                icon: const Icon(Icons.check_circle_outline_rounded, color: AppTheme.accent, size: 20),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
                 tooltip: 'Terapkan Update Stok',
               ),
-              const SizedBox(width: 18),
+            ])),
+
+            Expanded(flex: 2, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              // Restock Formal
               IconButton(
                 onPressed: () => RestockDialog.show(context, widget.product),
                 icon: const Icon(Icons.add_shopping_cart_rounded, size: 18, color: AppTheme.info),
@@ -678,7 +672,8 @@ class _ProductRowState extends ConsumerState<_ProductRow> {
                 constraints: const BoxConstraints(),
                 tooltip: 'Restock Formal',
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 8),
+
               IconButton(
                 onPressed: () => ProductFormDialog.show(context, product: widget.product),
                 icon: const Icon(Icons.edit_rounded, size: 16, color: AppTheme.textSecondary),
@@ -686,7 +681,7 @@ class _ProductRowState extends ConsumerState<_ProductRow> {
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 8),
               _DeleteButton(product: widget.product),
             ])),
           ]),
@@ -773,6 +768,7 @@ class _ProductRowState extends ConsumerState<_ProductRow> {
           Flexible(
             child: Text(label,
               style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.bold),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

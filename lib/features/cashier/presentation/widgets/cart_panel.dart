@@ -5,6 +5,7 @@ import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../models/cart_item.dart';
 import '../../providers/cart_provider.dart';
+import '../../providers/multi_cart_provider.dart';
 import 'payment_dialog.dart';
 
 class CartPanel extends ConsumerStatefulWidget {
@@ -39,11 +40,16 @@ class _CartPanelState extends ConsumerState<CartPanel> {
   @override
   Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider);
+    final multiCart = ref.watch(multiCartProvider);
+    final multiCartNotifier = ref.read(multiCartProvider.notifier);
 
     return Column(children: [
+      // Multi-Cart Tabs
+      _cartTabs(context, multiCart, multiCartNotifier),
+
       // Header
       Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
         decoration: const BoxDecoration(
           border: Border(bottom: BorderSide(color: AppTheme.border)),
         ),
@@ -73,13 +79,13 @@ class _CartPanelState extends ConsumerState<CartPanel> {
               onPressed: () async {
                 final ok = await showConfirmDialog(context,
                     title: 'Kosongkan Keranjang',
-                    content: 'Yakin kosongkan semua item?',
+                    content: 'Yakin kosongkan semua item di antrian ini?',
                     confirmLabel: 'Kosongkan',
                     confirmColor: AppTheme.warning);
                 if (ok) ref.read(cartProvider.notifier).clear();
               },
               icon: const Icon(Icons.clear_all_rounded, size: 16),
-              label: const Text('Hapus Semua'),
+              label: const Text('Hapus Item'),
             ),
         ]),
       ),
@@ -254,6 +260,183 @@ class _CartPanelState extends ConsumerState<CartPanel> {
         ]),
       ),
     ]);
+  }
+
+  Widget _cartTabs(BuildContext context, MultiCartState state, MultiCartNotifier notifier) {
+    return Container(
+      height: 48, // Increased height for better tap target and visibility
+      decoration: const BoxDecoration(
+        color: AppTheme.surface,
+        border: Border(bottom: BorderSide(color: AppTheme.border)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: List.generate(state.carts.length, (index) {
+                  final isActive = state.activeIndex == index;
+                  final cart = isActive ? ref.watch(cartProvider) : state.carts[index];
+                  
+                  // Label logic: Icon + Number, or Icon + Customer Initial
+                  final String numberLabel = (index + 1).toString();
+                  String? customerLabel;
+                  
+                  if (cart.customerName?.isNotEmpty == true) {
+                    final names = cart.customerName!.split(' ');
+                    if (names.length > 1) {
+                      customerLabel = '${names[0][0]}${names[1][0]}'.toUpperCase();
+                    } else {
+                      customerLabel = names[0].substring(0, names[0].length > 3 ? 3 : names[0].length);
+                    }
+                  }
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 6),
+                    child: InkWell(
+                      onTap: () => notifier.switchCart(index),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: isActive ? AppTheme.accent : AppTheme.surfaceAlt,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isActive ? AppTheme.accent : AppTheme.border,
+                            width: 1.2,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Queue Icon instead of word "Antrian"
+                            Icon(
+                              Icons.person_outline_rounded,
+                              size: 16,
+                              color: isActive ? Colors.white : AppTheme.textSecondary,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              customerLabel != null ? '$numberLabel. $customerLabel' : numberLabel,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: isActive ? FontWeight.w900 : FontWeight.w600,
+                                color: isActive ? Colors.white : AppTheme.textPrimary,
+                              ),
+                            ),
+                            if (cart.itemCount > 0)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: isActive ? Colors.white24 : AppTheme.warning.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    '${cart.itemCount}',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: isActive ? Colors.white : AppTheme.warning,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            if (state.carts.length > 1) ...[
+                              const SizedBox(width: 8),
+                              InkWell(
+                                onTap: () async {
+                                  final ok = await showConfirmDialog(
+                                    context,
+                                    title: 'Hapus Antrian',
+                                    content: 'Yakin hapus antrian #${index + 1}?',
+                                    confirmLabel: 'Hapus',
+                                    confirmColor: AppTheme.danger,
+                                  );
+                                  if (ok) notifier.removeCart(index);
+                                },
+                                child: Icon(
+                                  Icons.close_rounded,
+                                  size: 14,
+                                  color: isActive ? Colors.white70 : AppTheme.textMuted,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ),
+          ),
+          const VerticalDivider(width: 1, indent: 10, endIndent: 10, color: AppTheme.border),
+          // Dropdown for many tabs
+          _tabsDropdown(state, notifier),
+          const VerticalDivider(width: 1, indent: 10, endIndent: 10, color: AppTheme.border),
+          IconButton(
+            onPressed: () => notifier.addNewCart(),
+            icon: const Icon(Icons.add_box_rounded, color: AppTheme.accent, size: 24),
+            tooltip: 'Tambah Antrian',
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tabsDropdown(MultiCartState state, MultiCartNotifier notifier) {
+    return PopupMenuButton<int>(
+      icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.textSecondary),
+      tooltip: 'Daftar Antrian',
+      onSelected: (index) => notifier.switchCart(index),
+      offset: const Offset(0, 48),
+      itemBuilder: (context) => List.generate(state.carts.length, (index) {
+        final cart = state.activeIndex == index ? ref.watch(cartProvider) : state.carts[index];
+        final isActive = state.activeIndex == index;
+        final name = cart.customerName?.isNotEmpty == true ? cart.customerName! : 'Antrian ${index + 1}';
+        
+        return PopupMenuItem<int>(
+          value: index,
+          child: Row(
+            children: [
+              Icon(
+                isActive ? Icons.check_circle_rounded : Icons.person_outline_rounded,
+                size: 18,
+                color: isActive ? AppTheme.accent : AppTheme.textMuted,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  name,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                    color: isActive ? AppTheme.accent : AppTheme.textPrimary,
+                  ),
+                ),
+              ),
+              if (cart.itemCount > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceAlt,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '${cart.itemCount}',
+                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.warning),
+                  ),
+                ),
+            ],
+          ),
+        );
+      }),
+    );
   }
 }
 
@@ -580,7 +763,7 @@ class _ItemEditDialogState extends ConsumerState<ItemEditDialog> {
                 child: SizedBox(
                   height: 48,
                   child: DropdownButtonFormField<DiscountType>(
-                    value: _discountType,
+                    initialValue: _discountType,
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Tipe', isDense: true),
                     items: const [

@@ -1,54 +1,65 @@
 import 'dart:async';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/auth_user.dart';
 
-final supabaseClientProvider = Provider<SupabaseClient>((ref) => Supabase.instance.client);
+final firebaseAuthProvider = Provider<FirebaseAuth>((ref) => FirebaseAuth.instance);
 
 final authStateProvider = StreamProvider<AuthUser?>((ref) {
-  final supabase = ref.watch(supabaseClientProvider);
-  return supabase.auth.onAuthStateChange.map((data) {
-    final user = data.user;
+  // Use userChanges() instead of authStateChanges() to catch metadata changes like email verification
+  return ref.watch(firebaseAuthProvider).userChanges().map((user) {
     if (user == null) return null;
-    return AuthUser.fromSupabase(user);
+    return AuthUser.fromFirebase(user);
   });
 });
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  return AuthRepository(ref.watch(supabaseClientProvider));
+  return AuthRepository(ref.watch(firebaseAuthProvider));
 });
 
 class AuthRepository {
-  final SupabaseClient _supabase;
-  AuthRepository(this._supabase);
+  final FirebaseAuth _auth;
+  AuthRepository(this._auth);
 
   Future<void> login(String email, String password) async {
-    await _supabase.auth.signInWithPassword(email: email, password: password);
+    await _auth.signInWithEmailAndPassword(email: email, password: password);
   }
 
   Future<User?> register(String email, String password) async {
-    final response = await _supabase.auth.signUp(email: email, password: password);
-    return response.user;
+    final cred = await _auth.createUserWithEmailAndPassword(email: email, password: password);
+    await cred.user?.sendEmailVerification();
+    return cred.user;
   }
 
   Future<void> logout() async {
-    await _supabase.auth.signOut();
+    await _auth.signOut();
   }
 
   Future<void> sendPasswordReset(String email) async {
-    await _supabase.auth.resetPasswordForEmail(email);
+    await _auth.sendPasswordResetEmail(email: email);
+  }
+
+  Future<void> sendVerificationEmail() async {
+    await _auth.currentUser?.sendEmailVerification();
   }
 
   Future<void> reloadUser() async {
-    // Supabase usually refreshes session automatically, but we can force refresh if needed
-    await _supabase.auth.refreshSession();
+    await _auth.currentUser?.reload();
   }
 
   Future<void> updatePassword(String newPassword) async {
-    await _supabase.auth.updateUser(UserAttributes(password: newPassword));
+    await _auth.currentUser?.updatePassword(newPassword);
   }
 
-  Future<void> updateEmail(String newEmail) async {
-    await _supabase.auth.updateUser(UserAttributes(email: newEmail));
+  Future<void> verifyBeforeUpdateEmail(String newEmail) async {
+    await _auth.currentUser?.verifyBeforeUpdateEmail(newEmail);
+  }
+
+  Future<void> reauthenticate(String email, String password) async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      final cred = EmailAuthProvider.credential(email: email, password: password);
+      await user.reauthenticateWithCredential(cred);
+    }
   }
 }
