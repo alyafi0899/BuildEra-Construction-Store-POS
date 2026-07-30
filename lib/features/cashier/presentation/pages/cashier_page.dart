@@ -6,8 +6,15 @@ import '../../../../shared/models/product.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../../../shared/widgets/product_image.dart';
 import '../../../products/providers/product_provider.dart';
+<<<<<<< HEAD
 import '../../providers/cart_provider.dart';
 import '../../providers/barcode_event_provider.dart';
+=======
+
+import '../../providers/cart_provider.dart';
+import '../../providers/barcode_event_provider.dart';
+import '../widgets/cart_panel.dart';
+>>>>>>> 9e3c0fa (fixing fix)
 import '../widgets/barcode_listener.dart';
 import '../widgets/cart_panel.dart';
 import 'scanner_page.dart';

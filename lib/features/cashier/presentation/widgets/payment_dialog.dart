@@ -813,6 +813,57 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
     );
   }
 
+<<<<<<< HEAD
+=======
+  Future<void> _handlePiutangAction(
+    Transaction tx, 
+    StoreSettings settings, 
+    FutureOr<void> Function(Customer, Debt, List<DebtPayment>, StoreSettings) piutangAction,
+    FutureOr<void> Function(Transaction, StoreSettings) defaultAction,
+  ) async {
+    if (tx.paymentMethod != AppConstants.paymentPiutang) {
+      await defaultAction(tx, settings);
+      return;
+    }
+
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator(color: AppTheme.accent)),
+    );
+
+    try {
+      final repo = ref.read(debtRepositoryProvider);
+      final debts = await repo.getDebts(customerId: tx.customerId);
+      final debt = debts.firstWhereOrNull((d) => d.transactionId == tx.id);
+      if (debt == null) throw 'Data piutang tidak ditemukan';
+
+      final customer = await _findCustomer(ref, debt.customerId);
+      if (customer == null) throw 'Data pelanggan tidak ditemukan';
+
+      final payments = await repo.getPayments(customerId: customer.id, debtId: debt.id);
+      
+      if (mounted) {
+        Navigator.pop(context); // Close loading
+        await piutangAction(customer, debt, payments, settings);
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading
+        showError(context, 'Gagal memproses nota piutang: $e');
+        // Fallback to regular invoice
+        await defaultAction(tx, settings);
+      }
+    }
+  }
+
+  Future<Customer?> _findCustomer(WidgetRef ref, String customerId) async {
+    final customers = await ref.read(customersProvider.future);
+    return customers.firstWhereOrNull((c) => c.id == customerId);
+  }
+
+>>>>>>> 9e3c0fa (fixing fix)
   Widget _exactAmountBtn(double total) {
     return ElevatedButton(
       onPressed: () {
