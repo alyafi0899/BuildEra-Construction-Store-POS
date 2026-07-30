@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'firebase_options.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'features/cashier/presentation/pages/cashier_page.dart';
+import 'features/cashier/presentation/pages/customer_display_page.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
 import 'shared/widgets/sidebar.dart';
-import 'features/cashier/presentation/pages/cashier_page.dart';
 import 'features/products/presentation/pages/products_page.dart';
 import 'features/payment/presentation/pages/transactions_page.dart';
 import 'features/analytics/presentation/pages/analytics_page.dart';
@@ -15,7 +14,6 @@ import 'features/debts/presentation/pages/piutang_dashboard.dart';
 import 'features/debts/presentation/pages/customer_list_page.dart';
 import 'features/inventory/presentation/pages/bills_page.dart';
 import 'features/settings/providers/app_settings_provider.dart';
-import 'features/cashier/presentation/pages/customer_display_page.dart';
 import 'features/cashier/providers/cart_provider.dart';
 import 'features/cashier/providers/customer_display_provider.dart';
 import 'features/products/providers/product_provider.dart';
@@ -57,8 +55,9 @@ Future<void> main(List<String> args) async {
     }
 
     await LocalDatabase.init();
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
+    await Supabase.initialize(
+      url: 'https://xlkncjimgriwrxxpweue.supabase.co',
+      publishableKey: 'sb_publishable_RfxfRsQv2zm-Gt0rdTQP0w_23dkq2Zh',
     );
     await initializeDateFormatting('id_ID', null);
 
@@ -132,21 +131,11 @@ Future<void> main(List<String> args) async {
   await Future.delayed(const Duration(milliseconds: 100));
 
   try {
-    // Perform all heavy lifting while splash is showing
-    // Add timeout to prevent hanging if internet is extremely poor
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    ).timeout(const Duration(seconds: 10), onTimeout: () {
-      debugPrint('BOOT: Firebase Init Timeout (Continuing Offline)');
-      return Firebase.app(); // Attempt to use already initialized app or continue
-    });
-    
-    if (!kIsWeb && Platform.isWindows) {
-      FirebaseFirestore.instance.settings = const Settings(
-        persistenceEnabled: true, // Enable offline cache for instant loading
-        cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-      );
-    }
+    // Initialize Supabase
+    await Supabase.initialize(
+      url: 'https://xlkncjimgriwrxxpweue.supabase.co',
+      publishableKey: 'sb_publishable_RfxfRsQv2zm-Gt0rdTQP0w_23dkq2Zh',
+    );
 
     await initializeDateFormatting('id_ID', null);
 
@@ -228,8 +217,9 @@ class _MainShellState extends ConsumerState<MainShell> {
     ref.listen(cartProvider, (prev, next) {
       final user = ref.read(authStateProvider).value;
       final settings = ref.read(appSettingsProvider);
+      final supabase = ref.read(supabaseClientProvider);
       if (user != null && settings.isCustomerDisplayEnabled) {
-        CustomerDisplayBridge.syncCart(user.uid, next);
+        CustomerDisplayBridge.syncCart(supabase, user.uid, next);
       }
     });
 

@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/restock_record.dart';
@@ -13,36 +13,33 @@ import 'bill_payment_provider.dart'; // New
 
 class RestockRepository {
   final String _uid;
+  final sb.SupabaseClient _supabase;
   final Ref _ref;
 
-  RestockRepository(this._uid, this._ref);
+  RestockRepository(this._uid, this._supabase, this._ref);
 
   Future<Box> _getBox() => LocalDatabase.openBox(_uid, 'restock_history');
 
   // ── Sync Logic ────────────────────────────────────────────────────────────
 
   Future<void> bootstrap({bool force = false}) async {
-    final userDoc = FirebaseFirestore.instance.collection('users').doc(_uid);
-
     // 1. Bootstrap Restock History
     final rBox = await _getBox();
     if (rBox.isEmpty || force) {
-      final snap = await userDoc.collection('restock_history').get().timeout(const Duration(seconds: 15));
+      final snap = await _supabase.from('restock_history').select().eq('user_id', _uid);
       if (force) await rBox.clear();
-      for (final d in snap.docs) {
-        final data = Map<String, dynamic>.from(d.data() as Map);
-        await rBox.put(d.id, LocalDatabase.sanitize(data));
+      for (final d in snap) {
+        await rBox.put(d['id'], LocalDatabase.sanitize(d));
       }
     }
 
     // 2. Bootstrap Bill Payments
     final pBox = await LocalDatabase.openBox(_uid, 'bill_payments');
     if (pBox.isEmpty || force) {
-      final snap = await userDoc.collection('bill_payments').get().timeout(const Duration(seconds: 15));
+      final snap = await _supabase.from('bill_payments').select().eq('user_id', _uid);
       if (force) await pBox.clear();
-      for (final d in snap.docs) {
-        final data = Map<String, dynamic>.from(d.data() as Map);
-        await pBox.put(d.id, LocalDatabase.sanitize(data));
+      for (final d in snap) {
+        await pBox.put(d['id'], LocalDatabase.sanitize(d));
       }
     }
   }
@@ -62,6 +59,7 @@ class RestockRepository {
   Future<void> saveRestock(RestockRecord record) async {
     final box = await _getBox();
     final data = record.toMap();
+    data['user_id'] = _uid;
     await box.put(record.id, data);
 
     // 1. Sync Record
@@ -78,13 +76,15 @@ class RestockRepository {
 
   Future<void> updateRestock(RestockRecord old, RestockRecord next) async {
     final box = await _getBox();
-    await box.put(next.id, next.toMap());
+    final data = next.toMap();
+    data['user_id'] = _uid;
+    await box.put(next.id, data);
 
     await _ref.read(syncProvider.notifier).addToQueue(
       collection: 'restock_history',
       documentId: next.id,
       action:     SyncAction.update,
-      data:       next.toMap(),
+      data:       data,
     );
 
     // Update product stock and financials
@@ -121,20 +121,6 @@ class RestockRepository {
 
   /// Calculates total stock and latest financials from all restock records and updates the product.
   Future<void> _refreshProductState(String productId) async {
-    // In a real system, we'd need the INITIAL stock too. 
-    // For this POC, we assume the 'stock' on product is managed by restocks.
-    // However, if we only sum restocks, we lose sales deductions.
-    // So: new_stock = old_stock + (new_qty - old_qty)
-    // Actually, let's just adjust the delta.
-    
-    // For simplicity in this edit/delete scenario:
-    // When we ADD: product.stock += added
-    // When we DELETE: product.stock -= added
-    // When we UPDATE: product.stock += (next - old)
-    
-    // But since I'm doing a full refresh here to be safe:
-    // We can't really recalculate total stock easily without a "starting balance" + "all transactions".
-    // I will stick to adjusting product stock based on the specific action in the Notifier.
   }
 
   Future<void> adjustProductStock(String productId, double delta) async {
@@ -150,13 +136,15 @@ class RestockRepository {
       supplierPaymentStatus: isSupplier ? status : record.supplierPaymentStatus,
       shippingPaymentStatus: !isSupplier ? status : record.shippingPaymentStatus,
     );
-    await box.put(record.id, updated.toMap());
+    final data = updated.toMap();
+    data['user_id'] = _uid;
+    await box.put(record.id, data);
 
     await _ref.read(syncProvider.notifier).addToQueue(
       collection: 'restock_history',
       documentId: record.id,
       action:     SyncAction.update,
-      data:       updated.toMap(),
+      data:       data,
     );
 
     await _refreshProductState(record.productId);
@@ -195,7 +183,8 @@ class RestockRepository {
 
 final restockRepositoryProvider = Provider<RestockRepository>((ref) {
   final user = ref.watch(authStateProvider).value;
-  return RestockRepository(user?.uid ?? 'unknown', ref);
+  final supabase = ref.watch(supabaseClientProvider);
+  return RestockRepository(user?.uid ?? 'unknown', supabase, ref);
 });
 
 final restockHistoryProvider = StreamProvider<List<RestockRecord>>((ref) {

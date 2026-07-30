@@ -41,6 +41,9 @@ class StoreSettings {
   final String? qrisImagePath; // New: Local path for QRIS barcode
   final String? securityPin; // New: PIN for sensitive data
   final double receiptWidth; // New: Receipt paper width in mm
+  final String subscriptionStatus; // 'active', 'expired', 'none'
+  final DateTime? subscriptionExpiry;
+  final String? xenditCustomerId;
 
   const StoreSettings({
     this.businessName = '',
@@ -55,6 +58,9 @@ class StoreSettings {
     this.qrisImagePath,
     this.securityPin,
     this.receiptWidth = 80.0,
+    this.subscriptionStatus = 'none',
+    this.subscriptionExpiry,
+    this.xenditCustomerId,
   });
 
   Map<String, dynamic> toMap() {
@@ -71,6 +77,9 @@ class StoreSettings {
       'qrisImagePath': qrisImagePath,
       'securityPin': securityPin,
       'receiptWidth': receiptWidth,
+      'subscription_status': subscriptionStatus,
+      'subscription_expiry': subscriptionExpiry?.toIso8601String(),
+      'xendit_customer_id': xenditCustomerId,
     };
   }
 
@@ -91,6 +100,9 @@ class StoreSettings {
       qrisImagePath: map['qrisImagePath']?.toString(),
       securityPin: map['securityPin']?.toString(),
       receiptWidth: (map['receiptWidth'] as num?)?.toDouble() ?? 80.0,
+      subscriptionStatus: map['subscription_status']?.toString() ?? 'none',
+      subscriptionExpiry: map['subscription_expiry'] != null ? DateTime.tryParse(map['subscription_expiry'].toString()) : null,
+      xenditCustomerId: map['xendit_customer_id']?.toString(),
     );
   }
 
@@ -111,6 +123,9 @@ class StoreSettings {
     String? qrisImagePath,
     String? securityPin,
     double? receiptWidth,
+    String? subscriptionStatus,
+    DateTime? subscriptionExpiry,
+    String? xenditCustomerId,
   }) {
     return StoreSettings(
       businessName: businessName ?? this.businessName,
@@ -125,6 +140,9 @@ class StoreSettings {
       qrisImagePath: qrisImagePath ?? this.qrisImagePath,
       securityPin: securityPin ?? this.securityPin,
       receiptWidth: receiptWidth ?? this.receiptWidth,
+      subscriptionStatus: subscriptionStatus ?? this.subscriptionStatus,
+      subscriptionExpiry: subscriptionExpiry ?? this.subscriptionExpiry,
+      xenditCustomerId: xenditCustomerId ?? this.xenditCustomerId,
     );
   }
 }

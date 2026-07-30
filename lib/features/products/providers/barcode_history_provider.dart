@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -9,13 +9,10 @@ import '../../../core/sync/providers/sync_provider.dart';
 
 class BarcodeHistoryRepository {
   final String _uid;
+  final SupabaseClient _supabase;
   final Ref _ref;
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  BarcodeHistoryRepository(this._uid, this._ref);
-
-  CollectionReference get _historyCol => 
-      _db.collection('users').doc(_uid).collection('barcode_history');
+  BarcodeHistoryRepository(this._uid, this._supabase, this._ref);
 
   Future<Box> _getBox() => LocalDatabase.openBox(_uid, 'barcode_history');
 
@@ -25,11 +22,10 @@ class BarcodeHistoryRepository {
     final box = await _getBox();
     if (box.isNotEmpty && !force) return;
 
-    final snapshot = await _historyCol.get().timeout(const Duration(seconds: 15));
+    final response = await _supabase.from('barcode_history').select().eq('user_id', _uid);
     if (force) await box.clear();
-    for (final doc in snapshot.docs) {
-      final data = Map<String, dynamic>.from(doc.data() as Map);
-      await box.put(doc.id, LocalDatabase.sanitize(data));
+    for (final data in response) {
+      await box.put(data['barcode'], LocalDatabase.sanitize(data));
     }
   }
 
@@ -42,12 +38,12 @@ class BarcodeHistoryRepository {
     final box = await _getBox();
     if (box.containsKey(normalized)) return true;
 
-    // 2. Check in Firestore only if online
+    // 2. Check in Supabase only if online
     try {
-      final historyDoc = await _historyCol.doc(normalized).get().timeout(const Duration(seconds: 2));
-      if (historyDoc.exists) {
+      final response = await _supabase.from('barcode_history').select().eq('barcode', normalized).maybeSingle();
+      if (response != null) {
         // Cache it locally if we found it on server
-        final data = LocalDatabase.sanitize(historyDoc.data() as Map<String, dynamic>);
+        final data = LocalDatabase.sanitize(response);
         await box.put(normalized, data);
         return true;
       }
@@ -69,6 +65,7 @@ class BarcodeHistoryRepository {
       'productId': productId,
       'usedAt': DateTime.now().toIso8601String(),
       'status': 'active',
+      'user_id': _uid,
     };
 
     // 1. Save Local
@@ -103,6 +100,7 @@ class BarcodeHistoryRepository {
         'productId': item.id,
         'usedAt': now,
         'status': 'active',
+        'user_id': _uid,
       };
 
       localEntries[normalized] = data;
@@ -134,6 +132,7 @@ class BarcodeHistoryRepository {
       final m = Map<String, dynamic>.from(data as Map);
       m['status'] = 'archived';
       m['archivedAt'] = DateTime.now().toIso8601String();
+      m['user_id'] = _uid;
       await box.put(normalized, m);
 
       // Sync Update
@@ -149,5 +148,6 @@ class BarcodeHistoryRepository {
 
 final barcodeHistoryRepositoryProvider = Provider<BarcodeHistoryRepository>((ref) {
   final user = ref.watch(authStateProvider).value;
-  return BarcodeHistoryRepository(user?.uid ?? 'unknown', ref);
+  final supabase = ref.watch(supabaseClientProvider);
+  return BarcodeHistoryRepository(user?.uid ?? 'unknown', supabase, ref);
 });

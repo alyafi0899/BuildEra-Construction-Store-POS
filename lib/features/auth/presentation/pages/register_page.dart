@@ -69,10 +69,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       );
 
       // 3. Save profile using the explicit UID
-      await ref.read(settingsProvider.notifier).updateSettings(settings, uid: user.uid);
+      await ref.read(settingsProvider.notifier).updateSettings(settings, uid: user.id);
 
       // 4. Mark initial sync as done for new users (nothing to download)
-      final box = await LocalDatabase.openBox(user.uid, 'sync_meta');
+      final box = await LocalDatabase.openBox(user.id, 'sync_meta');
       await box.put('initial_sync_done', true);
 
       if (mounted) {

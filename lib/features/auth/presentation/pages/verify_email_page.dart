@@ -58,8 +58,10 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
 
   Future<void> _resendEmail() async {
     if (!_canResend) return;
+    final user = ref.read(authStateProvider).value;
+    if (user == null) return;
     try {
-      await ref.read(authRepositoryProvider).sendVerificationEmail();
+      await ref.read(authRepositoryProvider).sendVerificationEmail(user.email);
       setState(() => _canResend = false);
       if (mounted) showSuccess(context, 'Email verifikasi telah dikirim ulang.');
       Future.delayed(const Duration(seconds: 60), () {

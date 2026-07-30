@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 class LocalDatabase {
@@ -13,7 +12,7 @@ class LocalDatabase {
   }
 
   static Future<void> clearUserCache(String uid) async {
-    final collections = ['products', 'transactions', 'customers', 'debts', 'debt_payments', 'settings', 'sync_queue', 'suppliers', 'shipping_services', 'restock_history'];
+    final collections = ['products', 'transactions', 'customers', 'debts', 'debt_payments', 'settings', 'sync_queue', 'suppliers', 'shipping_services', 'restock_history', 'barcode_history'];
     for (final col in collections) {
       if (await Hive.boxExists(_boxName(uid, col))) {
         final box = await Hive.openBox(_boxName(uid, col));
@@ -23,8 +22,7 @@ class LocalDatabase {
     }
   }
 
-  /// Recursively converts Firestore Timestamps to ISO-8601 strings
-  /// so they can be saved in Hive without custom adapters.
+  /// Recursively sanitizes data for Hive storage.
   static Map<String, dynamic> sanitize(Map<String, dynamic> data) {
     final sanitized = <String, dynamic>{};
     data.forEach((key, value) {
@@ -34,9 +32,7 @@ class LocalDatabase {
   }
 
   static dynamic _sanitizeValue(dynamic value) {
-    if (value is Timestamp) {
-      return value.toDate().toIso8601String();
-    } else if (value is Map) {
+    if (value is Map) {
       return sanitize(Map<String, dynamic>.from(value));
     } else if (value is List) {
       return value.map(_sanitizeValue).toList();

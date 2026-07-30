@@ -5,6 +5,7 @@ import '../../providers/auth_provider.dart';
 import '../pages/login_page.dart';
 import '../pages/verify_email_page.dart';
 import '../pages/setup_pin_page.dart';
+import '../pages/subscription_lock_page.dart';
 import '../../../../main.dart'; // To get MainShell or whatever home is
 import '../../../../shared/widgets/splash_screen.dart';
 import '../../../settings/providers/settings_provider.dart';
@@ -69,6 +70,14 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 
         if (settings.securityPin == null) {
           return const SetupPinPage();
+        }
+
+        // Check for active subscription
+        final isSubscribed = (settings.subscriptionStatus == 'active') ||
+                           (settings.subscriptionExpiry != null && settings.subscriptionExpiry!.isAfter(DateTime.now()));
+        
+        if (!isSubscribed) {
+          return const SubscriptionLockPage();
         }
 
         return const MainShell();

@@ -36,12 +36,11 @@ class InitialSyncState {
 class InitialSyncNotifier extends Notifier<InitialSyncState> {
   @override
   InitialSyncState build() {
-    // We use a future here to avoid blocking build, but we want it to update state ASAP
     final user = ref.watch(authStateProvider).value;
     if (user != null) {
       _loadSyncStatus(user.uid);
     }
-    return InitialSyncState(isInitialSyncDone: true); // Start as TRUE to avoid flashing dialog
+    return InitialSyncState(isInitialSyncDone: true);
   }
 
   Future<void> _loadSyncStatus(String uid) async {
@@ -51,45 +50,30 @@ class InitialSyncNotifier extends Notifier<InitialSyncState> {
   }
 
   Future<void> performInitialSync({bool force = false}) async {
-    debugPrint('SYNC: Triggered performInitialSync(force: $force)');
     final auth = ref.read(authStateProvider).value;
     final isOnline = ref.read(isOnlineProvider);
     
-    if (auth == null) {
-      debugPrint('SYNC: No user found for initial sync');
-      return;
-    }
+    if (auth == null) return;
 
     if (!isOnline) {
-      debugPrint('SYNC: Offline - Aborting');
       state = state.copyWith(error: 'Tidak ada koneksi internet. Silakan coba lagi nanti.');
       return;
     }
 
-    debugPrint('SYNC: Starting Initial Download for user ${auth.uid}');
     state = state.copyWith(isSyncing: true, error: null);
 
     try {
-      // 1. Products
+      // Bootstrap all repositories from Supabase
       await ref.read(productRepositoryProvider).bootstrap(force: force);
-      
-      // 2. Transactions
       await ref.read(transactionRepositoryProvider).bootstrap(force: force);
-      
-      // 3. Debts & Customers
       await ref.read(debtRepositoryProvider).bootstrap(force: force);
-      
-      // 4. Restocks & Bill Payments
       await ref.read(restockRepositoryProvider).bootstrap(force: force);
-
-      // 5. Barcode History
       await ref.read(barcodeHistoryRepositoryProvider).bootstrap(force: force);
 
       final box = await LocalDatabase.openBox(auth.uid, 'sync_meta');
       await box.put('initial_sync_done', true);
 
       state = state.copyWith(isSyncing: false, isInitialSyncDone: true);
-      debugPrint('SYNC: Initial Download Completed');
     } catch (e) {
       debugPrint('SYNC: Initial Download Error: $e');
       state = state.copyWith(isSyncing: false, error: e.toString());
