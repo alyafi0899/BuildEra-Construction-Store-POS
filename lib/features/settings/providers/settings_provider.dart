@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -17,7 +17,7 @@ class SettingsNotifier extends Notifier<StoreSettings> {
     return const StoreSettings();
   }
 
-  FirebaseFirestore get _db => FirebaseFirestore.instance;
+  SupabaseClient get _supabase => ref.watch(supabaseClientProvider);
   Future<Box> _getBox(String uid) => LocalDatabase.openBox(uid, 'settings');
 
   Future<void> _loadSettings(String uid) async {
@@ -28,12 +28,11 @@ class SettingsNotifier extends Notifier<StoreSettings> {
       state = StoreSettings.fromMap(cached as Map);
     }
 
-    // 2. Load from Firestore in background or if no cache
+    // 2. Load from Supabase in background or if no cache
     try {
-      final doc = await _db.collection('users').doc(uid).get().timeout(const Duration(seconds: 5));
-      if (doc.exists) {
-        final data = LocalDatabase.sanitize(doc.data()!);
-        final settings = StoreSettings.fromMap(data);
+      final response = await _supabase.from('profiles').select().eq('id', uid).maybeSingle();
+      if (response != null) {
+        final settings = StoreSettings.fromMap(response);
         state = settings;
         // Update cache
         await box.put('store_settings', settings.toMap());
@@ -47,8 +46,11 @@ class SettingsNotifier extends Notifier<StoreSettings> {
     final targetUid = uid ?? ref.read(authStateProvider).value?.uid;
     if (targetUid == null) return;
     
-    // Save to Firestore
-    await _db.collection('users').doc(targetUid).set(settings.toMap(), SetOptions(merge: true));
+    // Save to Supabase
+    await _supabase.from('profiles').upsert({
+      'id': targetUid,
+      ...settings.toMap(),
+    });
     
     // Save to Hive
     final box = await _getBox(targetUid);
