@@ -834,11 +834,6 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
     );
   }
 
-  Future<Debt?> _findDebt(WidgetRef ref, String txId, String? customerId) async {
-    final debts = await ref.read(debtsProvider(customerId).future);
-    return debts.firstWhereOrNull((d) => d.transactionId == txId);
-  }
-
   Future<void> _handlePiutangAction(
     Transaction tx, 
     StoreSettings settings, 

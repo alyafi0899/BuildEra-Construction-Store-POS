@@ -6,11 +6,9 @@ import '../../../../shared/models/product.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../../../shared/widgets/product_image.dart';
 import '../../../products/providers/product_provider.dart';
-import '../../models/cart_item.dart';
+
 import '../../providers/cart_provider.dart';
-import '../../providers/multi_cart_provider.dart';
 import '../../providers/barcode_event_provider.dart';
-import '../widgets/payment_dialog.dart';
 import '../widgets/cart_panel.dart';
 import '../widgets/barcode_listener.dart';
 
