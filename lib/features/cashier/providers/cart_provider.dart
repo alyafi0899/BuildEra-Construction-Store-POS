@@ -72,6 +72,10 @@ class CartState {
         customerName:        customerName       ?? this.customerName,
       );
 
+  void updateState(CartState newState) {
+    // This is a helper for the MultiCart logic to swap the whole state
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'items': items.map((x) => x.toMap()).toList(),
@@ -213,6 +217,9 @@ class CartNotifier extends Notifier<CartState> {
   void setTaxRate(double r)  => state = state.copyWith(taxRate: r);
 
   void clear() => state = const CartState();
+
+  // Add this to allow manual state updates from MultiCart provider
+  set stateValue(CartState newState) => state = newState;
 }
 
 final cartProvider = NotifierProvider<CartNotifier, CartState>(CartNotifier.new);

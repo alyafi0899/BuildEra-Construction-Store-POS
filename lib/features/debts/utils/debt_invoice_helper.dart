@@ -31,81 +31,109 @@ class DebtInvoiceHelper {
 
     pdf.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.roll80,
-        margin: const pw.EdgeInsets.all(10),
+        pageFormat: PdfPageFormat(
+          settings.receiptWidth * PdfPageFormat.mm,
+          double.infinity,
+          marginAll: 0,
+        ),
         build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              // Header
-              pw.Center(
-                child: pw.Column(children: [
-                  pw.Text(settings.businessName.toUpperCase(), 
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
-                  pw.Text('NOTA PIUTANG', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
-                  if (settings.address.isNotEmpty)
-                    pw.Text(settings.address, style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center),
-                ]),
-              ),
-              pw.Divider(thickness: 0.5),
+          return pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              mainAxisSize: pw.MainAxisSize.min,
+              children: [
+                // Header
+                pw.Center(
+                  child: pw.Column(children: [
+                    pw.Text(settings.businessName.toUpperCase(), 
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
+                    pw.Text('NOTA PIUTANG', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                    if (settings.address.isNotEmpty)
+                      pw.Text(settings.address, style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center),
+                  ]),
+                ),
+                pw.Divider(thickness: 0.5),
 
-              // Customer & Debt Info
-              pw.Text('Pelanggan: ${customer.name}', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
-              pw.Text('Telp: ${customer.phone}', style: const pw.TextStyle(fontSize: 8)),
-              pw.SizedBox(height: 4),
-              pw.Text('No. Invoice Asal: ${debt.invoiceNumber}', style: const pw.TextStyle(fontSize: 8)),
-              pw.Text('Tgl Transaksi: ${Formatters.date(debt.createdAt)}', style: const pw.TextStyle(fontSize: 8)),
-              pw.Text('Jatuh Tempo: ${Formatters.date(debt.dueDate)}', style: const pw.TextStyle(fontSize: 8)),
-              if (debt.updatedAt.isAfter(debt.createdAt.add(Duration(minutes: 1))))
-                pw.Text('Update Terakhir: ${Formatters.date(debt.updatedAt)}', style: pw.TextStyle(fontSize: 8)),
-              
-              pw.Divider(thickness: 0.5),
+                // Customer & Debt Info
+                pw.Align(
+                  alignment: pw.Alignment.centerRight,
+                  child: pw.Text(Formatters.dateTime(debt.createdAt), style: const pw.TextStyle(fontSize: 8)),
+                ),
+                pw.Text('Pelanggan: ${customer.name}', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                if (customer.phone.isNotEmpty)
+                  pw.Text('Telp: ${customer.phone}', style: const pw.TextStyle(fontSize: 8)),
+                pw.SizedBox(height: 2),
+                pw.Text('No. Invoice Asal: ${debt.invoiceNumber}', style: const pw.TextStyle(fontSize: 7)),
+                pw.Text('Jatuh Tempo: ${Formatters.date(debt.dueDate)}', style: const pw.TextStyle(fontSize: 8)),
+                if (debt.updatedAt.isAfter(debt.createdAt.add(Duration(minutes: 1))))
+                  pw.Text('Update Terakhir: ${Formatters.dateTime(debt.updatedAt)}', style: pw.TextStyle(fontSize: 6)),
+                
+                pw.Divider(thickness: 0.5),
 
-              // Debt Summary
-              _buildRow('Total Piutang Awal', Formatters.currency(debt.totalAmount)),
-              _buildRow('Total Sudah Bayar', Formatters.currency(debt.paidAmount), color: PdfColors.green),
-              pw.SizedBox(height: 4),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('SISA PIUTANG', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
-                  pw.Text(Formatters.currency(debt.remainingBalance), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: PdfColors.red)),
+                // Debt Summary
+                _buildRow('Total Piutang Awal', Formatters.currency(debt.totalAmount)),
+                _buildRow('Total Sudah Bayar', Formatters.currency(debt.paidAmount)),
+                pw.SizedBox(height: 4),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('SISA PIUTANG', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                    pw.Text(Formatters.currency(debt.remainingBalance), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                  ],
+                ),
+                
+                pw.Divider(thickness: 0.5),
+
+                // Payment History
+                pw.Text('RIWAYAT CICILAN / PEMBAYARAN:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 4),
+                if (payments.isEmpty)
+                  pw.Text('Belum ada riwayat pembayaran', style: pw.TextStyle(fontSize: 7, fontStyle: pw.FontStyle.italic))
+                else
+                  ...payments.map((p) => pw.Padding(
+                    padding: const pw.EdgeInsets.only(bottom: 2),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            pw.Text(Formatters.dateTime(p.createdAt), style: const pw.TextStyle(fontSize: 7)),
+                            pw.Text(Formatters.currency(p.amount), style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                          ],
+                        ),
+                        if (p.notes != null)
+                          pw.Text('Ket: ${p.notes}', style: const pw.TextStyle(fontSize: 6)),
+                      ],
+                    ),
+                  )),
+
+                pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+                
+                if (settings.bankAccounts.isNotEmpty) ...[
+                  pw.SizedBox(height: 6),
+                  pw.Text('PEMBAYARAN TRANSFER:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                  ...settings.bankAccounts.map((acc) => pw.Padding(
+                    padding: const pw.EdgeInsets.only(top: 1),
+                    child: pw.Text('${acc.bankName}: ${acc.accountNumber} a/n ${acc.accountHolder}', 
+                      style: const pw.TextStyle(fontSize: 7)),
+                  )),
+                  pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
                 ],
-              ),
-              
-              pw.Divider(thickness: 0.5),
 
-              // Payment History
-              pw.Text('RIWAYAT CICILAN / PEMBAYARAN:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 4),
-              if (payments.isEmpty)
-                pw.Text('Belum ada riwayat pembayaran', style: pw.TextStyle(fontSize: 7, fontStyle: pw.FontStyle.italic))
-              else
-                ...payments.map((p) => pw.Padding(
-                  padding: const pw.EdgeInsets.only(bottom: 2),
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        children: [
-                          pw.Text(Formatters.date(p.createdAt), style: const pw.TextStyle(fontSize: 7)),
-                          pw.Text(Formatters.currency(p.amount), style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
-                        ],
-                      ),
-                      if (p.notes != null)
-                        pw.Text('Ket: ${p.notes}', style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey700)),
-                    ],
-                  ),
-                )),
-
-              pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 10),
-              pw.Center(
-                child: pw.Text('Dokumen ini adalah bukti sah piutang per tanggal ${Formatters.date(DateTime.now())}', 
-                  style: pw.TextStyle(fontSize: 7, fontStyle: pw.FontStyle.italic)),
-              ),
-            ],
+                pw.SizedBox(height: 8),
+                pw.Center(
+                  child: pw.Text('Dokumen ini adalah bukti sah piutang', 
+                    style: pw.TextStyle(fontSize: 7, fontStyle: pw.FontStyle.italic)),
+                ),
+                pw.Align(
+                  alignment: pw.Alignment.centerRight,
+                  child: pw.Text('Printed: ${Formatters.dateTime(DateTime.now())}', 
+                    style: const pw.TextStyle(fontSize: 5)),
+                ),
+              ],
+            ),
           );
         },
       ),
