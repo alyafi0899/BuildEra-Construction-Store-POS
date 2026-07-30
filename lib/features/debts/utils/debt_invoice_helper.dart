@@ -38,7 +38,7 @@ class DebtInvoiceHelper {
         ),
         build: (pw.Context context) {
           return pw.Padding(
-            padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+            padding: const pw.EdgeInsets.symmetric(vertical: 2, horizontal: 2),
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               mainAxisSize: pw.MainAxisSize.min,
