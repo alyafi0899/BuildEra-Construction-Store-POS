@@ -119,6 +119,11 @@ class DebtRepository {
     return list;
   }
 
+  Future<List<Debt>> getDebts({String? customerId}) async {
+    final box = await _getBox('debts');
+    return _debtsFromBox(box, customerId);
+  }
+
   Future<void> createDebt(Debt debt) async {
     final debtBox = await _getBox('debts');
     final custBox = await _getBox('customers');
@@ -167,6 +172,11 @@ class DebtRepository {
     if (debtId != null)     list = list.where((p) => p.debtId == debtId).toList();
     list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return list;
+  }
+
+  Future<List<DebtPayment>> getPayments({String? customerId, String? debtId}) async {
+    final box = await _getBox('debt_payments');
+    return _paymentsFromBox(box, customerId, debtId);
   }
 
   Future<void> recordPayment({

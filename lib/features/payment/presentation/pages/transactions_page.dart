@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
@@ -8,7 +10,12 @@ import '../../../../core/utils/invoice_helper.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../providers/transaction_provider.dart';
 import '../../../debts/providers/debt_repository.dart';
+import '../../../debts/models/customer.dart';
 import '../../../debts/models/debt.dart';
+import '../../../debts/models/debt_payment.dart';
+import '../../../debts/utils/debt_invoice_helper.dart';
+import '../../../settings/models/store_settings.dart';
+import 'package:printing/printing.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../shared/widgets/security_gate.dart';
 
@@ -326,15 +333,15 @@ class _DebtStatusBadge extends ConsumerWidget {
   }
 }
 
-class _TxDetail extends StatefulWidget {
+class _TxDetail extends ConsumerStatefulWidget {
   final Transaction tx;
   const _TxDetail({super.key, required this.tx});
 
   @override
-  State<_TxDetail> createState() => _TxDetailState();
+  ConsumerState<_TxDetail> createState() => _TxDetailState();
 }
 
-class _TxDetailState extends State<_TxDetail> {
+class _TxDetailState extends ConsumerState<_TxDetail> {
   final ScrollController _scrollController = ScrollController();
 
   @override
@@ -345,118 +352,122 @@ class _TxDetailState extends State<_TxDetail> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer(
-      builder: (context, ref, child) {
-        final settings = ref.watch(settingsProvider);
-        final tx = widget.tx;
-        final isDebt = tx.paymentMethod == AppConstants.paymentPiutang;
+    final settings = ref.watch(settingsProvider);
+    final tx = widget.tx;
+    final isDebt = tx.paymentMethod == AppConstants.paymentPiutang;
 
-        return Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: AppTheme.border)),
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: AppTheme.border)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text('Detail Transaksi', style: Theme.of(context).textTheme.titleLarge),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () async {
+                      final ok = await showConfirmDialog(context,
+                          title: 'Hapus Transaksi',
+                          content: 'Yakin ingin menghapus transaksi ini? Stok produk akan dikembalikan secara otomatis.',
+                          confirmLabel: 'HAPUS',
+                          confirmColor: AppTheme.danger);
+                      if (ok) {
+                        if (context.mounted) {
+                          requirePin(context, ref, () async {
+                            await ref.read(transactionsActionProvider.notifier).deleteTransaction(tx.id);
+                            if (context.mounted) showSuccess(context, 'Transaksi berhasil dihapus');
+                          });
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.danger),
+                    tooltip: 'Hapus Transaksi',
+                  ),
+                  IconButton(
+                    onPressed: () => _handlePiutangAction(tx, settings, (Customer c, Debt d, List<DebtPayment> p, StoreSettings s) => DebtInvoiceHelper.printDebtInvoice(c, d, p, s), InvoiceHelper.printInvoice),
+                    icon: const Icon(Icons.print_rounded, size: 20, color: AppTheme.accent),
+                    tooltip: 'Cetak Invoice',
+                  ),
+                  IconButton(
+                    onPressed: () => _handlePiutangAction(tx, settings, (Customer c, Debt d, List<DebtPayment> p, StoreSettings s) => DebtInvoiceHelper.downloadDebtInvoice(c, d, p, s), InvoiceHelper.saveInvoice),
+                    icon: const Icon(Icons.download, size: 20, color: AppTheme.accent),
+                    tooltip: 'Download PDF',
+                  ),
+                  IconButton(
+                    onPressed: () => _handlePiutangAction(tx, settings, (Customer c, Debt d, List<DebtPayment> p, StoreSettings s) async {
+                      final pdfBytes = await DebtInvoiceHelper.generateDebtPdf(customer: c, debt: d, payments: p, settings: s);
+                      await Printing.sharePdf(bytes: pdfBytes, filename: 'Piutang-${c.name}-${tx.invoiceNumber}.pdf');
+                    }, InvoiceHelper.shareInvoice),
+                    icon: const Icon(Icons.share_rounded, size: 20, color: AppTheme.accent),
+                    tooltip: 'Share PDF',
+                  ),
+                ],
               ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(tx.invoiceNumber,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontFamily: 'monospace', color: AppTheme.accent)),
+                  ),
+                  if (isDebt) _DebtStatusBadge(tx: tx),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(Formatters.dateTime(tx.createdAt), style: Theme.of(context).textTheme.bodySmall),
+            ],
+          ),
+        ),
+        Expanded(
+          child: Scrollbar(
+            controller: _scrollController,
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Text('Detail Transaksi', style: Theme.of(context).textTheme.titleLarge),
-                      const Spacer(),
-                      IconButton(
-                        onPressed: () async {
-                          final ok = await showConfirmDialog(context,
-                              title: 'Hapus Transaksi',
-                              content: 'Yakin ingin menghapus transaksi ini? Stok produk akan dikembalikan secara otomatis.',
-                              confirmLabel: 'HAPUS',
-                              confirmColor: AppTheme.danger);
-                          if (ok) {
-                            if (context.mounted) {
-                              requirePin(context, ref, () async {
-                                await ref.read(transactionsActionProvider.notifier).deleteTransaction(tx.id);
-                                if (context.mounted) showSuccess(context, 'Transaksi berhasil dihapus');
-                              });
-                            }
-                          }
-                        },
-                        icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.danger),
-                        tooltip: 'Hapus Transaksi',
-                      ),
-                      IconButton(
-                        onPressed: () => InvoiceHelper.saveInvoice(tx, settings),
-                        icon: const Icon(Icons.download, size: 20, color: AppTheme.accent),
-                        tooltip: 'Cetak/Download PDF',
-                      ),
-                      IconButton(
-                        onPressed: () => InvoiceHelper.shareInvoice(tx, settings),
-                        icon: const Icon(Icons.share_rounded, size: 20, color: AppTheme.accent),
-                        tooltip: 'Share PDF',
-                      ),
-                    ],
-                  ),
+                  if (tx.customerName != null) ...[
+                    _infoRow(context, 'Pelanggan', tx.customerName!),
+                    const SizedBox(height: 4),
+                  ],
+                  _infoRow(context, 'Kasir', tx.cashierName ?? 'Admin'),
+                  const Divider(color: AppTheme.border, height: 32),
+                  Text('Item Pesanan', style: Theme.of(context).textTheme.titleSmall?.copyWith(color: AppTheme.accent, letterSpacing: 0.5)),
+                  const SizedBox(height: 16),
+                  ...tx.items.map((item) => _DetailItemRow(key: ValueKey('item_${item.id}'), item: item)),
+                  const Divider(color: AppTheme.border, height: 32),
+                  _row(context, 'Subtotal Item', Formatters.currency(tx.subtotal)),
+                  if (tx.itemDiscountTotal > 0) _row(context, 'Total Pot. Item', '- ${Formatters.currency(tx.itemDiscountTotal)}', AppTheme.success),
+                  if (tx.transDiscountAmount > 0) _row(context, 'Diskon Transaksi', '- ${Formatters.currency(tx.transDiscountAmount)}', AppTheme.success),
+                  if (tx.taxAmount > 0) _row(context, 'PPN (11%)', Formatters.currency(tx.taxAmount)),
+                  if (tx.shippingFee > 0) _row(context, 'Ongkos Kirim', Formatters.currency(tx.shippingFee)),
                   const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(tx.invoiceNumber,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontFamily: 'monospace', color: AppTheme.accent)),
-                      ),
-                      if (isDebt) _DebtStatusBadge(tx: tx),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(Formatters.dateTime(tx.createdAt), style: Theme.of(context).textTheme.bodySmall),
+                  _row(context, 'TOTAL', Formatters.currency(tx.total), AppTheme.accent, true),
+                  const Divider(color: AppTheme.border, height: 32),
+                  _row(context, 'Metode Pembayaran', tx.paymentMethod),
+                  _row(context, 'Dibayar', Formatters.currency(tx.amountPaid)),
+                  _row(context, 'Kembalian', Formatters.currency(tx.changeAmount), AppTheme.success),
+                  if (tx.notes != null && tx.notes!.isNotEmpty) ...[
+                    const Divider(color: AppTheme.border, height: 32),
+                    Text('Catatan:', style: Theme.of(context).textTheme.bodySmall),
+                    const SizedBox(height: 4),
+                    Text(tx.notes!, style: Theme.of(context).textTheme.bodyMedium),
+                  ],
                 ],
               ),
             ),
-            Expanded(
-              child: Scrollbar(
-                controller: _scrollController,
-                thumbVisibility: true,
-                child: SingleChildScrollView(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (tx.customerName != null) ...[
-                        _infoRow(context, 'Pelanggan', tx.customerName!),
-                        const SizedBox(height: 4),
-                      ],
-                      _infoRow(context, 'Kasir', tx.cashierName ?? 'Admin'),
-                      const Divider(color: AppTheme.border, height: 32),
-                      Text('Item Pesanan', style: Theme.of(context).textTheme.titleSmall?.copyWith(color: AppTheme.accent, letterSpacing: 0.5)),
-                      const SizedBox(height: 16),
-                      ...tx.items.map((item) => _DetailItemRow(key: ValueKey('item_${item.id}'), item: item)),
-                      const Divider(color: AppTheme.border, height: 32),
-                      _row(context, 'Subtotal Item', Formatters.currency(tx.subtotal)),
-                      if (tx.itemDiscountTotal > 0) _row(context, 'Total Pot. Item', '- ${Formatters.currency(tx.itemDiscountTotal)}', AppTheme.success),
-                      if (tx.transDiscountAmount > 0) _row(context, 'Diskon Transaksi', '- ${Formatters.currency(tx.transDiscountAmount)}', AppTheme.success),
-                      if (tx.taxAmount > 0) _row(context, 'PPN (11%)', Formatters.currency(tx.taxAmount)),
-                      if (tx.shippingFee > 0) _row(context, 'Ongkos Kirim', Formatters.currency(tx.shippingFee)),
-                      const SizedBox(height: 8),
-                      _row(context, 'TOTAL', Formatters.currency(tx.total), AppTheme.accent, true),
-                      const Divider(color: AppTheme.border, height: 32),
-                      _row(context, 'Metode Pembayaran', tx.paymentMethod),
-                      _row(context, 'Dibayar', Formatters.currency(tx.amountPaid)),
-                      _row(context, 'Kembalian', Formatters.currency(tx.changeAmount), AppTheme.success),
-                      if (tx.notes != null && tx.notes!.isNotEmpty) ...[
-                        const Divider(color: AppTheme.border, height: 32),
-                        Text('Catatan:', style: Theme.of(context).textTheme.bodySmall),
-                        const SizedBox(height: 4),
-                        Text(tx.notes!, style: Theme.of(context).textTheme.bodyMedium),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+          ),
+        ),
+      ],
     );
   }
 
@@ -481,6 +492,50 @@ class _TxDetailState extends State<_TxDetail> {
         )),
       ]),
     );
+  }
+
+  Future<void> _handlePiutangAction(
+    Transaction tx, 
+    StoreSettings settings, 
+    FutureOr<void> Function(Customer, Debt, List<DebtPayment>, StoreSettings) piutangAction,
+    FutureOr<void> Function(Transaction, StoreSettings) defaultAction,
+  ) async {
+    if (tx.paymentMethod != AppConstants.paymentPiutang) {
+      await defaultAction(tx, settings);
+      return;
+    }
+
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator(color: AppTheme.accent)),
+    );
+
+    try {
+      final repo = ref.read(debtRepositoryProvider);
+      final debts = await repo.getDebts(customerId: tx.customerId);
+      final debt = debts.firstWhereOrNull((d) => d.transactionId == tx.id);
+      if (debt == null) throw 'Data piutang tidak ditemukan';
+
+      final customers = await ref.read(customersProvider.future);
+      final customer = customers.firstWhereOrNull((c) => c.id == debt.customerId);
+      if (customer == null) throw 'Data pelanggan tidak ditemukan';
+
+      final payments = await repo.getPayments(customerId: customer.id, debtId: debt.id);
+      
+      if (mounted) {
+        Navigator.pop(context); // Close loading
+        await piutangAction(customer, debt, payments, settings);
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading
+        showError(context, 'Gagal memproses nota piutang: $e');
+        // Fallback to regular invoice
+        await defaultAction(tx, settings);
+      }
+    }
   }
 }
 
