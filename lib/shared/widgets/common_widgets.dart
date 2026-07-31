@@ -409,6 +409,7 @@ class ScrollableQtyField extends StatelessWidget {
   final TextEditingController controller;
   final Function(double)? onChanged;
   final double step;
+  final double minValue;
 
   const ScrollableQtyField({
     super.key,
@@ -416,6 +417,7 @@ class ScrollableQtyField extends StatelessWidget {
     required this.controller,
     this.onChanged,
     this.step = 1.0,
+    this.minValue = 0,
   });
 
   @override
@@ -432,7 +434,7 @@ class ScrollableQtyField extends StatelessWidget {
             current -= step;
           }
 
-          if (current < 0) current = 0;
+          if (current < minValue) current = minValue;
           
           final text = current == current.toInt() 
               ? current.toInt().toString() 

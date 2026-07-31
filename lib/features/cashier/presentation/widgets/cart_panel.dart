@@ -763,6 +763,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                       width: 45,
                       child: ScrollableQtyField(
                         controller: _qtyCtrl,
+                        minValue: 1,
                         onChanged: (v) => notifier.updateQuantity(item.id, v),
                         child: TextField(
                           controller: _qtyCtrl,
