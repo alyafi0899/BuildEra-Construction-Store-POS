@@ -191,10 +191,12 @@ class _CartPanelState extends ConsumerState<CartPanel> {
                   contentPadding:
                       EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 ),
-                onChanged: (v) => ref
-                    .read(cartProvider.notifier)
-                    .setTransDiscount(
-                        double.tryParse(v) ?? 0, cart.transDiscountType),
+                onChanged: (v) {
+                  final numericValue = v.replaceAll('.', '');
+                  ref.read(cartProvider.notifier).setTransDiscount(
+                      double.tryParse(numericValue) ?? 0, cart.transDiscountType);
+                },
+                inputFormatters: [CurrencyInputFormatter()],
                 onSubmitted: (_) =>
                     cart.isEmpty ? null : PaymentDialog.show(context),
               ),
@@ -476,6 +478,7 @@ class CartItemTile extends ConsumerStatefulWidget {
 class _CartItemTileState extends ConsumerState<CartItemTile> {
   late TextEditingController _qtyCtrl;
   late FocusNode _qtyFocus;
+  bool _showProfit = false;
 
   @override
   void initState() {
@@ -501,6 +504,65 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
     super.dispose();
   }
 
+  void _verifyPinAndShowProfit() async {
+    if (_showProfit) {
+      setState(() => _showProfit = false);
+      return;
+    }
+
+    final pinController = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Akses Keuntungan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Masukkan PIN untuk melihat estimasi keuntungan.', style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: pinController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'PIN Owner',
+                hintText: 'Default: 1234',
+                prefixIcon: Icon(Icons.lock_outline, size: 20),
+              ),
+              onSubmitted: (_) {
+                 if (pinController.text == '1234') {
+                    Navigator.pop(context, true);
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PIN Salah!')));
+                  }
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () {
+              // Default PIN 1234
+              if (pinController.text == '1234') {
+                Navigator.pop(context, true);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PIN Salah!')));
+              }
+            },
+            child: const Text('Verifikasi'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok == true) {
+      setState(() => _showProfit = true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
@@ -524,14 +586,6 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1),
           ),
-          IconButton(
-            onPressed: () => _showItemEditDialog(context, ref, item),
-            icon: const Icon(Icons.edit_note_rounded,
-                size: 18, color: AppTheme.accent),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-          ),
-          const SizedBox(width: 8),
           IconButton(
             onPressed: () => notifier.removeItem(item.id),
             icon: const Icon(Icons.close_rounded,
@@ -584,29 +638,33 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
               }),
           SizedBox(
             width: 50,
-            child: TextField(
+            child: ScrollableQtyField(
               controller: _qtyCtrl,
-              focusNode: _qtyFocus,
-              textAlign: TextAlign.center,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              style: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600),
-              decoration: const InputDecoration(
-                isDense: true,
-                contentPadding: EdgeInsets.symmetric(vertical: 6),
-                border: InputBorder.none,
+              onChanged: (v) => notifier.updateQuantity(item.id, v),
+              child: TextField(
+                controller: _qtyCtrl,
+                focusNode: _qtyFocus,
+                textAlign: TextAlign.center,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600),
+                decoration: const InputDecoration(
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(vertical: 6),
+                  border: InputBorder.none,
+                ),
+                onChanged: (v) {
+                  final qty = double.tryParse(v) ?? 0;
+                  if (qty > 0) {
+                    notifier.updateQuantity(item.id, qty);
+                  }
+                },
+                onSubmitted: (v) =>
+                    notifier.updateQuantity(item.id, double.tryParse(v) ?? 1),
               ),
-              onChanged: (v) {
-                final qty = double.tryParse(v) ?? 0;
-                if (qty > 0) {
-                  notifier.updateQuantity(item.id, qty);
-                }
-              },
-              onSubmitted: (v) =>
-                  notifier.updateQuantity(item.id, double.tryParse(v) ?? 1),
             ),
           ),
           QtyButton(
@@ -617,57 +675,135 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                 _qtyCtrl.text = q.toString();
               }),
         ]),
-        const SizedBox(height: 6),
-        Row(children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (item.isOverridden)
-                Text(Formatters.currency(item.originalPrice),
+        const SizedBox(height: 12),
+        const Divider(height: 1, color: AppTheme.border),
+        const SizedBox(height: 12),
+        
+        // Inline Pricing Controls
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Price Override
+            Expanded(
+              flex: 4,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Harga Jual (Override)', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                  const SizedBox(height: 4),
+                  _InlineTextField(
+                    key: ValueKey('price_${item.id}'), // Fixed key to prevent rebuild lag
+                    initialValue: item.soldPrice.toStringAsFixed(0),
+                    onChanged: (v) => notifier.updateSoldPrice(item.id, double.tryParse(v) ?? item.originalPrice),
+                    prefixText: 'Rp ',
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Discount Settings
+            Expanded(
+              flex: 5,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Potongan Item', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _InlineTextField(
+                          key: ValueKey('discount_${item.id}'), // Fixed key to prevent rebuild lag
+                          initialValue: item.discountValue.toStringAsFixed(0),
+                          onChanged: (v) => notifier.setItemDiscount(item.id, double.tryParse(v) ?? 0, item.discountType),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Container(
+                        height: 32,
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surface,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppTheme.border),
+                        ),
+                        child: DropdownButton<DiscountType>(
+                          value: item.discountType,
+                          underline: const SizedBox(),
+                          isDense: true,
+                          style: const TextStyle(fontSize: 11, color: AppTheme.accent, fontWeight: FontWeight.bold),
+                          items: const [
+                            DropdownMenuItem(value: DiscountType.fixed, child: Text('Rp')),
+                            DropdownMenuItem(value: DiscountType.percentage, child: Text('%')),
+                          ],
+                          onChanged: (v) => notifier.setItemDiscount(item.id, item.discountValue, v!),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        
+        const SizedBox(height: 12),
+        
+        // Profit Indicator and Subtotal
+        Row(
+          children: [
+            GestureDetector(
+              onTap: _verifyPinAndShowProfit,
+              child: _ProfitIndicator(item: item, isActive: _showProfit),
+            ),
+            const Spacer(),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (item.totalDiscount > 0)
+                   Text('-${Formatters.currency(item.totalDiscount)}',
+                      style: const TextStyle(
+                          color: AppTheme.success,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600)),
+                Text(Formatters.currency(item.subtotal),
                     style: const TextStyle(
-                        color: AppTheme.textMuted,
-                        fontSize: 11,
-                        decoration: TextDecoration.lineThrough)),
-              Text(Formatters.currency(item.soldPrice),
-                  style: TextStyle(
-                    color: item.isOverridden
-                        ? AppTheme.warning
-                        : AppTheme.textSecondary,
-                    fontSize: 12,
-                    fontWeight:
-                        item.isOverridden ? FontWeight.w600 : FontWeight.w400,
-                  )),
-            ],
+                        color: AppTheme.accent,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15)),
+              ],
+            ),
+          ],
+        ),
+
+        // Expanded Profit Details
+        if (_showProfit) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppTheme.surface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.border),
+            ),
+            child: Column(
+              children: [
+                _ProfitDetailRow(label: 'Harga Modal Unit', value: item.costPrice),
+                _ProfitDetailRow(label: 'Total Estimasi Untung', value: item.profit, isBold: true),
+                _ProfitDetailRow(
+                  label: 'Margin Profit', 
+                  value: (item.profit / (item.subtotal > 0 ? item.subtotal : 1)) * 100, 
+                  isPercent: true
+                ),
+              ],
+            ),
           ),
-          const Spacer(),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              if (item.totalDiscount > 0)
-                Text('-${Formatters.currency(item.totalDiscount)}',
-                    style: const TextStyle(
-                        color: AppTheme.success,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600)),
-              Text(Formatters.currency(item.subtotal),
-                  style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13)),
-            ],
-          ),
-        ]),
+        ],
       ]),
     );
   }
-
-  void _showItemEditDialog(BuildContext context, WidgetRef ref, CartItem item) {
-    showDialog(
-      context: context,
-      builder: (context) => ItemEditDialog(item: item),
-    );
-  }
 }
+
 
 class ItemEditDialog extends ConsumerStatefulWidget {
   final CartItem item;
@@ -855,6 +991,164 @@ class _ItemEditDialogState extends ConsumerState<ItemEditDialog> {
           child: const Text('Simpan'),
         ),
       ],
+    );
+  }
+}
+
+class _InlineTextField extends StatefulWidget {
+  final String initialValue;
+  final Function(String) onChanged;
+  final String? prefixText;
+
+  const _InlineTextField({super.key, required this.initialValue, required this.onChanged, this.prefixText});
+
+  @override
+  State<_InlineTextField> createState() => _InlineTextFieldState();
+}
+
+class _InlineTextFieldState extends State<_InlineTextField> {
+  late TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void didUpdateWidget(_InlineTextField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialValue != widget.initialValue) {
+      // Only update if not focused to avoid cursor jumping
+      if (!FocusScope.of(context).hasFocus) {
+         _controller.text = widget.initialValue;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 32,
+      child: TextField(
+        controller: _controller,
+        onChanged: (v) {
+          final numericValue = v.replaceAll('.', '');
+          widget.onChanged(numericValue);
+        },
+        inputFormatters: [CurrencyInputFormatter()],
+        keyboardType: TextInputType.number,
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+        decoration: InputDecoration(
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          prefixText: widget.prefixText,
+          prefixStyle: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+          filled: true,
+          fillColor: AppTheme.surface,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: AppTheme.border),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: AppTheme.border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: AppTheme.accent, width: 1.5),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfitIndicator extends StatelessWidget {
+  final CartItem item;
+  final bool isActive;
+  const _ProfitIndicator({required this.item, required this.isActive});
+
+  @override
+  Widget build(BuildContext context) {
+    final margin = item.subtotal > 0 ? (item.profit / item.subtotal) : 0;
+    final isLowMargin = margin < 0.1;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: isActive 
+            ? AppTheme.accent 
+            : (isLowMargin ? AppTheme.danger.withValues(alpha: 0.1) : AppTheme.success.withValues(alpha: 0.1)),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: isActive ? AppTheme.accent : (isLowMargin ? AppTheme.danger : AppTheme.success),
+          width: 0.8
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isActive ? Icons.lock_open_rounded : Icons.show_chart_rounded,
+            size: 12,
+            color: isActive ? Colors.white : (isLowMargin ? AppTheme.danger : AppTheme.success),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            isActive ? 'TUTUP DETAIL' : 'CEK UNTUNG',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              color: isActive ? Colors.white : (isLowMargin ? AppTheme.danger : AppTheme.success),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfitDetailRow extends StatelessWidget {
+  final String label;
+  final double value;
+  final bool isBold;
+  final bool isPercent;
+
+  const _ProfitDetailRow({
+    required this.label,
+    required this.value,
+    this.isBold = false,
+    this.isPercent = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = value < 0 ? AppTheme.danger : (label.contains('Untung') || isPercent ? AppTheme.success : AppTheme.textPrimary);
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+          const Spacer(),
+          Text(
+            isPercent ? '${value.toStringAsFixed(1)}%' : Formatters.currency(value),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

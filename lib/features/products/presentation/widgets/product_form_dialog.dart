@@ -469,12 +469,16 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                         ),
                         const SizedBox(width: 16),
                             Expanded(
-                              child: TextFormField(
-                                controller:   _stock,
-                                decoration:   const InputDecoration(labelText: 'Jumlah Barang *'),
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              child: ScrollableQtyField(
+                                controller: _stock,
                                 onChanged: (_) => _updateCalculatedCost(),
-                                validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+                                child: TextFormField(
+                                  controller:   _stock,
+                                  decoration:   const InputDecoration(labelText: 'Jumlah Barang *'),
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  onChanged: (_) => _updateCalculatedCost(),
+                                  validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+                                ),
                               ),
                             ),
                       ]),
@@ -543,6 +547,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                         isDense: true,
                                       ),
                                       keyboardType: TextInputType.number,
+                                      inputFormatters: [CurrencyInputFormatter()],
                                       onChanged: (_) => _updateCalculatedCost(),
                                     ),
                                   ),
@@ -556,6 +561,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                         isDense: true,
                                       ),
                                       keyboardType: TextInputType.number,
+                                      inputFormatters: [CurrencyInputFormatter()],
                                       onChanged: (_) => _updateCalculatedCost(),
                                     ),
                                   ),
@@ -579,11 +585,12 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                       helperText: !_isManualCost ? 'Dihitung otomatis: (Beli+Ongkir)/Qty' : 'Input harga modal akhir per unit',
                                     ),
                                     keyboardType: TextInputType.number,
+                                    inputFormatters: [CurrencyInputFormatter()],
                                     onChanged: (_) {
                                       setState(() {});
                                       _applyProfitPercentage();
                                     },
-                                    validator: (v) => double.tryParse(v ?? '') == null ? 'Wajib diisi' : null,
+                                    validator: (v) => double.tryParse((v ?? '').replaceAll('.', '')) == null ? 'Wajib diisi' : null,
                                   ),
                                 ),
                                 const SizedBox(width: 16),
@@ -629,10 +636,11 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                             prefixText: 'Rp ',
                                           ),
                                           keyboardType: TextInputType.number,
+                                          inputFormatters: [CurrencyInputFormatter()],
                                           onChanged: (_) => _onBasePriceChanged(),
                                           validator: (v) {
-                                            final sell = double.tryParse(v ?? '') ?? 0;
-                                            final cost = double.tryParse(_costPrice.text) ?? 0;
+                                            final sell = double.tryParse((v ?? '').replaceAll('.', '')) ?? 0;
+                                            final cost = double.tryParse(_costPrice.text.replaceAll('.', '')) ?? 0;
                                             if (sell <= 0) return 'Wajib diisi';
                                             if (sell < cost) return 'Harga jual di bawah modal';
                                             return null;

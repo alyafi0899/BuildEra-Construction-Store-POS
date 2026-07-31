@@ -628,6 +628,7 @@ class _BillTile extends ConsumerWidget {
                 prefixText: 'Rp ',
               ),
               keyboardType: TextInputType.number,
+              inputFormatters: [CurrencyInputFormatter()],
               onFieldSubmitted: (_) => submit(),
             ),
             const SizedBox(height: 12),

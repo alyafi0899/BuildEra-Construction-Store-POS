@@ -55,8 +55,24 @@ class MultiCartNotifier extends Notifier<MultiCartState> {
   
   void addNewCart() {
     if (state.carts.length >= 8) return; // Limit to 8 carts
+
+    // 1. Save current active cart to the list before switching
+    final currentCart = ref.read(cartProvider);
+    final updatedCarts = List<CartState>.from(state.carts);
+    updatedCarts[state.activeIndex] = currentCart;
+
+    // 2. Add a new empty cart
+    const newCart = CartState();
+    updatedCarts.add(newCart);
+    final newIndex = updatedCarts.length - 1;
+
+    // 3. Load the new cart to the cartProvider
+    ref.read(cartProvider.notifier).stateValue = newCart;
+
+    // 4. Update MultiCartState
     state = state.copyWith(
-      carts: [...state.carts, const CartState()],
+      carts: updatedCarts,
+      activeIndex: newIndex,
     );
   }
   

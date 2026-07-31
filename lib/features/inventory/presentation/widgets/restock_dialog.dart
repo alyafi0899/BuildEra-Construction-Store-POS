@@ -271,12 +271,16 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                       Row(children: [
                         Expanded(
                           flex: 2,
-                          child: TextFormField(
+                          child: ScrollableQtyField(
                             controller: _qty,
-                            decoration: const InputDecoration(labelText: 'Jumlah Tambahan *'),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             onChanged: (_) => _calculateCost(),
-                            validator: (v) => (double.tryParse(v ?? '') ?? 0) <= 0 ? 'Wajib diisi' : null,
+                            child: TextFormField(
+                              controller: _qty,
+                              decoration: const InputDecoration(labelText: 'Jumlah Tambahan *'),
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              onChanged: (_) => _calculateCost(),
+                              validator: (v) => (double.tryParse(v ?? '') ?? 0) <= 0 ? 'Wajib diisi' : null,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -359,6 +363,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                         isDense: true,
                                       ),
                                       keyboardType: TextInputType.number,
+                                      inputFormatters: [CurrencyInputFormatter()],
                                       onChanged: (_) => _calculateCost(),
                                     ),
                                   ),
@@ -372,6 +377,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                         isDense: true,
                                       ),
                                       keyboardType: TextInputType.number,
+                                      inputFormatters: [CurrencyInputFormatter()],
                                       onChanged: (_) => _calculateCost(),
                                     ),
                                   ),
@@ -395,8 +401,9 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                       helperText: !_isManualCost ? 'Dihitung otomatis: (Beli+Ongkir)/Qty' : 'Input harga modal akhir per unit',
                                     ),
                                     keyboardType: TextInputType.number,
+                                    inputFormatters: [CurrencyInputFormatter()],
                                     onChanged: (_) => setState(() {}),
-                                    validator: (v) => double.tryParse(v ?? '') == null ? 'Wajib diisi' : null,
+                                    validator: (v) => double.tryParse((v ?? '').replaceAll('.', '')) == null ? 'Wajib diisi' : null,
                                   ),
                                 ),
                                 const SizedBox(width: 16),
@@ -413,10 +420,11 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                       ),
                                     ),
                                     keyboardType: TextInputType.number,
+                                    inputFormatters: [CurrencyInputFormatter()],
                                     onChanged: (_) => setState(() {}),
                                     validator: (v) {
-                                      final sell = double.tryParse(v ?? '') ?? 0;
-                                      final cost = double.tryParse(_totalCostPerUnit.text) ?? 0;
+                                      final sell = double.tryParse((v ?? '').replaceAll('.', '')) ?? 0;
+                                      final cost = double.tryParse(_totalCostPerUnit.text.replaceAll('.', '')) ?? 0;
                                       if (sell <= 0) return 'Wajib diisi';
                                       if (sell < cost) return 'Harga jual di bawah modal';
                                       return null;

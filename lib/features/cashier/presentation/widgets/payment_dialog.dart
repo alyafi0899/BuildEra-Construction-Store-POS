@@ -52,8 +52,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   Customer? _selectedCustomer;
   DateTime _dueDate = DateTime.now().add(const Duration(days: 30));
 
-  double get _paid =>
-      double.tryParse(_amountCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+  double _paid = 0;
 
   @override
   void dispose() {
@@ -391,6 +390,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
       TextField(
         controller: _shippingFeeCtrl,
         keyboardType: TextInputType.number,
+        inputFormatters: [CurrencyInputFormatter()],
         style: const TextStyle(fontSize: 13),
         decoration: const InputDecoration(
           labelText: 'Biaya Ongkir (Jika ada)',
@@ -511,6 +511,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
         TextFormField(
           controller:   _amountCtrl,
           keyboardType: TextInputType.number,
+          inputFormatters: [CurrencyInputFormatter()],
           autofocus: true,
           style: const TextStyle(
               color: AppTheme.textPrimary,
@@ -522,7 +523,10 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
             prefixText: 'Rp ',
             prefixStyle: const TextStyle(fontSize: 18, color: AppTheme.textMuted),
           ),
-          onChanged: (_) => setState(() {}),
+          onChanged: (v) {
+            final val = Formatters.parseDecimal(v);
+            setState(() => _paid = val);
+          },
           onFieldSubmitted: (_) => _confirm(),
         ),
         

@@ -449,6 +449,7 @@ class _RecordPaymentDialogState extends ConsumerState<_RecordPaymentDialog> {
             TextField(
               controller: _amountCtrl,
               keyboardType: TextInputType.number,
+              inputFormatters: [CurrencyInputFormatter()],
               decoration: const InputDecoration(
                 labelText: 'Jumlah Bayar',
                 prefixText: 'Rp ',

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import '../../core/theme/app_theme.dart';
 
 // ── PageHeader ───────────────────────────────────────────────────────────
@@ -399,4 +400,49 @@ void showError(BuildContext context, String msg) {
     ]),
     duration: const Duration(seconds: 3),
   ));
+}
+
+// ── Qty Scroll Wrapper ────────────────────────────────────────────────────
+
+class ScrollableQtyField extends StatelessWidget {
+  final Widget child;
+  final TextEditingController controller;
+  final Function(double)? onChanged;
+  final double step;
+
+  const ScrollableQtyField({
+    super.key,
+    required this.child,
+    required this.controller,
+    this.onChanged,
+    this.step = 1.0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerSignal: (pointerSignal) {
+        if (pointerSignal is PointerScrollEvent) {
+          final double delta = pointerSignal.scrollDelta.dy;
+          double current = double.tryParse(controller.text) ?? 0;
+          
+          if (delta < 0) {
+            current += step;
+          } else if (delta > 0) {
+            current -= step;
+          }
+
+          if (current < 0) current = 0;
+          
+          final text = current == current.toInt() 
+              ? current.toInt().toString() 
+              : current.toString();
+          
+          controller.text = text;
+          if (onChanged != null) onChanged!(current);
+        }
+      },
+      child: child,
+    );
+  }
 }
