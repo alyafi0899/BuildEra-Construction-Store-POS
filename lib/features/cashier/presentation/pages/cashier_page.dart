@@ -107,7 +107,7 @@ class _CashierPageState extends ConsumerState<CashierPage> {
 
         // ── Right: Cart Panel ────────────────────────────────────────────
         Container(
-          width: 380,
+          width: 480,
           decoration: const BoxDecoration(
             color: AppTheme.surface,
             border: Border(left: BorderSide(color: AppTheme.border)),

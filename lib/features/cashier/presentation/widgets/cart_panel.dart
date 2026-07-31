@@ -6,267 +6,40 @@ import '../../../../shared/widgets/common_widgets.dart';
 import '../../models/cart_item.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/multi_cart_provider.dart';
+import '../../../settings/providers/settings_provider.dart';
 import 'payment_dialog.dart';
 
-class CartPanel extends ConsumerStatefulWidget {
+class CartPanel extends StatelessWidget {
   const CartPanel({super.key});
 
   @override
-  ConsumerState<CartPanel> createState() => _CartPanelState();
+  Widget build(BuildContext context) {
+    return const Column(children: [
+      // Multi-Cart Tabs
+      _CartTabsSection(),
+
+      // Header
+      _CartHeaderSection(),
+
+      // Cart items
+      _CartListSection(),
+
+      // Totals & checkout
+      _CartTotalsSection(),
+    ]);
+  }
 }
 
-class _CartPanelState extends ConsumerState<CartPanel> {
-  final ScrollController _scrollController = ScrollController();
-  late final TextEditingController _discountCtrl;
-  late final FocusNode _discountFocus;
+class _CartTabsSection extends ConsumerWidget {
+  const _CartTabsSection();
 
   @override
-  void initState() {
-    super.initState();
-    final cart = ref.read(cartProvider);
-    _discountCtrl = TextEditingController(
-        text: cart.transDiscountValue == 0 ? '' : cart.transDiscountValue.toStringAsFixed(0));
-    _discountFocus = FocusNode();
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    _discountCtrl.dispose();
-    _discountFocus.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final cart = ref.watch(cartProvider);
+  Widget build(BuildContext context, WidgetRef ref) {
     final multiCart = ref.watch(multiCartProvider);
     final multiCartNotifier = ref.read(multiCartProvider.notifier);
 
-    return Column(children: [
-      // Multi-Cart Tabs
-      _cartTabs(context, multiCart, multiCartNotifier),
-
-      // Header
-      Container(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: AppTheme.border)),
-        ),
-        child: Row(children: [
-          const Icon(Icons.shopping_cart_rounded,
-              color: AppTheme.accent, size: 20),
-          const SizedBox(width: 10),
-          Text('Keranjang', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(width: 8),
-          if (cart.itemCount > 0)
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: AppTheme.accent,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text('${cart.itemCount}',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700)),
-            ),
-          const Spacer(),
-          if (!cart.isEmpty)
-            TextButton.icon(
-              onPressed: () async {
-                final ok = await showConfirmDialog(context,
-                    title: 'Kosongkan Keranjang',
-                    content: 'Yakin kosongkan semua item di antrian ini?',
-                    confirmLabel: 'Kosongkan',
-                    confirmColor: AppTheme.warning);
-                if (ok) ref.read(cartProvider.notifier).clear();
-              },
-              icon: const Icon(Icons.clear_all_rounded, size: 16),
-              label: const Text('Hapus Item'),
-            ),
-        ]),
-      ),
-
-      // Cart items
-      Expanded(
-        child: cart.isEmpty
-            ? const EmptyState(
-                icon: Icons.shopping_cart_outlined,
-                title: 'Keranjang kosong',
-                subtitle: 'Pilih produk untuk ditambahkan',
-              )
-            : Scrollbar(
-                controller: _scrollController,
-                thumbVisibility: true,
-                child: ListView.separated(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: cart.items.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (_, i) {
-                    final item = cart.items[i];
-                    return CartItemTile(
-                      key: ValueKey('cart_item_${item.id}'),
-                      item: item,
-                    );
-                  },
-                ),
-              ),
-      ),
-
-      // Totals & checkout
-      Container(
-        padding: const EdgeInsets.all(20),
-        decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: AppTheme.border)),
-        ),
-        child: Column(children: [
-          TextField(
-            style: const TextStyle(fontSize: 13),
-            decoration: const InputDecoration(
-              hintText: 'Nama Pelanggan (Opsional)',
-              isDense: true,
-              prefixIcon: Icon(Icons.person_outline, size: 16),
-              contentPadding: EdgeInsets.symmetric(vertical: 8),
-            ),
-            onChanged: (v) => ref
-                .read(cartProvider.notifier)
-                .setCustomer(null, v.isEmpty ? null : v),
-            onSubmitted: (_) =>
-                cart.isEmpty ? null : PaymentDialog.show(context),
-          ),
-          const SizedBox(height: 12),
-
-          _TotalRow(label: 'Subtotal', value: cart.grossSubtotal),
-
-          if (cart.itemDiscountTotal > 0)
-            _TotalRow(
-                label: 'Potongan Item',
-                value: -cart.itemDiscountTotal,
-                valueColor: AppTheme.success),
-
-          const SizedBox(height: 8),
-
-          Row(children: [
-            const Text('Diskon Transaksi',
-                style:
-                    TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-            const Spacer(),
-            SizedBox(
-              width: 50,
-              child: DropdownButton<DiscountType>(
-                value: cart.transDiscountType,
-                isDense: true,
-                isExpanded: true,
-                underline: const SizedBox(),
-                style: const TextStyle(fontSize: 12, color: AppTheme.accent),
-                items: const [
-                  DropdownMenuItem(
-                      value: DiscountType.fixed, child: Text('Rp')),
-                  DropdownMenuItem(
-                      value: DiscountType.percentage, child: Text('%')),
-                ],
-                onChanged: (v) => ref
-                    .read(cartProvider.notifier)
-                    .setTransDiscount(cart.transDiscountValue, v!),
-              ),
-            ),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 80,
-              child: TextField(
-                controller: _discountCtrl,
-                focusNode: _discountFocus,
-                keyboardType: TextInputType.number,
-                textAlign: TextAlign.right,
-                style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold),
-                decoration: const InputDecoration(
-                  isDense: true,
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                ),
-                onChanged: (v) {
-                  final numericValue = v.replaceAll('.', '');
-                  ref.read(cartProvider.notifier).setTransDiscount(
-                      double.tryParse(numericValue) ?? 0, cart.transDiscountType);
-                },
-                inputFormatters: [CurrencyInputFormatter()],
-                onSubmitted: (_) =>
-                    cart.isEmpty ? null : PaymentDialog.show(context),
-              ),
-            ),
-          ]),
-
-          const SizedBox(height: 8),
-
-          Row(children: [
-            const Text('PPN (11%)',
-                style:
-                    TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-            const Spacer(),
-            Switch.adaptive(
-              value: cart.taxEnabled,
-              onChanged: (_) => ref.read(cartProvider.notifier).toggleTax(),
-              activeTrackColor: AppTheme.accent,
-            ),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 80,
-              child: Text(
-                Formatters.currency(cart.taxAmount),
-                textAlign: TextAlign.right,
-                style: const TextStyle(
-                    color: AppTheme.textSecondary, fontSize: 13),
-              ),
-            ),
-          ]),
-
-          const Divider(height: 24, color: AppTheme.border),
-
-          Row(children: [
-            Text('TOTAL',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontSize: 18)),
-            const Spacer(),
-            Text(Formatters.currency(cart.total),
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      color: AppTheme.accent,
-                      fontSize: 24,
-                    )),
-          ]),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            height: 54,
-            child: ElevatedButton.icon(
-              onPressed:
-                  cart.isEmpty ? null : () => PaymentDialog.show(context),
-              icon: const Icon(Icons.payments_rounded),
-              label: const Text('BAYAR SEKARANG'),
-              style: ElevatedButton.styleFrom(
-                textStyle: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.w800),
-                backgroundColor: AppTheme.accent,
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ),
-        ]),
-      ),
-    ]);
-  }
-
-  Widget _cartTabs(BuildContext context, MultiCartState state, MultiCartNotifier notifier) {
     return Container(
-      height: 48, // Increased height for better tap target and visibility
+      height: 48,
       decoration: const BoxDecoration(
         color: AppTheme.surface,
         border: Border(bottom: BorderSide(color: AppTheme.border)),
@@ -278,110 +51,34 @@ class _CartPanelState extends ConsumerState<CartPanel> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Row(
-                children: List.generate(state.carts.length, (index) {
-                  final isActive = state.activeIndex == index;
-                  final cart = isActive ? ref.watch(cartProvider) : state.carts[index];
-                  
-                  // Label logic: Icon + Number, or Icon + Customer Initial
-                  final String numberLabel = (index + 1).toString();
-                  String? customerLabel;
-                  
-                  if (cart.customerName?.isNotEmpty == true) {
-                    final names = cart.customerName!.split(' ');
-                    if (names.length > 1) {
-                      customerLabel = '${names[0][0]}${names[1][0]}'.toUpperCase();
-                    } else {
-                      customerLabel = names[0].substring(0, names[0].length > 3 ? 3 : names[0].length);
-                    }
-                  }
-
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 6),
-                    child: InkWell(
-                      onTap: () => notifier.switchCart(index),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: isActive ? AppTheme.accent : AppTheme.surfaceAlt,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: isActive ? AppTheme.accent : AppTheme.border,
-                            width: 1.2,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Queue Icon instead of word "Antrian"
-                            Icon(
-                              Icons.person_outline_rounded,
-                              size: 16,
-                              color: isActive ? Colors.white : AppTheme.textSecondary,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              customerLabel != null ? '$numberLabel. $customerLabel' : numberLabel,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: isActive ? FontWeight.w900 : FontWeight.w600,
-                                color: isActive ? Colors.white : AppTheme.textPrimary,
-                              ),
-                            ),
-                            if (cart.itemCount > 0)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 6),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: isActive ? Colors.white24 : AppTheme.warning.withValues(alpha: 0.2),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    '${cart.itemCount}',
-                                    style: TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold,
-                                      color: isActive ? Colors.white : AppTheme.warning,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            if (state.carts.length > 1) ...[
-                              const SizedBox(width: 8),
-                              InkWell(
-                                onTap: () async {
-                                  final ok = await showConfirmDialog(
-                                    context,
-                                    title: 'Hapus Antrian',
-                                    content: 'Yakin hapus antrian #${index + 1}?',
-                                    confirmLabel: 'Hapus',
-                                    confirmColor: AppTheme.danger,
-                                  );
-                                  if (ok) notifier.removeCart(index);
-                                },
-                                child: Icon(
-                                  Icons.close_rounded,
-                                  size: 14,
-                                  color: isActive ? Colors.white70 : AppTheme.textMuted,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
+                children: List.generate(multiCart.carts.length, (index) {
+                  final isActive = multiCart.activeIndex == index;
+                  return _CartTabItem(
+                    index: index,
+                    isActive: isActive,
+                    cartState: multiCart.carts[index],
+                    onTap: () => multiCartNotifier.switchCart(index),
+                    showRemove: multiCart.carts.length > 1,
+                    onRemove: () async {
+                       final ok = await showConfirmDialog(
+                        context,
+                        title: 'Hapus Antrian',
+                        content: 'Yakin hapus antrian #${index + 1}?',
+                        confirmLabel: 'Hapus',
+                        confirmColor: AppTheme.danger,
+                      );
+                      if (ok) multiCartNotifier.removeCart(index);
+                    },
                   );
                 }),
               ),
             ),
           ),
           const VerticalDivider(width: 1, indent: 10, endIndent: 10, color: AppTheme.border),
-          // Dropdown for many tabs
-          _tabsDropdown(state, notifier),
+          _TabsDropdown(state: multiCart, notifier: multiCartNotifier),
           const VerticalDivider(width: 1, indent: 10, endIndent: 10, color: AppTheme.border),
           IconButton(
-            onPressed: () => notifier.addNewCart(),
+            onPressed: () => multiCartNotifier.addNewCart(),
             icon: const Icon(Icons.add_box_rounded, color: AppTheme.accent, size: 24),
             tooltip: 'Tambah Antrian',
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -390,16 +87,23 @@ class _CartPanelState extends ConsumerState<CartPanel> {
       ),
     );
   }
+}
 
-  Widget _tabsDropdown(MultiCartState state, MultiCartNotifier notifier) {
+class _TabsDropdown extends ConsumerWidget {
+  final MultiCartState state;
+  final MultiCartNotifier notifier;
+  const _TabsDropdown({required this.state, required this.notifier});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     return PopupMenuButton<int>(
       icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.textSecondary),
       tooltip: 'Daftar Antrian',
       onSelected: (index) => notifier.switchCart(index),
       offset: const Offset(0, 48),
       itemBuilder: (context) => List.generate(state.carts.length, (index) {
-        final cart = state.activeIndex == index ? ref.watch(cartProvider) : state.carts[index];
         final isActive = state.activeIndex == index;
+        final cart = isActive ? ref.watch(cartProvider) : state.carts[index];
         final name = cart.customerName?.isNotEmpty == true ? cart.customerName! : 'Antrian ${index + 1}';
         
         return PopupMenuItem<int>(
@@ -442,6 +146,402 @@ class _CartPanelState extends ConsumerState<CartPanel> {
   }
 }
 
+class _CartTabItem extends ConsumerWidget {
+  final int index;
+  final bool isActive;
+  final CartState cartState;
+  final VoidCallback onTap;
+  final VoidCallback onRemove;
+  final bool showRemove;
+
+  const _CartTabItem({
+    required this.index,
+    required this.isActive,
+    required this.cartState,
+    required this.onTap,
+    required this.onRemove,
+    required this.showRemove,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // If active, watch the live cart provider for metadata changes
+    final String? customerName = isActive 
+        ? ref.watch(cartProvider.select((s) => s.customerName))
+        : cartState.customerName;
+    
+    final int itemCount = isActive
+        ? ref.watch(cartProvider.select((s) => s.items.length))
+        : cartState.items.length;
+
+    final String numberLabel = (index + 1).toString();
+    String? customerLabel;
+    
+    if (customerName?.isNotEmpty == true) {
+      final names = customerName!.split(' ');
+      if (names.length > 1) {
+        customerLabel = '${names[0][0]}${names[1][0]}'.toUpperCase();
+      } else {
+        customerLabel = names[0].substring(0, names[0].length > 3 ? 3 : names[0].length);
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 6),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: isActive ? AppTheme.accent : AppTheme.surfaceAlt,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isActive ? AppTheme.accent : AppTheme.border,
+              width: 1.2,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.person_outline_rounded,
+                size: 16,
+                color: isActive ? Colors.white : AppTheme.textSecondary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                customerLabel != null ? '$numberLabel. $customerLabel' : numberLabel,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: isActive ? FontWeight.w900 : FontWeight.w600,
+                  color: isActive ? Colors.white : AppTheme.textPrimary,
+                ),
+              ),
+              if (itemCount > 0)
+                Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: isActive ? Colors.white24 : AppTheme.warning.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '$itemCount',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        color: isActive ? Colors.white : AppTheme.warning,
+                      ),
+                    ),
+                  ),
+                ),
+              if (showRemove) ...[
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: onRemove,
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 14,
+                    color: isActive ? Colors.white70 : AppTheme.textMuted,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CartHeaderSection extends ConsumerWidget {
+  const _CartHeaderSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final itemCount = ref.watch(cartProvider.select((s) => s.items.length));
+    final isEmpty = ref.watch(cartProvider.select((s) => s.isEmpty));
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppTheme.border)),
+      ),
+      child: Row(children: [
+        const Icon(Icons.shopping_cart_rounded,
+            color: AppTheme.accent, size: 20),
+        const SizedBox(width: 10),
+        Text('Keranjang', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(width: 8),
+        if (itemCount > 0)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppTheme.accent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text('$itemCount',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700)),
+          ),
+        const Spacer(),
+        if (!isEmpty)
+          TextButton.icon(
+            onPressed: () async {
+              final ok = await showConfirmDialog(context,
+                  title: 'Kosongkan Keranjang',
+                  content: 'Yakin kosongkan semua item di antrian ini?',
+                  confirmLabel: 'Kosongkan',
+                  confirmColor: AppTheme.warning);
+              if (ok) ref.read(cartProvider.notifier).clear();
+            },
+            icon: const Icon(Icons.clear_all_rounded, size: 16),
+            label: const Text('Hapus Item'),
+          ),
+      ]),
+    );
+  }
+}
+
+class _CartListSection extends ConsumerStatefulWidget {
+  const _CartListSection();
+
+  @override
+  ConsumerState<_CartListSection> createState() => _CartListSectionState();
+}
+
+class _CartListSectionState extends ConsumerState<_CartListSection> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = ref.watch(cartProvider.select((s) => s.items));
+    final isEmpty = items.isEmpty;
+
+    return Expanded(
+      child: isEmpty
+          ? const EmptyState(
+              icon: Icons.shopping_cart_outlined,
+              title: 'Keranjang kosong',
+              subtitle: 'Pilih produk untuk ditambahkan',
+            )
+          : Scrollbar(
+              controller: _scrollController,
+              thumbVisibility: true,
+              child: ListView.separated(
+                controller: _scrollController,
+                padding: const EdgeInsets.all(16),
+                itemCount: items.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (_, i) {
+                  final itemId = items[i].id;
+                  return CartItemTile(
+                    key: ValueKey('cart_item_$itemId'),
+                    itemId: itemId,
+                  );
+                },
+              ),
+            ),
+    );
+  }
+}
+
+class _CartTotalsSection extends ConsumerStatefulWidget {
+  const _CartTotalsSection();
+
+  @override
+  ConsumerState<_CartTotalsSection> createState() => _CartTotalsSectionState();
+}
+
+class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
+  late final TextEditingController _discountCtrl;
+  late final FocusNode _discountFocus;
+  late final TextEditingController _customerCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    final cart = ref.read(cartProvider);
+    _discountCtrl = TextEditingController(
+        text: cart.transDiscountValue == 0 ? '' : cart.transDiscountValue.toStringAsFixed(0));
+    _discountFocus = FocusNode();
+    _customerCtrl = TextEditingController(text: cart.customerName ?? '');
+  }
+
+  @override
+  void dispose() {
+    _discountCtrl.dispose();
+    _discountFocus.dispose();
+    _customerCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Watch specific properties to minimize rebuilds
+    final cart = ref.watch(cartProvider);
+    
+    // We still need most of the cart state here for calculations, 
+    // but at least this widget is isolated.
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppTheme.border)),
+      ),
+      child: Column(children: [
+        TextField(
+          controller: _customerCtrl,
+          style: const TextStyle(fontSize: 13),
+          decoration: const InputDecoration(
+            hintText: 'Nama Pelanggan (Opsional)',
+            isDense: true,
+            prefixIcon: Icon(Icons.person_outline, size: 16),
+            contentPadding: EdgeInsets.symmetric(vertical: 8),
+          ),
+          onChanged: (v) => ref
+              .read(cartProvider.notifier)
+              .setCustomer(null, v.isEmpty ? null : v),
+          onSubmitted: (_) =>
+              cart.isEmpty ? null : PaymentDialog.show(context),
+        ),
+        const SizedBox(height: 12),
+
+        _TotalRow(label: 'Subtotal', value: cart.grossSubtotal),
+
+        if (cart.itemDiscountTotal > 0)
+          _TotalRow(
+              label: 'Potongan Item',
+              value: -cart.itemDiscountTotal,
+              valueColor: AppTheme.success),
+
+        const SizedBox(height: 8),
+
+        Row(children: [
+          const Text('Diskon Transaksi',
+              style:
+                  TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+          const Spacer(),
+          SizedBox(
+            width: 50,
+            child: DropdownButton<DiscountType>(
+              value: cart.transDiscountType,
+              isDense: true,
+              isExpanded: true,
+              underline: const SizedBox(),
+              style: const TextStyle(fontSize: 12, color: AppTheme.accent),
+              items: const [
+                DropdownMenuItem(
+                    value: DiscountType.fixed, child: Text('Rp')),
+                DropdownMenuItem(
+                    value: DiscountType.percentage, child: Text('%')),
+              ],
+              onChanged: (v) => ref
+                  .read(cartProvider.notifier)
+                  .setTransDiscount(cart.transDiscountValue, v!),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 80,
+            child: TextField(
+              controller: _discountCtrl,
+              focusNode: _discountFocus,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold),
+              decoration: const InputDecoration(
+                isDense: true,
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              ),
+              onChanged: (v) {
+                final numericValue = v.replaceAll('.', '');
+                ref.read(cartProvider.notifier).setTransDiscount(
+                    double.tryParse(numericValue) ?? 0, cart.transDiscountType);
+              },
+              inputFormatters: [CurrencyInputFormatter()],
+              onSubmitted: (_) =>
+                  cart.isEmpty ? null : PaymentDialog.show(context),
+            ),
+          ),
+        ]),
+
+        const SizedBox(height: 8),
+
+        Row(children: [
+          const Text('PPN (11%)',
+              style:
+                  TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+          const Spacer(),
+          Switch.adaptive(
+            value: cart.taxEnabled,
+            onChanged: (_) => ref.read(cartProvider.notifier).toggleTax(),
+            activeTrackColor: AppTheme.accent,
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 80,
+            child: Text(
+              Formatters.currency(cart.taxAmount),
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                  color: AppTheme.textSecondary, fontSize: 13),
+            ),
+          ),
+        ]),
+
+        const Divider(height: 24, color: AppTheme.border),
+
+        Row(children: [
+          Text('TOTAL',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontSize: 18)),
+          const Spacer(),
+          Text(Formatters.currency(cart.total),
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    color: AppTheme.accent,
+                    fontSize: 24,
+                  )),
+        ]),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          height: 54,
+          child: ElevatedButton.icon(
+            onPressed:
+                cart.isEmpty ? null : () => PaymentDialog.show(context),
+            icon: const Icon(Icons.payments_rounded),
+            label: const Text('BAYAR SEKARANG'),
+            style: ElevatedButton.styleFrom(
+              textStyle: const TextStyle(
+                  fontSize: 16, fontWeight: FontWeight.w800),
+              backgroundColor: AppTheme.accent,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+
 class _TotalRow extends StatelessWidget {
   final String label;
   final double value;
@@ -468,8 +568,8 @@ class _TotalRow extends StatelessWidget {
 }
 
 class CartItemTile extends ConsumerStatefulWidget {
-  final CartItem item;
-  const CartItemTile({super.key, required this.item});
+  final String itemId;
+  const CartItemTile({super.key, required this.itemId});
 
   @override
   ConsumerState<CartItemTile> createState() => _CartItemTileState();
@@ -483,18 +583,9 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
   @override
   void initState() {
     super.initState();
-    _qtyCtrl = TextEditingController(text: widget.item.quantity.toString());
+    final item = ref.read(cartProvider).items.firstWhere((i) => i.id == widget.itemId);
+    _qtyCtrl = TextEditingController(text: item.quantity.toString());
     _qtyFocus = FocusNode();
-  }
-
-  @override
-  void didUpdateWidget(CartItemTile old) {
-    super.didUpdateWidget(old);
-    if (old.item.quantity != widget.item.quantity) {
-      if (!_qtyFocus.hasFocus) {
-        _qtyCtrl.text = widget.item.quantity.toString();
-      }
-    }
   }
 
   @override
@@ -509,6 +600,9 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
       setState(() => _showProfit = false);
       return;
     }
+
+    final settings = ref.read(settingsProvider);
+    final correctPin = settings.securityPin ?? '1234';
 
     final pinController = TextEditingController();
     final ok = await showDialog<bool>(
@@ -527,12 +621,12 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
               keyboardType: TextInputType.number,
               autofocus: true,
               decoration: const InputDecoration(
-                labelText: 'PIN Owner',
-                hintText: 'Default: 1234',
+                labelText: 'PIN Keamanan',
+                hintText: 'Masukkan PIN Owner',
                 prefixIcon: Icon(Icons.lock_outline, size: 20),
               ),
               onSubmitted: (_) {
-                 if (pinController.text == '1234') {
+                 if (pinController.text == correctPin) {
                     Navigator.pop(context, true);
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PIN Salah!')));
@@ -545,8 +639,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Batal')),
           ElevatedButton(
             onPressed: () {
-              // Default PIN 1234
-              if (pinController.text == '1234') {
+              if (pinController.text == correctPin) {
                 Navigator.pop(context, true);
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PIN Salah!')));
@@ -565,11 +658,26 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
 
   @override
   Widget build(BuildContext context) {
-    final item = widget.item;
+    final item = ref.watch(cartProvider.select(
+      (s) => s.items.isEmpty 
+          ? null 
+          : s.items.cast<CartItem?>().firstWhere((i) => i?.id == widget.itemId, orElse: () => null),
+    ));
+    
+    if (item == null) return const SizedBox.shrink();
+
     final notifier = ref.read(cartProvider.notifier);
 
+    // Sync quantity controller if changed externally
+    if (!_qtyFocus.hasFocus) {
+      final qStr = item.quantity.toString();
+      if (_qtyCtrl.text != qStr) {
+        _qtyCtrl.text = qStr;
+      }
+    }
+
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: AppTheme.surfaceAlt,
         borderRadius: BorderRadius.circular(10),
@@ -582,7 +690,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                 style: Theme.of(context)
                     .textTheme
                     .titleMedium
-                    ?.copyWith(fontSize: 13),
+                    ?.copyWith(fontSize: 13, fontWeight: FontWeight.bold),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1),
           ),
@@ -595,146 +703,166 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
           ),
         ]),
         const SizedBox(height: 8),
-        Row(children: [
-          if (item.product.allUnits.length > 1)
-            SizedBox(
-              width: 80,
-              child: DropdownButton<String>(
-                value: item.selectedUnit.unitName,
-                isDense: true,
-                isExpanded: true,
-                underline: const SizedBox(),
-                dropdownColor: AppTheme.surfaceAlt,
-                style: const TextStyle(
-                    color: AppTheme.accent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600),
-                items: item.product.allUnits
-                    .map((u) => DropdownMenuItem(
-                          value: u.unitName,
-                          child: Text(u.unitName, overflow: TextOverflow.ellipsis),
-                        ))
-                    .toList(),
-                onChanged: (v) {
-                  final u =
-                      item.product.allUnits.firstWhere((u) => u.unitName == v);
-                  notifier.updateUnit(item.id, u);
-                },
-              ),
-            )
-          else
-            Text(item.selectedUnit.unitName,
-                style: const TextStyle(
-                    color: AppTheme.accent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600)),
-          const Spacer(),
-          QtyButton(
-              icon: Icons.remove,
-              onTap: () {
-                final q = item.quantity - 1;
-                notifier.updateQuantity(item.id, q);
-                _qtyCtrl.text = q <= 0 ? '0' : q.toString();
-              }),
-          SizedBox(
-            width: 50,
-            child: ScrollableQtyField(
-              controller: _qtyCtrl,
-              onChanged: (v) => notifier.updateQuantity(item.id, v),
-              child: TextField(
-                controller: _qtyCtrl,
-                focusNode: _qtyFocus,
-                textAlign: TextAlign.center,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600),
-                decoration: const InputDecoration(
-                  isDense: true,
-                  contentPadding: EdgeInsets.symmetric(vertical: 6),
-                  border: InputBorder.none,
-                ),
-                onChanged: (v) {
-                  final qty = double.tryParse(v) ?? 0;
-                  if (qty > 0) {
-                    notifier.updateQuantity(item.id, qty);
-                  }
-                },
-                onSubmitted: (v) =>
-                    notifier.updateQuantity(item.id, double.tryParse(v) ?? 1),
-              ),
-            ),
-          ),
-          QtyButton(
-              icon: Icons.add,
-              onTap: () {
-                final q = item.quantity + 1;
-                notifier.updateQuantity(item.id, q);
-                _qtyCtrl.text = q.toString();
-              }),
-        ]),
-        const SizedBox(height: 12),
-        const Divider(height: 1, color: AppTheme.border),
-        const SizedBox(height: 12),
-        
-        // Inline Pricing Controls
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Price Override
+            // 1. Qty & Unit Section
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Unit / Qty', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    // Unit Box
+                    _StandardBox(
+                      width: 70,
+                      child: item.product.allUnits.length > 1
+                          ? DropdownButton<String>(
+                              value: item.selectedUnit.unitName,
+                              isDense: true,
+                              isExpanded: true,
+                              underline: const SizedBox(),
+                              dropdownColor: AppTheme.surfaceAlt,
+                              style: const TextStyle(
+                                  color: AppTheme.accent,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600),
+                              items: item.product.allUnits
+                                  .map((u) => DropdownMenuItem(
+                                        value: u.unitName,
+                                        child: Text(u.unitName),
+                                      ))
+                                  .toList(),
+                              onChanged: (v) {
+                                final u =
+                                    item.product.allUnits.firstWhere((u) => u.unitName == v);
+                                notifier.updateUnit(item.id, u);
+                              },
+                            )
+                          : Center(
+                              child: Text(item.selectedUnit.unitName,
+                                  style: const TextStyle(
+                                      color: AppTheme.accent,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600)),
+                            ),
+                    ),
+                    const SizedBox(width: 8),
+                    
+                    // Qty Controls
+                    QtyButton(
+                        icon: Icons.remove,
+                        onTap: () {
+                          final q = item.quantity - 1;
+                          notifier.updateQuantity(item.id, q);
+                          _qtyCtrl.text = q <= 0 ? '0' : q.toString();
+                        }),
+                    const SizedBox(width: 4),
+                    _StandardBox(
+                      width: 45,
+                      child: ScrollableQtyField(
+                        controller: _qtyCtrl,
+                        onChanged: (v) => notifier.updateQuantity(item.id, v),
+                        child: TextField(
+                          controller: _qtyCtrl,
+                          focusNode: _qtyFocus,
+                          textAlign: TextAlign.center,
+                          keyboardType:
+                              const TextInputType.numberWithOptions(decimal: true),
+                          style: const TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600),
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                          ),
+                          onChanged: (v) {
+                            final qty = double.tryParse(v) ?? 0;
+                            if (qty > 0) {
+                              notifier.updateQuantity(item.id, qty);
+                            }
+                          },
+                          onSubmitted: (v) =>
+                              notifier.updateQuantity(item.id, double.tryParse(v) ?? 1),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    QtyButton(
+                        icon: Icons.add,
+                        onTap: () {
+                          final q = item.quantity + 1;
+                          notifier.updateQuantity(item.id, q);
+                          _qtyCtrl.text = q.toString();
+                        }),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(width: 12),
+            // 2. Price Override Section
             Expanded(
               flex: 4,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Harga Jual (Override)', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                  Text('Harga Jual (${item.selectedUnit.unitName})', 
+                    style: const TextStyle(fontSize: 10, color: AppTheme.textMuted),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   const SizedBox(height: 4),
-                  _InlineTextField(
-                    key: ValueKey('price_${item.id}'), // Fixed key to prevent rebuild lag
-                    initialValue: item.soldPrice.toStringAsFixed(0),
-                    onChanged: (v) => notifier.updateSoldPrice(item.id, double.tryParse(v) ?? item.originalPrice),
-                    prefixText: 'Rp ',
+                  _StandardBox(
+                    child: _InlineTextField(
+                      key: ValueKey('price_${item.id}_${item.selectedUnit.unitName}'),
+                      initialValue: item.soldPrice.toStringAsFixed(0),
+                      onChanged: (v) => notifier.updateSoldPrice(item.id, double.tryParse(v) ?? item.originalPrice),
+                      prefixText: 'Rp ',
+                      isBare: true,
+                    ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: 12),
-            // Discount Settings
+            const SizedBox(width: 8),
+            // 3. Discount Section
             Expanded(
-              flex: 5,
+              flex: 4,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Potongan Item', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                  const Text('Potongan', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
                   const SizedBox(height: 4),
                   Row(
                     children: [
                       Expanded(
-                        child: _InlineTextField(
-                          key: ValueKey('discount_${item.id}'), // Fixed key to prevent rebuild lag
-                          initialValue: item.discountValue.toStringAsFixed(0),
-                          onChanged: (v) => notifier.setItemDiscount(item.id, double.tryParse(v) ?? 0, item.discountType),
+                        child: _StandardBox(
+                          child: _InlineTextField(
+                            key: ValueKey('discount_${item.id}'),
+                            initialValue: item.discountValue.toStringAsFixed(0),
+                            onChanged: (v) => notifier.setItemDiscount(item.id, double.tryParse(v) ?? 0, item.discountType),
+                            isBare: true,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 4),
-                      Container(
-                        height: 32,
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        decoration: BoxDecoration(
-                          color: AppTheme.surface,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppTheme.border),
-                        ),
+                      _StandardBox(
+                        width: 50,
                         child: DropdownButton<DiscountType>(
                           value: item.discountType,
                           underline: const SizedBox(),
                           isDense: true,
+                          isExpanded: true,
+                          alignment: Alignment.center,
                           style: const TextStyle(fontSize: 11, color: AppTheme.accent, fontWeight: FontWeight.bold),
                           items: const [
-                            DropdownMenuItem(value: DiscountType.fixed, child: Text('Rp')),
-                            DropdownMenuItem(value: DiscountType.percentage, child: Text('%')),
+                            DropdownMenuItem(value: DiscountType.fixed, child: Center(child: Text('Rp'))),
+                            DropdownMenuItem(value: DiscountType.percentage, child: Center(child: Text('%'))),
                           ],
                           onChanged: (v) => notifier.setItemDiscount(item.id, item.discountValue, v!),
                         ),
@@ -751,12 +879,12 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
         
         // Profit Indicator and Subtotal
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             GestureDetector(
               onTap: _verifyPinAndShowProfit,
               child: _ProfitIndicator(item: item, isActive: _showProfit),
             ),
-            const Spacer(),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -769,8 +897,8 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                 Text(Formatters.currency(item.subtotal),
                     style: const TextStyle(
                         color: AppTheme.accent,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15)),
+                        fontWeight: FontWeight.w900,
+                        fontSize: 16)),
               ],
             ),
           ],
@@ -999,8 +1127,15 @@ class _InlineTextField extends StatefulWidget {
   final String initialValue;
   final Function(String) onChanged;
   final String? prefixText;
+  final bool isBare;
 
-  const _InlineTextField({super.key, required this.initialValue, required this.onChanged, this.prefixText});
+  const _InlineTextField({
+    super.key, 
+    required this.initialValue, 
+    required this.onChanged, 
+    this.prefixText,
+    this.isBare = false,
+  });
 
   @override
   State<_InlineTextField> createState() => _InlineTextFieldState();
@@ -1034,6 +1169,28 @@ class _InlineTextFieldState extends State<_InlineTextField> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.isBare) {
+      return TextField(
+        controller: _controller,
+        onChanged: (v) {
+          final numericValue = v.replaceAll('.', '');
+          widget.onChanged(numericValue);
+        },
+        inputFormatters: [CurrencyInputFormatter()],
+        keyboardType: TextInputType.number,
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+        decoration: InputDecoration(
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          prefixText: widget.prefixText,
+          prefixStyle: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+        ),
+      );
+    }
+
     return SizedBox(
       height: 32,
       child: TextField(
@@ -1066,6 +1223,30 @@ class _InlineTextFieldState extends State<_InlineTextField> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _StandardBox extends StatelessWidget {
+  final Widget child;
+  final double? width;
+  final double height;
+
+  const _StandardBox({required this.child, this.width, this.height = 32});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppTheme.border),
+      ),
+      alignment: Alignment.center,
+      child: child,
     );
   }
 }
@@ -1163,8 +1344,8 @@ class QtyButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 26,
-        height: 26,
+        width: 24,
+        height: 24,
         decoration: BoxDecoration(
           color: AppTheme.border,
           borderRadius: BorderRadius.circular(6),
