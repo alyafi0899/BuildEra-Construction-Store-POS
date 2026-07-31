@@ -41,8 +41,10 @@ class StoreSettings {
   final String? qrisImagePath; // New: Local path for QRIS barcode
   final String? securityPin; // New: PIN for sensitive data
   final double receiptWidth; // New: Receipt paper width in mm
-  final String subscriptionStatus; // 'active', 'expired', 'none'
+  final String subscriptionStatus; // 'active', 'expired', 'trial', 'none'
+  final String? subscriptionType; // 'monthly', 'yearly', 'none'
   final DateTime? subscriptionExpiry;
+  final DateTime? trialExpiry;
   final String? xenditCustomerId;
 
   const StoreSettings({
@@ -59,7 +61,9 @@ class StoreSettings {
     this.securityPin,
     this.receiptWidth = 80.0,
     this.subscriptionStatus = 'none',
+    this.subscriptionType,
     this.subscriptionExpiry,
+    this.trialExpiry,
     this.xenditCustomerId,
   });
 
@@ -78,7 +82,9 @@ class StoreSettings {
       'securityPin': securityPin,
       'receiptWidth': receiptWidth,
       'subscription_status': subscriptionStatus,
+      'subscription_type': subscriptionType,
       'subscription_expiry': subscriptionExpiry?.toIso8601String(),
+      'trial_expiry': trialExpiry?.toIso8601String(),
       'xendit_customer_id': xenditCustomerId,
     };
   }
@@ -101,7 +107,9 @@ class StoreSettings {
       securityPin: map['securityPin']?.toString(),
       receiptWidth: (map['receiptWidth'] as num?)?.toDouble() ?? 80.0,
       subscriptionStatus: map['subscription_status']?.toString() ?? 'none',
+      subscriptionType: map['subscription_type']?.toString(),
       subscriptionExpiry: map['subscription_expiry'] != null ? DateTime.tryParse(map['subscription_expiry'].toString()) : null,
+      trialExpiry: map['trial_expiry'] != null ? DateTime.tryParse(map['trial_expiry'].toString()) : null,
       xenditCustomerId: map['xendit_customer_id']?.toString(),
     );
   }
@@ -124,7 +132,9 @@ class StoreSettings {
     String? securityPin,
     double? receiptWidth,
     String? subscriptionStatus,
+    String? subscriptionType,
     DateTime? subscriptionExpiry,
+    DateTime? trialExpiry,
     String? xenditCustomerId,
   }) {
     return StoreSettings(
@@ -141,7 +151,9 @@ class StoreSettings {
       securityPin: securityPin ?? this.securityPin,
       receiptWidth: receiptWidth ?? this.receiptWidth,
       subscriptionStatus: subscriptionStatus ?? this.subscriptionStatus,
+      subscriptionType: subscriptionType ?? this.subscriptionType,
       subscriptionExpiry: subscriptionExpiry ?? this.subscriptionExpiry,
+      trialExpiry: trialExpiry ?? this.trialExpiry,
       xenditCustomerId: xenditCustomerId ?? this.xenditCustomerId,
     );
   }

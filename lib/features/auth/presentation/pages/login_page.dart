@@ -1,3 +1,4 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -42,12 +43,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         _passCtrl.text,
       );
       // AuthGate will handle navigation
+    } on AuthException catch (e) {
+      if (mounted) {
+        String msg = e.message;
+        if (msg.contains('Invalid login credentials')) {
+          msg = 'Email atau password salah.';
+        } else if (msg.contains('Email not confirmed')) {
+          msg = 'Email Anda belum dikonfirmasi. Silakan cek inbox.';
+        }
+        showError(context, msg);
+      }
     } catch (e) {
       if (mounted) {
-        String msg = 'Gagal masuk. Silakan cek email dan password Anda.';
-        if (e.toString().contains('user-not-found')) msg = 'Email tidak terdaftar.';
-        if (e.toString().contains('wrong-password')) msg = 'Password salah.';
-        showError(context, msg);
+        showError(context, 'Terjadi kesalahan sistem: $e');
       }
     } finally {
       if (mounted) setState(() => _loading = false);

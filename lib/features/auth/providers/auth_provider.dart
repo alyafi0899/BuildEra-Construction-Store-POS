@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:supabase_flutter/supabase_flutter.dart' as sb;
+import 'package:supabase_flutter/supabase_flutter.dart' as sb hide AuthUser;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/auth_user.dart';
 

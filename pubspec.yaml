@@ -20,6 +20,7 @@ dependencies:
   excel: ^4.0.6
   shared_preferences: ^2.5.3
   window_manager: ^0.4.3
+  url_launcher: ^6.3.1
   pdf: ^3.11.1
   printing: ^5.13.2
   share_plus: ^10.1.4

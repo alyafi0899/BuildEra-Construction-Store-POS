@@ -38,7 +38,7 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
     try {
       await ref.read(authRepositoryProvider).reloadUser();
       
-      // The reloadUser() updates Firebase Auth state, 
+      // The reloadUser() updates Supabase Auth state,
       // which will eventually update authStateProvider.
       // But we can check current state immediately for feedback.
       final user = ref.read(authStateProvider).value;

@@ -217,8 +217,8 @@ class _MainShellState extends ConsumerState<MainShell> {
     ref.listen(cartProvider, (prev, next) {
       final user = ref.read(authStateProvider).value;
       final settings = ref.read(appSettingsProvider);
-      final supabase = ref.read(supabaseClientProvider);
       if (user != null && settings.isCustomerDisplayEnabled) {
+        final supabase = ref.read(supabaseClientProvider);
         CustomerDisplayBridge.syncCart(supabase, user.uid, next);
       }
     });
