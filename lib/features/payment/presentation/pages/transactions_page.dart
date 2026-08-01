@@ -64,14 +64,16 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
                   actions: [
                     IconButton(
                       onPressed: () => ref.refresh(transactionsProvider),
-                      icon: const Icon(Icons.refresh_rounded, color: AppTheme.accent),
+                      icon: const Icon(Icons.refresh_rounded,
+                          color: AppTheme.accent),
                     ),
                   ],
                 ),
 
                 // Filters Bar
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   decoration: const BoxDecoration(
                     color: AppTheme.surface,
                     border: Border(bottom: BorderSide(color: AppTheme.border)),
@@ -86,7 +88,10 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
                               focusNode: _searchFocus, // Use FocusNode
                               hintText: 'Cari nomor invoice...',
                               onChanged: (v) => setState(() => _search = v),
-                              onClear: () => setState(() { _search = ''; _searchCtrl.clear(); }),
+                              onClear: () => setState(() {
+                                _search = '';
+                                _searchCtrl.clear();
+                              }),
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -97,13 +102,20 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
                         const SizedBox(height: 12),
                         Row(
                           children: [
-                            const Text('Status Piutang:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textSecondary)),
+                            const Text('Status Piutang:',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.textSecondary)),
                             const SizedBox(width: 12),
-                            _filterChip('Semua', _debtPaidFilter == null, () => setState(() => _debtPaidFilter = null)),
+                            _filterChip('Semua', _debtPaidFilter == null,
+                                () => setState(() => _debtPaidFilter = null)),
                             const SizedBox(width: 8),
-                            _filterChip('Lunas', _debtPaidFilter == true, () => setState(() => _debtPaidFilter = true)),
+                            _filterChip('Lunas', _debtPaidFilter == true,
+                                () => setState(() => _debtPaidFilter = true)),
                             const SizedBox(width: 8),
-                            _filterChip('Belum Lunas', _debtPaidFilter == false, () => setState(() => _debtPaidFilter = false)),
+                            _filterChip('Belum Lunas', _debtPaidFilter == false,
+                                () => setState(() => _debtPaidFilter = false)),
                           ],
                         ),
                       ],
@@ -118,20 +130,25 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
                     data: (txs) {
                       // Apply filters
                       final filtered = txs.where((t) {
-                        final matchSearch = _search.isEmpty || t.invoiceNumber.toLowerCase().contains(_search.toLowerCase());
-                        final matchMethod = _methodFilter == null || t.paymentMethod == _methodFilter;
-                        
+                        final matchSearch = _search.isEmpty ||
+                            t.invoiceNumber
+                                .toLowerCase()
+                                .contains(_search.toLowerCase());
+                        final matchMethod = _methodFilter == null ||
+                            t.paymentMethod == _methodFilter;
+
                         bool matchDebt = true;
-                        if (_methodFilter == AppConstants.paymentPiutang && _debtPaidFilter != null) {
-                          // We need to resolve debt status. 
+                        if (_methodFilter == AppConstants.paymentPiutang &&
+                            _debtPaidFilter != null) {
+                          // We need to resolve debt status.
                           // Since we can't easily watch debts for ALL transactions here efficiently,
                           // we check the state from debt repository if possible or just rely on simple filtering if data available.
                           // For now, let's assume we filter by what's loaded.
                           // Actually, we can't accurately filter without the debt status data.
-                          // I'll skip deep debt filtering in the main list for now to avoid provider complexity, 
+                          // I'll skip deep debt filtering in the main list for now to avoid provider complexity,
                           // or I'll implement it if I find a clean way.
                         }
-                        
+
                         return matchSearch && matchMethod && matchDebt;
                       }).toList();
 
@@ -139,7 +156,8 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
                         return const EmptyState(
                           icon: Icons.receipt_long_outlined,
                           title: 'Transaksi tidak ditemukan',
-                          subtitle: 'Sesuaikan filter atau kata kunci pencarian Anda',
+                          subtitle:
+                              'Sesuaikan filter atau kata kunci pencarian Anda',
                         );
                       }
                       return Scrollbar(
@@ -149,7 +167,8 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
                           controller: _listScrollController,
                           padding: const EdgeInsets.all(20),
                           itemCount: filtered.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 8),
                           itemBuilder: (_, i) {
                             final tx = filtered[i];
                             return _TxCard(
@@ -158,7 +177,8 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
                               selected: _selected?.id == tx.id,
                               onTap: () {
                                 setState(() {
-                                  _selected = _selected?.id == tx.id ? null : tx;
+                                  _selected =
+                                      _selected?.id == tx.id ? null : tx;
                                 });
                               },
                             );
@@ -179,7 +199,8 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
               child: Container(
                 decoration: const BoxDecoration(
                   color: AppTheme.surface,
-                  border: Border(left: BorderSide(color: AppTheme.border, width: 1)),
+                  border: Border(
+                      left: BorderSide(color: AppTheme.border, width: 1)),
                 ),
                 child: _TxDetail(
                   key: ValueKey('tx_detail_view_${_selected!.id}'),
@@ -209,13 +230,15 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
         hint: const Text('Semua Metode', style: TextStyle(fontSize: 13)),
         dropdownColor: AppTheme.surfaceAlt,
         items: [
-          const DropdownMenuItem(value: null, child: Text('Semua Metode', style: TextStyle(fontSize: 13))),
+          const DropdownMenuItem(
+              value: null,
+              child: Text('Semua Metode', style: TextStyle(fontSize: 13))),
           ...AppConstants.paymentMethods.map((m) => DropdownMenuItem(
-            value: m,
-            child: Text(m, style: const TextStyle(fontSize: 13)),
-          )),
+                value: m,
+                child: Text(m, style: const TextStyle(fontSize: 13)),
+              )),
         ],
-        onChanged: (v) => setState(() { 
+        onChanged: (v) => setState(() {
           _methodFilter = v;
           if (v != AppConstants.paymentPiutang) _debtPaidFilter = null;
         }),
@@ -230,15 +253,18 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
-          color: active ? AppTheme.accent.withValues(alpha: 0.15) : AppTheme.surfaceAlt,
+          color: active
+              ? AppTheme.accent.withValues(alpha: 0.15)
+              : AppTheme.surfaceAlt,
           border: Border.all(color: active ? AppTheme.accent : AppTheme.border),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Text(label, style: TextStyle(
-          fontSize: 11, 
-          fontWeight: active ? FontWeight.bold : FontWeight.normal,
-          color: active ? AppTheme.accent : AppTheme.textSecondary,
-        )),
+        child: Text(label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: active ? FontWeight.bold : FontWeight.normal,
+              color: active ? AppTheme.accent : AppTheme.textSecondary,
+            )),
       ),
     );
   }
@@ -246,49 +272,68 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
 
 class _TxCard extends ConsumerWidget {
   final Transaction tx;
-  final bool        selected;
+  final bool selected;
   final VoidCallback onTap;
-  const _TxCard({super.key, required this.tx, required this.selected, required this.onTap});
+  const _TxCard(
+      {super.key,
+      required this.tx,
+      required this.selected,
+      required this.onTap});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDebt = tx.paymentMethod == AppConstants.paymentPiutang;
-    
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color:        selected ? AppTheme.accent.withValues(alpha: 0.1) : AppTheme.card,
+          color:
+              selected ? AppTheme.accent.withValues(alpha: 0.1) : AppTheme.card,
           borderRadius: BorderRadius.circular(10),
-          border:       Border.all(color: selected ? AppTheme.accent : AppTheme.border),
+          border:
+              Border.all(color: selected ? AppTheme.accent : AppTheme.border),
         ),
         child: Row(children: [
           Container(
-            width: 40, height: 40,
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
-              color:        AppTheme.accent.withValues(alpha: 0.1),
+              color: AppTheme.accent.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.receipt_long_rounded, color: AppTheme.accent, size: 20),
+            child: const Icon(Icons.receipt_long_rounded,
+                color: AppTheme.accent, size: 20),
           ),
           const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(tx.invoiceNumber,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontFamily: 'monospace', fontSize: 13)),
-            Text(Formatters.dateTime(tx.createdAt), style: Theme.of(context).textTheme.bodySmall),
-          ])),
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text(tx.invoiceNumber,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontFamily: 'monospace', fontSize: 13)),
+                Text(Formatters.dateTime(tx.createdAt),
+                    style: Theme.of(context).textTheme.bodySmall),
+              ])),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text(Formatters.currency(tx.total),
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppTheme.accent)),
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(color: AppTheme.accent)),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (isDebt)
-                  _DebtStatusBadge(tx: tx),
+                if (isDebt) _DebtStatusBadge(tx: tx),
                 const SizedBox(width: 4),
-                StatusChip(label: tx.paymentMethod, color: _methodColor(tx.paymentMethod)),
+                StatusChip(
+                    label: tx.paymentMethod,
+                    color: _methodColor(tx.paymentMethod)),
               ],
             ),
           ]),
@@ -299,10 +344,14 @@ class _TxCard extends ConsumerWidget {
 
   Color _methodColor(String m) {
     switch (m) {
-      case 'Tunai':  return AppTheme.success;
-      case 'QRIS':   return AppTheme.info;
-      case 'Debit':  return AppTheme.accent;
-      default:       return AppTheme.textSecondary;
+      case 'Tunai':
+        return AppTheme.success;
+      case 'QRIS':
+        return AppTheme.info;
+      case 'Debit':
+        return AppTheme.accent;
+      default:
+        return AppTheme.textSecondary;
     }
   }
 }
@@ -314,10 +363,10 @@ class _DebtStatusBadge extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (tx.customerId == null) return const SizedBox();
-    
+
     // Using a more stable watch strategy
     final debtsAsync = ref.watch(debtsProvider(tx.customerId!));
-    
+
     return debtsAsync.maybeWhen(
       data: (debts) {
         final d = debts.where((d) => d.transactionId == tx.id).firstOrNull;
@@ -368,43 +417,72 @@ class _TxDetailState extends ConsumerState<_TxDetail> {
             children: [
               Row(
                 children: [
-                  Text('Detail Transaksi', style: Theme.of(context).textTheme.titleLarge),
+                  Text('Detail Transaksi',
+                      style: Theme.of(context).textTheme.titleLarge),
                   const Spacer(),
                   IconButton(
                     onPressed: () async {
                       final ok = await showConfirmDialog(context,
                           title: 'Hapus Transaksi',
-                          content: 'Yakin ingin menghapus transaksi ini? Stok produk akan dikembalikan secara otomatis.',
+                          content:
+                              'Yakin ingin menghapus transaksi ini? Stok produk akan dikembalikan secara otomatis.',
                           confirmLabel: 'HAPUS',
                           confirmColor: AppTheme.danger);
                       if (ok) {
                         if (context.mounted) {
                           requirePin(context, ref, () async {
-                            await ref.read(transactionsActionProvider.notifier).deleteTransaction(tx.id);
-                            if (context.mounted) showSuccess(context, 'Transaksi berhasil dihapus');
+                            await ref
+                                .read(transactionsActionProvider.notifier)
+                                .deleteTransaction(tx.id);
+                            if (context.mounted) {
+                              showSuccess(
+                                  context, 'Transaksi berhasil dihapus');
+                            }
                           });
                         }
                       }
                     },
-                    icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.danger),
+                    icon: const Icon(Icons.delete_outline,
+                        size: 20, color: AppTheme.danger),
                     tooltip: 'Hapus Transaksi',
                   ),
                   IconButton(
-                    onPressed: () => _handlePiutangAction(tx, settings, (Customer c, Debt d, List<DebtPayment> p, StoreSettings s) => DebtInvoiceHelper.printDebtInvoice(c, d, p, s), InvoiceHelper.printInvoice),
-                    icon: const Icon(Icons.print_rounded, size: 20, color: AppTheme.accent),
+                    onPressed: () => _handlePiutangAction(
+                        tx,
+                        settings,
+                        (Customer c, Debt d, List<DebtPayment> p,
+                                StoreSettings s) =>
+                            DebtInvoiceHelper.printDebtInvoice(c, d, p, s),
+                        InvoiceHelper.printInvoice),
+                    icon: const Icon(Icons.print_rounded,
+                        size: 20, color: AppTheme.accent),
                     tooltip: 'Cetak Invoice',
                   ),
                   IconButton(
-                    onPressed: () => _handlePiutangAction(tx, settings, (Customer c, Debt d, List<DebtPayment> p, StoreSettings s) => DebtInvoiceHelper.downloadDebtInvoice(c, d, p, s), InvoiceHelper.saveInvoice),
-                    icon: const Icon(Icons.download, size: 20, color: AppTheme.accent),
+                    onPressed: () => _handlePiutangAction(
+                        tx,
+                        settings,
+                        (Customer c, Debt d, List<DebtPayment> p,
+                                StoreSettings s) =>
+                            DebtInvoiceHelper.downloadDebtInvoice(c, d, p, s),
+                        InvoiceHelper.saveInvoice),
+                    icon: const Icon(Icons.download,
+                        size: 20, color: AppTheme.accent),
                     tooltip: 'Download PDF',
                   ),
                   IconButton(
-                    onPressed: () => _handlePiutangAction(tx, settings, (Customer c, Debt d, List<DebtPayment> p, StoreSettings s) async {
-                      final pdfBytes = await DebtInvoiceHelper.generateDebtPdf(customer: c, debt: d, payments: p, settings: s);
-                      await Printing.sharePdf(bytes: pdfBytes, filename: 'Piutang-${c.name}-${tx.invoiceNumber}.pdf');
+                    onPressed: () => _handlePiutangAction(tx, settings,
+                        (Customer c, Debt d, List<DebtPayment> p,
+                            StoreSettings s) async {
+                      final pdfBytes = await DebtInvoiceHelper.generateDebtPdf(
+                          customer: c, debt: d, payments: p, settings: s);
+                      await Printing.sharePdf(
+                          bytes: pdfBytes,
+                          filename:
+                              'Piutang-${c.name}-${tx.invoiceNumber}.pdf');
                     }, InvoiceHelper.shareInvoice),
-                    icon: const Icon(Icons.share_rounded, size: 20, color: AppTheme.accent),
+                    icon: const Icon(Icons.share_rounded,
+                        size: 20, color: AppTheme.accent),
                     tooltip: 'Share PDF',
                   ),
                 ],
@@ -415,13 +493,15 @@ class _TxDetailState extends ConsumerState<_TxDetail> {
                   Expanded(
                     child: Text(tx.invoiceNumber,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontFamily: 'monospace', color: AppTheme.accent)),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontFamily: 'monospace', color: AppTheme.accent)),
                   ),
                   if (isDebt) _DebtStatusBadge(tx: tx),
                 ],
               ),
               const SizedBox(height: 4),
-              Text(Formatters.dateTime(tx.createdAt), style: Theme.of(context).textTheme.bodySmall),
+              Text(Formatters.dateTime(tx.createdAt),
+                  style: Theme.of(context).textTheme.bodySmall),
             ],
           ),
         ),
@@ -441,26 +521,48 @@ class _TxDetailState extends ConsumerState<_TxDetail> {
                   ],
                   _infoRow(context, 'Kasir', tx.cashierName ?? 'Admin'),
                   const Divider(color: AppTheme.border, height: 32),
-                  Text('Item Pesanan', style: Theme.of(context).textTheme.titleSmall?.copyWith(color: AppTheme.accent, letterSpacing: 0.5)),
+                  Text('Item Pesanan',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: AppTheme.accent, letterSpacing: 0.5)),
                   const SizedBox(height: 16),
-                  ...tx.items.map((item) => _DetailItemRow(key: ValueKey('item_${item.id}'), item: item)),
+                  ...tx.items.map((item) => _DetailItemRow(
+                      key: ValueKey('item_${item.id}'), item: item)),
                   const Divider(color: AppTheme.border, height: 32),
-                  _row(context, 'Subtotal Item', Formatters.currency(tx.subtotal)),
-                  if (tx.itemDiscountTotal > 0) _row(context, 'Total Pot. Item', '- ${Formatters.currency(tx.itemDiscountTotal)}', AppTheme.success),
-                  if (tx.transDiscountAmount > 0) _row(context, 'Diskon Transaksi', '- ${Formatters.currency(tx.transDiscountAmount)}', AppTheme.success),
-                  if (tx.taxAmount > 0) _row(context, 'PPN (11%)', Formatters.currency(tx.taxAmount)),
-                  if (tx.shippingFee > 0) _row(context, 'Ongkos Kirim', Formatters.currency(tx.shippingFee)),
+                  _row(context, 'Subtotal Item',
+                      Formatters.currency(tx.subtotal)),
+                  if (tx.itemDiscountTotal > 0)
+                    _row(
+                        context,
+                        'Total Pot. Item',
+                        '- ${Formatters.currency(tx.itemDiscountTotal)}',
+                        AppTheme.success),
+                  if (tx.transDiscountAmount > 0)
+                    _row(
+                        context,
+                        'Diskon Transaksi',
+                        '- ${Formatters.currency(tx.transDiscountAmount)}',
+                        AppTheme.success),
+                  if (tx.taxAmount > 0)
+                    _row(context, 'PPN (11%)',
+                        Formatters.currency(tx.taxAmount)),
+                  if (tx.shippingFee > 0)
+                    _row(context, 'Ongkos Kirim',
+                        Formatters.currency(tx.shippingFee)),
                   const SizedBox(height: 8),
-                  _row(context, 'TOTAL', Formatters.currency(tx.total), AppTheme.accent, true),
+                  _row(context, 'TOTAL', Formatters.currency(tx.total),
+                      AppTheme.accent, true),
                   const Divider(color: AppTheme.border, height: 32),
                   _row(context, 'Metode Pembayaran', tx.paymentMethod),
                   _row(context, 'Dibayar', Formatters.currency(tx.amountPaid)),
-                  _row(context, 'Kembalian', Formatters.currency(tx.changeAmount), AppTheme.success),
+                  _row(context, 'Kembalian',
+                      Formatters.currency(tx.changeAmount), AppTheme.success),
                   if (tx.notes != null && tx.notes!.isNotEmpty) ...[
                     const Divider(color: AppTheme.border, height: 32),
-                    Text('Catatan:', style: Theme.of(context).textTheme.bodySmall),
+                    Text('Catatan:',
+                        style: Theme.of(context).textTheme.bodySmall),
                     const SizedBox(height: 4),
-                    Text(tx.notes!, style: Theme.of(context).textTheme.bodyMedium),
+                    Text(tx.notes!,
+                        style: Theme.of(context).textTheme.bodyMedium),
                   ],
                 ],
               ),
@@ -475,29 +577,40 @@ class _TxDetailState extends ConsumerState<_TxDetail> {
     return Row(children: [
       Text('$label:', style: Theme.of(context).textTheme.bodySmall),
       const SizedBox(width: 8),
-      Text(value, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+      Text(value,
+          style: Theme.of(context)
+              .textTheme
+              .bodyMedium
+              ?.copyWith(fontWeight: FontWeight.w600)),
     ]);
   }
 
-  Widget _row(BuildContext context, String label, String value, [Color? color, bool bold = false]) {
+  Widget _row(BuildContext context, String label, String value,
+      [Color? color, bool bold = false]) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(children: [
-        Text(label, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.textSecondary)),
+        Text(label,
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: AppTheme.textSecondary)),
         const Spacer(),
-        Text(value, style: TextStyle(
-          color:      color ?? AppTheme.textPrimary,
-          fontWeight: bold ? FontWeight.w900 : FontWeight.w700,
-          fontSize:   bold ? 18 : 14,
-        )),
+        Text(value,
+            style: TextStyle(
+              color: color ?? AppTheme.textPrimary,
+              fontWeight: bold ? FontWeight.w900 : FontWeight.w700,
+              fontSize: bold ? 18 : 14,
+            )),
       ]),
     );
   }
 
   Future<void> _handlePiutangAction(
-    Transaction tx, 
-    StoreSettings settings, 
-    FutureOr<void> Function(Customer, Debt, List<DebtPayment>, StoreSettings) piutangAction,
+    Transaction tx,
+    StoreSettings settings,
+    FutureOr<void> Function(Customer, Debt, List<DebtPayment>, StoreSettings)
+        piutangAction,
     FutureOr<void> Function(Transaction, StoreSettings) defaultAction,
   ) async {
     if (tx.paymentMethod != AppConstants.paymentPiutang) {
@@ -509,7 +622,8 @@ class _TxDetailState extends ConsumerState<_TxDetail> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator(color: AppTheme.accent)),
+      builder: (_) => const Center(
+          child: CircularProgressIndicator(color: AppTheme.accent)),
     );
 
     try {
@@ -519,11 +633,13 @@ class _TxDetailState extends ConsumerState<_TxDetail> {
       if (debt == null) throw 'Data piutang tidak ditemukan';
 
       final customers = await ref.read(customersProvider.future);
-      final customer = customers.firstWhereOrNull((c) => c.id == debt.customerId);
+      final customer =
+          customers.firstWhereOrNull((c) => c.id == debt.customerId);
       if (customer == null) throw 'Data pelanggan tidak ditemukan';
 
-      final payments = await repo.getPayments(customerId: customer.id, debtId: debt.id);
-      
+      final payments =
+          await repo.getPayments(customerId: customer.id, debtId: debt.id);
+
       if (mounted) {
         Navigator.pop(context); // Close loading
         await piutangAction(customer, debt, payments, settings);
@@ -554,12 +670,16 @@ class _DetailItemRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(item.productName, 
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, height: 1.2)),
+                child: Text(item.productName,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        height: 1.2)),
               ),
               const SizedBox(width: 16),
-              Text(Formatters.currency(item.subtotal), 
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              Text(Formatters.currency(item.subtotal),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 14)),
             ],
           ),
           const SizedBox(height: 4),
@@ -567,14 +687,22 @@ class _DetailItemRow extends StatelessWidget {
             children: [
               Text(
                 '${Formatters.decimal(item.quantity)} ${item.unitName} × ${Formatters.currency(item.soldPrice)}',
-                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                style: const TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 12),
               ),
               if (item.soldPrice != item.originalPrice) ...[
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                  decoration: BoxDecoration(color: AppTheme.warning.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
-                  child: const Text('HARGA DIUBAH', style: TextStyle(color: AppTheme.warning, fontSize: 9, fontWeight: FontWeight.bold)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                      color: AppTheme.warning.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4)),
+                  child: const Text('HARGA DIUBAH',
+                      style: TextStyle(
+                          color: AppTheme.warning,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold)),
                 ),
               ],
             ],
@@ -584,7 +712,10 @@ class _DetailItemRow extends StatelessWidget {
               padding: const EdgeInsets.only(top: 2),
               child: Text(
                 'Diskon: -${Formatters.currency(item.totalDiscount)}',
-                style: const TextStyle(color: AppTheme.success, fontSize: 12, fontWeight: FontWeight.w500),
+                style: const TextStyle(
+                    color: AppTheme.success,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500),
               ),
             ),
         ],

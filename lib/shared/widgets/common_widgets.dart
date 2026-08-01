@@ -450,9 +450,6 @@ class ScrollableQtyField extends StatelessWidget {
 
           if (current < minValue) current = minValue;
 
-          final text = current == current.toInt()
-              ? current.toInt().toString()
-              : current.toString();
           final formattedText =
               NumberFormat.decimalPattern('id_ID').format(current.toInt());
 

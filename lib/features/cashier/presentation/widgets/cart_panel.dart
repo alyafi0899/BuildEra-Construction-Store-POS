@@ -1349,15 +1349,14 @@ class _InlineTextFieldState extends State<_InlineTextField> {
 class _StandardBox extends StatelessWidget {
   final Widget child;
   final double? width;
-  final double height;
 
-  const _StandardBox({required this.child, this.width, this.height = 32});
+  const _StandardBox({required this.child, this.width});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: width,
-      height: height,
+      height: 32,
       padding: const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
         color: AppTheme.surface,
