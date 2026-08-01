@@ -114,9 +114,9 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   void _updateCalculatedCost() {
     if (_isManualCost) return;
     
-    final supplierPrice = double.tryParse(_supplierPrice.text) ?? 0;
-    final shippingCost = double.tryParse(_supplierShippingCost.text) ?? 0;
-    final qty = double.tryParse(_stock.text) ?? 0;
+    final supplierPrice = Formatters.parseDecimal(_supplierPrice.text);
+    final shippingCost = Formatters.parseDecimal(_supplierShippingCost.text);
+    final qty = Formatters.parseDecimal(_stock.text);
     
     if (qty > 0) {
       final totalCost = (supplierPrice + shippingCost) / qty;
@@ -128,7 +128,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   }
 
   void _applyProfitPercentage() {
-    final cost = double.tryParse(_costPrice.text) ?? 0;
+    final cost = Formatters.parseDecimal(_costPrice.text);
     final percent = double.tryParse(_profitPercentCtrl.text) ?? 0;
     if (cost > 0 && percent > 0) {
       final sell = cost + (cost * percent / 100);
@@ -139,8 +139,8 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   }
 
   void _onBasePriceChanged() {
-    final cost = double.tryParse(_costPrice.text) ?? 0;
-    final sell = double.tryParse(_basePrice.text) ?? 0;
+    final cost = Formatters.parseDecimal(_costPrice.text);
+    final sell = Formatters.parseDecimal(_basePrice.text);
     if (cost > 0 && sell > 0) {
       final percent = ((sell - cost) / cost) * 100;
       _profitPercentCtrl.text = percent.toStringAsFixed(0);
@@ -149,8 +149,8 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   }
 
   double get _netProfit {
-    final cost = double.tryParse(_costPrice.text) ?? 0;
-    final sell = double.tryParse(_basePrice.text) ?? 0;
+    final cost = Formatters.parseDecimal(_costPrice.text);
+    final sell = Formatters.parseDecimal(_basePrice.text);
     return sell - cost;
   }
 
@@ -233,15 +233,15 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
         category:  _categoryCtrl.text.trim().isEmpty ? 'Umum' : _categoryCtrl.text.trim(),
         barcode:   _barcode.text.trim().isEmpty ? null : _barcode.text.trim(),
         description: _description.text.trim().isEmpty ? null : _description.text.trim(),
-        costPrice: double.tryParse(_costPrice.text) ?? 0,
-        basePrice: double.tryParse(_basePrice.text) ?? 0,
+        costPrice: Formatters.parseDecimal(_costPrice.text),
+        basePrice: Formatters.parseDecimal(_basePrice.text),
         baseUnit:  _baseUnitCtrl.text.trim().isEmpty ? 'pcs' : _baseUnitCtrl.text.trim(),
         defaultUnitName: _defaultUnitName,
-        stock:     double.tryParse(_stock.text) ?? 0,
+        stock:     Formatters.parseDecimal(_stock.text),
         imagePath: imagePath,
         financials: ProductFinancials(
-          supplierPrice: double.tryParse(_supplierPrice.text) ?? 0,
-          supplierShippingCost: double.tryParse(_supplierShippingCost.text) ?? 0,
+          supplierPrice: Formatters.parseDecimal(_supplierPrice.text),
+          supplierShippingCost: Formatters.parseDecimal(_supplierShippingCost.text),
           isManualCost: _isManualCost,
           supplierName: supplierName,
           supplierPaymentStatus: _supplierPaymentStatus,
@@ -590,7 +590,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                       setState(() {});
                                       _applyProfitPercentage();
                                     },
-                                    validator: (v) => double.tryParse((v ?? '').replaceAll('.', '')) == null ? 'Wajib diisi' : null,
+                                    validator: (v) => Formatters.parseDecimal(v ?? '') == 0 && (v ?? '').isNotEmpty && (v ?? '') != '0' ? 'Format salah' : (Formatters.parseDecimal(v ?? '') == 0 && (v ?? '').isEmpty ? 'Wajib diisi' : null),
                                   ),
                                 ),
                                 const SizedBox(width: 16),
@@ -639,8 +639,8 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                           inputFormatters: [CurrencyInputFormatter()],
                                           onChanged: (_) => _onBasePriceChanged(),
                                           validator: (v) {
-                                            final sell = double.tryParse((v ?? '').replaceAll('.', '')) ?? 0;
-                                            final cost = double.tryParse(_costPrice.text.replaceAll('.', '')) ?? 0;
+                                            final sell = Formatters.parseDecimal(v ?? '');
+                                            final cost = Formatters.parseDecimal(_costPrice.text);
                                             if (sell <= 0) return 'Wajib diisi';
                                             if (sell < cost) return 'Harga jual di bawah modal';
                                             return null;
@@ -1183,8 +1183,8 @@ class _UnitEntry {
         id:             id,
         productId:      pid,
         unitName:       unitName.trim(),
-        conversionRate: double.tryParse(conversionRate) ?? 1,
-        sellPrice:      double.tryParse(sellPrice) ?? 0,
+        conversionRate: Formatters.parseDecimal(conversionRate),
+        sellPrice:      Formatters.parseDecimal(sellPrice),
       );
 }
 

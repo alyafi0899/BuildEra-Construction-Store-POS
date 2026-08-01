@@ -47,24 +47,30 @@ class _AuthGateState extends ConsumerState<AuthGate> {
         final settings = ref.watch(settingsProvider);
         
         // If settings are still loading or initial, we might need to wait 
+        // Optimization: Use authState email as fallback if settings.loginEmail is null
         if (settings.loginEmail == null) {
-           return Scaffold(
-             backgroundColor: const Color(0xFF0F1117),
-             body: Center(
-               child: Column(
-                 mainAxisSize: MainAxisSize.min,
-                 children: [
-                   const SizedBox(
-                     width: 40,
-                     height: 40,
-                     child: CircularProgressIndicator(strokeWidth: 3, color: AppTheme.accent),
-                   ),
-                   const SizedBox(height: 16),
-                   Text('Memuat Pengaturan...', style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12)),
-                 ],
+           // If user just logged in, settings might not have loginEmail yet
+           // but authState definitely has the email. 
+           // If businessName is empty, it's definitely the initial state.
+           if (settings.businessName.isEmpty) {
+             return Scaffold(
+               backgroundColor: const Color(0xFF0F1117),
+               body: Center(
+                 child: Column(
+                   mainAxisSize: MainAxisSize.min,
+                   children: [
+                     const SizedBox(
+                       width: 40,
+                       height: 40,
+                       child: CircularProgressIndicator(strokeWidth: 3, color: AppTheme.accent),
+                     ),
+                     const SizedBox(height: 16),
+                     Text('Memuat Pengaturan...', style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12)),
+                   ],
+                 ),
                ),
-             ),
-           );
+             );
+           }
         }
 
         if (settings.securityPin == null) {

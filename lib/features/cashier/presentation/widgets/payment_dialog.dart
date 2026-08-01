@@ -595,8 +595,10 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
           children: [50000, 100000, 150000, 200000, 500000]
               .where((v) => v >= finalTotal)
               .map((v) => OutlinedButton(
-                    onPressed: () =>
-                        setState(() => _amountCtrl.text = v.toString()),
+                    onPressed: () {
+                      _amountCtrl.text = v.toInt().toString();
+                      setState(() => _paid = v.toDouble());
+                    },
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       side: const BorderSide(color: AppTheme.border),
@@ -824,10 +826,10 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   Widget _denomBtn(double amt) {
     return OutlinedButton(
       onPressed: () {
-        setState(() {
-          final current = double.tryParse(_amountCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-          _amountCtrl.text = (current + amt).toStringAsFixed(0);
-        });
+        final current = _paid;
+        final newValue = current + amt;
+        _amountCtrl.text = newValue.toInt().toString();
+        setState(() => _paid = newValue);
       },
       style: OutlinedButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -889,9 +891,8 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   Widget _exactAmountBtn(double total) {
     return ElevatedButton(
       onPressed: () {
-        setState(() {
-          _amountCtrl.text = total.toStringAsFixed(0);
-        });
+        _amountCtrl.text = total.toInt().toString();
+        setState(() => _paid = total);
       },
       style: ElevatedButton.styleFrom(
         backgroundColor: AppTheme.success,

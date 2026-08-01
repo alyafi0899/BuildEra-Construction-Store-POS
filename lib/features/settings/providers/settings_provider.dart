@@ -22,24 +22,44 @@ class SettingsNotifier extends Notifier<StoreSettings> {
 
   Future<void> _loadSettings(String uid) async {
     // 1. Try to load from Hive first (Instant)
-    final box = await _getBox(uid);
-    final cached = box.get('store_settings');
-    if (cached != null) {
-      state = StoreSettings.fromMap(cached as Map);
+    try {
+      final box = await _getBox(uid);
+      final cached = box.get('store_settings');
+      if (cached != null) {
+        state = StoreSettings.fromMap(cached as Map);
+      }
+    } catch (e) {
+      // Ignore hive errors
     }
 
     // 2. Load from Firestore in background or if no cache
     try {
-      final doc = await _db.collection('users').doc(uid).get().timeout(const Duration(seconds: 5));
+      final doc = await _db.collection('users').doc(uid).get().timeout(const Duration(seconds: 10));
       if (doc.exists) {
         final data = LocalDatabase.sanitize(doc.data()!);
         final settings = StoreSettings.fromMap(data);
         state = settings;
         // Update cache
-        await box.put('store_settings', settings.toMap());
+        try {
+          final box = await _getBox(uid);
+          await box.put('store_settings', settings.toMap());
+        } catch (e) {
+          // Ignore hive write errors
+        }
+      } else {
+        // Handle case where user document doesn't exist yet (new registration)
+        // Ensure state is at least updated with login email if available
+        final user = ref.read(authStateProvider).value;
+        if (user != null && state.loginEmail == null) {
+          state = state.copyWith(loginEmail: user.email);
+        }
       }
     } catch (e) {
-      // If offline, we stay with cached state
+      // If offline, ensure we have a working state even if doc fetch fails
+      final user = ref.read(authStateProvider).value;
+      if (user != null && state.loginEmail == null) {
+        state = state.copyWith(loginEmail: user.email);
+      }
     }
   }
 

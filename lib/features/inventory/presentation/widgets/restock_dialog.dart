@@ -107,9 +107,9 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
   void _calculateCost() {
     if (_isManualCost) return;
     
-    final q = double.tryParse(_qty.text) ?? 0;
-    final sp = double.tryParse(_supplierPrice.text) ?? 0;
-    final sc = double.tryParse(_supplierShippingCost.text) ?? 0;
+    final q = Formatters.parseDecimal(_qty.text);
+    final sp = Formatters.parseDecimal(_supplierPrice.text);
+    final sc = Formatters.parseDecimal(_supplierShippingCost.text);
     
     if (q > 0) {
       final totalBaseQty = q * _selectedUnit.conversionRate;
@@ -121,7 +121,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
   }
 
   void _suggestPrice() {
-    final cost = double.tryParse(_totalCostPerUnit.text) ?? 0;
+    final cost = Formatters.parseDecimal(_totalCostPerUnit.text);
     if (cost > 0) {
       final suggested = cost * 1.1; // +10%
       setState(() {
@@ -131,8 +131,8 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
   }
 
   double get _netProfit {
-    final cost = double.tryParse(_totalCostPerUnit.text) ?? 0;
-    final sell = double.tryParse(_basePrice.text) ?? 0;
+    final cost = Formatters.parseDecimal(_totalCostPerUnit.text);
+    final sell = Formatters.parseDecimal(_basePrice.text);
     return sell - cost;
   }
 
@@ -152,7 +152,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
           ? shippings.firstWhereOrNull((s) => s.id == _selectedShippingId)?.name 
           : _shippingServiceName.text.trim().isEmpty ? null : _shippingServiceName.text.trim();
 
-      final totalBaseQty = (double.tryParse(_qty.text) ?? 0) * _selectedUnit.conversionRate;
+      final totalBaseQty = Formatters.parseDecimal(_qty.text) * _selectedUnit.conversionRate;
 
       final record = RestockRecord(
         id: widget.record?.id ?? const Uuid().v4(),
@@ -160,10 +160,10 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
         productName: widget.product.name,
         quantityAdded: totalBaseQty,
         unitName: _selectedUnit.unitName,
-        supplierPrice: double.tryParse(_supplierPrice.text) ?? 0,
-        shippingCost: double.tryParse(_supplierShippingCost.text) ?? 0,
-        totalCostPerUnit: double.tryParse(_totalCostPerUnit.text) ?? 0,
-        sellingPrice: double.tryParse(_basePrice.text) ?? 0,
+        supplierPrice: Formatters.parseDecimal(_supplierPrice.text),
+        shippingCost: Formatters.parseDecimal(_supplierShippingCost.text),
+        totalCostPerUnit: Formatters.parseDecimal(_totalCostPerUnit.text),
+        sellingPrice: Formatters.parseDecimal(_basePrice.text),
         supplierName: supplierName,
         supplierPaymentStatus: _supplierPaymentStatus,
         shippingServiceName: shippingName,
@@ -403,7 +403,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                     keyboardType: TextInputType.number,
                                     inputFormatters: [CurrencyInputFormatter()],
                                     onChanged: (_) => setState(() {}),
-                                    validator: (v) => double.tryParse((v ?? '').replaceAll('.', '')) == null ? 'Wajib diisi' : null,
+                                    validator: (v) => Formatters.parseDecimal(v ?? '') == 0 && (v ?? '').isNotEmpty && (v ?? '') != '0' ? 'Format salah' : (Formatters.parseDecimal(v ?? '') == 0 && (v ?? '').isEmpty ? 'Wajib diisi' : null),
                                   ),
                                 ),
                                 const SizedBox(width: 16),
@@ -423,8 +423,8 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                     inputFormatters: [CurrencyInputFormatter()],
                                     onChanged: (_) => setState(() {}),
                                     validator: (v) {
-                                      final sell = double.tryParse((v ?? '').replaceAll('.', '')) ?? 0;
-                                      final cost = double.tryParse(_totalCostPerUnit.text.replaceAll('.', '')) ?? 0;
+                                      final sell = Formatters.parseDecimal(v ?? '');
+                                      final cost = Formatters.parseDecimal(_totalCostPerUnit.text);
                                       if (sell <= 0) return 'Wajib diisi';
                                       if (sell < cost) return 'Harga jual di bawah modal';
                                       return null;
@@ -942,8 +942,8 @@ class _UnitEntry {
         id:             id,
         productId:      pid,
         unitName:       unitName.trim(),
-        conversionRate: double.tryParse(conversionRate) ?? 1,
-        sellPrice:      double.tryParse(sellPrice) ?? 0,
+        conversionRate: Formatters.parseDecimal(conversionRate),
+        sellPrice:      Formatters.parseDecimal(sellPrice),
       );
 }
 
