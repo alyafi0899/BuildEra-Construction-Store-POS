@@ -325,8 +325,8 @@ class _CartListSectionState extends ConsumerState<_CartListSection> {
 
   @override
   Widget build(BuildContext context) {
-    final items = ref.watch(cartProvider.select((s) => s.items));
-    final isEmpty = items.isEmpty;
+    final itemCount = ref.watch(cartProvider.select((s) => s.items.length));
+    final isEmpty = itemCount == 0;
 
     return Expanded(
       child: isEmpty
@@ -341,10 +341,11 @@ class _CartListSectionState extends ConsumerState<_CartListSection> {
               child: ListView.separated(
                 controller: _scrollController,
                 padding: const EdgeInsets.all(16),
-                itemCount: items.length,
+                itemCount: itemCount,
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (_, i) {
-                  final itemId = items[i].id;
+                itemBuilder: (context, i) {
+                  // We only watch the ID at this level to avoid full list rebuilds
+                  final itemId = ref.read(cartProvider).items[i].id;
                   return CartItemTile(
                     key: ValueKey('cart_item_$itemId'),
                     itemId: itemId,
@@ -388,11 +389,15 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
 
   @override
   Widget build(BuildContext context) {
-    // Watch specific properties to minimize rebuilds
-    final cart = ref.watch(cartProvider);
-    
-    // We still need most of the cart state here for calculations, 
-    // but at least this widget is isolated.
+    // Watch granularly to avoid rebuilding the whole footer on small changes
+    final grossSubtotal = ref.watch(cartProvider.select((s) => s.grossSubtotal));
+    final itemDiscountTotal = ref.watch(cartProvider.select((s) => s.itemDiscountTotal));
+    final transDiscountValue = ref.watch(cartProvider.select((s) => s.transDiscountValue));
+    final transDiscountType = ref.watch(cartProvider.select((s) => s.transDiscountType));
+    final taxEnabled = ref.watch(cartProvider.select((s) => s.taxEnabled));
+    final taxAmount = ref.watch(cartProvider.select((s) => s.taxAmount));
+    final total = ref.watch(cartProvider.select((s) => s.total));
+    final isEmpty = ref.watch(cartProvider.select((s) => s.isEmpty));
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -413,16 +418,16 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
               .read(cartProvider.notifier)
               .setCustomer(null, v.isEmpty ? null : v),
           onSubmitted: (_) =>
-              cart.isEmpty ? null : PaymentDialog.show(context),
+              isEmpty ? null : PaymentDialog.show(context),
         ),
         const SizedBox(height: 12),
 
-        _TotalRow(label: 'Subtotal', value: cart.grossSubtotal),
+        _TotalRow(label: 'Subtotal', value: grossSubtotal),
 
-        if (cart.itemDiscountTotal > 0)
+        if (itemDiscountTotal > 0)
           _TotalRow(
               label: 'Potongan Item',
-              value: -cart.itemDiscountTotal,
+              value: -itemDiscountTotal,
               valueColor: AppTheme.success),
 
         const SizedBox(height: 8),
@@ -435,7 +440,7 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
           SizedBox(
             width: 50,
             child: DropdownButton<DiscountType>(
-              value: cart.transDiscountType,
+              value: transDiscountType,
               isDense: true,
               isExpanded: true,
               underline: const SizedBox(),
@@ -448,34 +453,41 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
               ],
               onChanged: (v) => ref
                   .read(cartProvider.notifier)
-                  .setTransDiscount(cart.transDiscountValue, v!),
+                  .setTransDiscount(transDiscountValue, v!),
             ),
           ),
           const SizedBox(width: 8),
           SizedBox(
             width: 80,
-            child: TextField(
+            child: ScrollableQtyField(
               controller: _discountCtrl,
-              focusNode: _discountFocus,
-              keyboardType: TextInputType.number,
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold),
-              decoration: const InputDecoration(
-                isDense: true,
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              step: 1000,
+              onChanged: (v) => ref
+                  .read(cartProvider.notifier)
+                  .setTransDiscount(v, transDiscountType),
+              child: TextField(
+                controller: _discountCtrl,
+                focusNode: _discountFocus,
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold),
+                decoration: const InputDecoration(
+                  isDense: true,
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                ),
+                onChanged: (v) {
+                  final numericValue = v.replaceAll('.', '');
+                  ref.read(cartProvider.notifier).setTransDiscount(
+                      double.tryParse(numericValue) ?? 0, transDiscountType);
+                },
+                inputFormatters: [CurrencyInputFormatter()],
+                onSubmitted: (_) =>
+                    isEmpty ? null : PaymentDialog.show(context),
               ),
-              onChanged: (v) {
-                final numericValue = v.replaceAll('.', '');
-                ref.read(cartProvider.notifier).setTransDiscount(
-                    double.tryParse(numericValue) ?? 0, cart.transDiscountType);
-              },
-              inputFormatters: [CurrencyInputFormatter()],
-              onSubmitted: (_) =>
-                  cart.isEmpty ? null : PaymentDialog.show(context),
             ),
           ),
         ]),
@@ -488,7 +500,7 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
                   TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
           const Spacer(),
           Switch.adaptive(
-            value: cart.taxEnabled,
+            value: taxEnabled,
             onChanged: (_) => ref.read(cartProvider.notifier).toggleTax(),
             activeTrackColor: AppTheme.accent,
           ),
@@ -496,7 +508,7 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
           SizedBox(
             width: 80,
             child: Text(
-              Formatters.currency(cart.taxAmount),
+              Formatters.currency(taxAmount),
               textAlign: TextAlign.right,
               style: const TextStyle(
                   color: AppTheme.textSecondary, fontSize: 13),
@@ -513,7 +525,7 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
                   .titleLarge
                   ?.copyWith(fontSize: 18)),
           const Spacer(),
-          Text(Formatters.currency(cart.total),
+          Text(Formatters.currency(total),
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     color: AppTheme.accent,
                     fontSize: 24,
@@ -525,7 +537,7 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
           height: 54,
           child: ElevatedButton.icon(
             onPressed:
-                cart.isEmpty ? null : () => PaymentDialog.show(context),
+                isEmpty ? null : () => PaymentDialog.show(context),
             icon: const Icon(Icons.payments_rounded),
             label: const Text('BAYAR SEKARANG'),
             style: ElevatedButton.styleFrom(
@@ -819,12 +831,17 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                   ),
                   const SizedBox(height: 4),
                   _StandardBox(
-                    child: _InlineTextField(
-                      key: ValueKey('price_${item.id}_${item.selectedUnit.unitName}'),
-                      initialValue: item.soldPrice.toStringAsFixed(0),
-                      onChanged: (v) => notifier.updateSoldPrice(item.id, double.tryParse(v) ?? item.originalPrice),
-                      prefixText: 'Rp ',
-                      isBare: true,
+                    child: ScrollableQtyField(
+                      controller: TextEditingController(text: item.soldPrice.toStringAsFixed(0)),
+                      step: 1000,
+                      onChanged: (v) => notifier.updateSoldPrice(item.id, v),
+                      child: _InlineTextField(
+                        key: ValueKey('price_${item.id}_${item.selectedUnit.unitName}'),
+                        initialValue: item.soldPrice.toStringAsFixed(0),
+                        onChanged: (v) => notifier.updateSoldPrice(item.id, double.tryParse(v) ?? item.originalPrice),
+                        prefixText: 'Rp ',
+                        isBare: true,
+                      ),
                     ),
                   ),
                 ],
@@ -843,11 +860,16 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                     children: [
                       Expanded(
                         child: _StandardBox(
-                          child: _InlineTextField(
-                            key: ValueKey('discount_${item.id}'),
-                            initialValue: item.discountValue.toStringAsFixed(0),
-                            onChanged: (v) => notifier.setItemDiscount(item.id, double.tryParse(v) ?? 0, item.discountType),
-                            isBare: true,
+                          child: ScrollableQtyField(
+                            controller: TextEditingController(text: item.discountValue.toStringAsFixed(0)),
+                            step: 1000,
+                            onChanged: (v) => notifier.setItemDiscount(item.id, v, item.discountType),
+                            child: _InlineTextField(
+                              key: ValueKey('discount_${item.id}'),
+                              initialValue: item.discountValue.toStringAsFixed(0),
+                              onChanged: (v) => notifier.setItemDiscount(item.id, double.tryParse(v) ?? 0, item.discountType),
+                              isBare: true,
+                            ),
                           ),
                         ),
                       ),
@@ -1155,10 +1177,7 @@ class _InlineTextFieldState extends State<_InlineTextField> {
   void didUpdateWidget(_InlineTextField oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.initialValue != widget.initialValue) {
-      // Only update if not focused to avoid cursor jumping
-      if (!FocusScope.of(context).hasFocus) {
-         _controller.text = widget.initialValue;
-      }
+      _controller.text = widget.initialValue;
     }
   }
 

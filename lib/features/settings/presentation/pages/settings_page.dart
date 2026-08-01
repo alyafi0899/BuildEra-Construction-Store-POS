@@ -35,6 +35,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   late TextEditingController _addressCtrl;
   late TextEditingController _descriptionCtrl;
   late TextEditingController _receiptWidthCtrl;
+  late TextEditingController _receiptMarginCtrl;
 
   List<BankAccount> _bankAccounts = [];
 
@@ -49,6 +50,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     _addressCtrl = TextEditingController(text: settings.address);
     _descriptionCtrl = TextEditingController(text: settings.description);
     _receiptWidthCtrl = TextEditingController(text: settings.receiptWidth.toString());
+    _receiptMarginCtrl = TextEditingController(text: settings.receiptMargin.toString());
     _bankAccounts = List.from(settings.bankAccounts);
   }
 
@@ -61,6 +63,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     _addressCtrl.dispose();
     _descriptionCtrl.dispose();
     _receiptWidthCtrl.dispose();
+    _receiptMarginCtrl.dispose();
     super.dispose();
   }
 
@@ -86,6 +89,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         address: _addressCtrl.text,
         description: _descriptionCtrl.text,
         receiptWidth: double.tryParse(_receiptWidthCtrl.text) ?? 80.0,
+        receiptMargin: double.tryParse(_receiptMarginCtrl.text) ?? 4.0,
         bankAccounts: _bankAccounts,
       );
       
@@ -147,6 +151,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         _addressCtrl.text = next.address;
         _descriptionCtrl.text = next.description;
         _receiptWidthCtrl.text = next.receiptWidth.toString();
+        _receiptMarginCtrl.text = next.receiptMargin.toString();
         setState(() {
           _bankAccounts = List.from(next.bankAccounts);
         });
@@ -914,22 +919,39 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
                         decoration: const InputDecoration(
                           prefixIcon: Icon(Icons.straighten_rounded, size: 20),
-                          hintText: 'Contoh: 80, 75, 58',
+                          hintText: 'Contoh: 80, 58',
                         ),
                         style: const TextStyle(fontSize: 14),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 24),
-                const Expanded(
-                  flex: 2,
-                  child: Text(
-                    'Sesuaikan dengan lebar kertas printer thermal Anda. Umumnya 80mm untuk printer besar dan 58mm untuk printer bluetooth portable.',
-                    style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Margin Kiri (pt)', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _receiptMarginCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+                        decoration: const InputDecoration(
+                          prefixIcon: Icon(Icons.padding_rounded, size: 20),
+                          hintText: 'Misal: 4, 8, 12',
+                        ),
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ],
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Tips: Naikkan "Margin Kiri" jika teks terpotong di kiri. Umumnya 4-12pt tergantung printer. 1mm = 2.8pt.',
+              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontStyle: FontStyle.italic),
             ),
           ],
         ),

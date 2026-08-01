@@ -387,18 +387,23 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
       const Divider(color: AppTheme.border, height: 24),
       _row(context, 'Subtotal Item', Formatters.currency(cart.grossSubtotal)),
       const SizedBox(height: 12),
-      TextField(
+      ScrollableQtyField(
         controller: _shippingFeeCtrl,
-        keyboardType: TextInputType.number,
-        inputFormatters: [CurrencyInputFormatter()],
-        style: const TextStyle(fontSize: 13),
-        decoration: const InputDecoration(
-          labelText: 'Biaya Ongkir (Jika ada)',
-          prefixText: 'Rp ',
-          isDense: true,
+        step: 1000,
+        onChanged: (v) => setState(() {}),
+        child: TextField(
+          controller: _shippingFeeCtrl,
+          keyboardType: TextInputType.number,
+          inputFormatters: [CurrencyInputFormatter()],
+          style: const TextStyle(fontSize: 13),
+          decoration: const InputDecoration(
+            labelText: 'Biaya Ongkir (Jika ada)',
+            prefixText: 'Rp ',
+            isDense: true,
+          ),
+          onChanged: (_) => setState(() {}),
+          onSubmitted: (_) => _confirm(), // Enable enter key to confirm
         ),
-        onChanged: (_) => setState(() {}),
-        onSubmitted: (_) => _confirm(), // Enable enter key to confirm
       ),
       const SizedBox(height: 12),
       if (cart.itemDiscountTotal > 0)
@@ -508,26 +513,33 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
           const SizedBox(height: 24),
         ],
         
-        TextFormField(
-          controller:   _amountCtrl,
-          keyboardType: TextInputType.number,
-          inputFormatters: [CurrencyInputFormatter()],
-          autofocus: true,
-          style: const TextStyle(
-              color: AppTheme.textPrimary,
-              fontSize:   28,
-              fontWeight: FontWeight.w900),
-          decoration: InputDecoration(
-            labelText:  _method == AppConstants.paymentPiutang ? 'Jumlah Bayar (DP/Cicilan)' : 'Jumlah Bayar',
-            hintText: _method == AppConstants.paymentPiutang ? 'Isi 0 jika belum bayar sama sekali' : 'Ketik nominal bayar...',
-            prefixText: 'Rp ',
-            prefixStyle: const TextStyle(fontSize: 18, color: AppTheme.textMuted),
-          ),
+        ScrollableQtyField(
+          controller: _amountCtrl,
+          step: 1000,
           onChanged: (v) {
-            final val = Formatters.parseDecimal(v);
-            setState(() => _paid = val);
+            setState(() => _paid = v);
           },
-          onFieldSubmitted: (_) => _confirm(),
+          child: TextFormField(
+            controller:   _amountCtrl,
+            keyboardType: TextInputType.number,
+            inputFormatters: [CurrencyInputFormatter()],
+            autofocus: true,
+            style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize:   28,
+                fontWeight: FontWeight.w900),
+            decoration: InputDecoration(
+              labelText:  _method == AppConstants.paymentPiutang ? 'Jumlah Bayar (DP/Cicilan)' : 'Jumlah Bayar',
+              hintText: _method == AppConstants.paymentPiutang ? 'Isi 0 jika belum bayar sama sekali' : 'Ketik nominal bayar...',
+              prefixText: 'Rp ',
+              prefixStyle: const TextStyle(fontSize: 18, color: AppTheme.textMuted),
+            ),
+            onChanged: (v) {
+              final val = Formatters.parseDecimal(v);
+              setState(() => _paid = val);
+            },
+            onFieldSubmitted: (_) => _confirm(),
+          ),
         ),
         
         if (_paid > 0) ...[
@@ -596,7 +608,8 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
               .where((v) => v >= finalTotal)
               .map((v) => OutlinedButton(
                     onPressed: () {
-                      _amountCtrl.text = v.toInt().toString();
+                      final formatted = Formatters.decimal(v.toDouble());
+                      _amountCtrl.text = formatted;
                       setState(() => _paid = v.toDouble());
                     },
                     style: OutlinedButton.styleFrom(
@@ -828,7 +841,8 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
       onPressed: () {
         final current = _paid;
         final newValue = current + amt;
-        _amountCtrl.text = newValue.toInt().toString();
+        final formatted = Formatters.decimal(newValue);
+        _amountCtrl.text = formatted;
         setState(() => _paid = newValue);
       },
       style: OutlinedButton.styleFrom(
@@ -891,7 +905,8 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   Widget _exactAmountBtn(double total) {
     return ElevatedButton(
       onPressed: () {
-        _amountCtrl.text = total.toInt().toString();
+        final formatted = Formatters.decimal(total);
+        _amountCtrl.text = formatted;
         setState(() => _paid = total);
       },
       style: ElevatedButton.styleFrom(
