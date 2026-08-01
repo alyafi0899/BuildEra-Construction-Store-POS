@@ -60,7 +60,7 @@ class _CartTabsSection extends ConsumerWidget {
                     onTap: () => multiCartNotifier.switchCart(index),
                     showRemove: multiCart.carts.length > 1,
                     onRemove: () async {
-                       final ok = await showConfirmDialog(
+                      final ok = await showConfirmDialog(
                         context,
                         title: 'Hapus Antrian',
                         content: 'Yakin hapus antrian #${index + 1}?',
@@ -74,12 +74,15 @@ class _CartTabsSection extends ConsumerWidget {
               ),
             ),
           ),
-          const VerticalDivider(width: 1, indent: 10, endIndent: 10, color: AppTheme.border),
+          const VerticalDivider(
+              width: 1, indent: 10, endIndent: 10, color: AppTheme.border),
           _TabsDropdown(state: multiCart, notifier: multiCartNotifier),
-          const VerticalDivider(width: 1, indent: 10, endIndent: 10, color: AppTheme.border),
+          const VerticalDivider(
+              width: 1, indent: 10, endIndent: 10, color: AppTheme.border),
           IconButton(
             onPressed: () => multiCartNotifier.addNewCart(),
-            icon: const Icon(Icons.add_box_rounded, color: AppTheme.accent, size: 24),
+            icon: const Icon(Icons.add_box_rounded,
+                color: AppTheme.accent, size: 24),
             tooltip: 'Tambah Antrian',
             padding: const EdgeInsets.symmetric(horizontal: 12),
           ),
@@ -97,21 +100,26 @@ class _TabsDropdown extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return PopupMenuButton<int>(
-      icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.textSecondary),
+      icon: const Icon(Icons.keyboard_arrow_down_rounded,
+          color: AppTheme.textSecondary),
       tooltip: 'Daftar Antrian',
       onSelected: (index) => notifier.switchCart(index),
       offset: const Offset(0, 48),
       itemBuilder: (context) => List.generate(state.carts.length, (index) {
         final isActive = state.activeIndex == index;
         final cart = isActive ? ref.watch(cartProvider) : state.carts[index];
-        final name = cart.customerName?.isNotEmpty == true ? cart.customerName! : 'Antrian ${index + 1}';
-        
+        final name = cart.customerName?.isNotEmpty == true
+            ? cart.customerName!
+            : 'Antrian ${index + 1}';
+
         return PopupMenuItem<int>(
           value: index,
           child: Row(
             children: [
               Icon(
-                isActive ? Icons.check_circle_rounded : Icons.person_outline_rounded,
+                isActive
+                    ? Icons.check_circle_rounded
+                    : Icons.person_outline_rounded,
                 size: 18,
                 color: isActive ? AppTheme.accent : AppTheme.textMuted,
               ),
@@ -128,14 +136,18 @@ class _TabsDropdown extends ConsumerWidget {
               ),
               if (cart.itemCount > 0)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: AppTheme.surfaceAlt,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
                     '${cart.itemCount}',
-                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.warning),
+                    style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.warning),
                   ),
                 ),
             ],
@@ -166,23 +178,24 @@ class _CartTabItem extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // If active, watch the live cart provider for metadata changes
-    final String? customerName = isActive 
+    final String? customerName = isActive
         ? ref.watch(cartProvider.select((s) => s.customerName))
         : cartState.customerName;
-    
+
     final int itemCount = isActive
         ? ref.watch(cartProvider.select((s) => s.items.length))
         : cartState.items.length;
 
     final String numberLabel = (index + 1).toString();
     String? customerLabel;
-    
+
     if (customerName?.isNotEmpty == true) {
       final names = customerName!.split(' ');
       if (names.length > 1) {
         customerLabel = '${names[0][0]}${names[1][0]}'.toUpperCase();
       } else {
-        customerLabel = names[0].substring(0, names[0].length > 3 ? 3 : names[0].length);
+        customerLabel =
+            names[0].substring(0, names[0].length > 3 ? 3 : names[0].length);
       }
     }
 
@@ -211,7 +224,9 @@ class _CartTabItem extends ConsumerWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                customerLabel != null ? '$numberLabel. $customerLabel' : numberLabel,
+                customerLabel != null
+                    ? '$numberLabel. $customerLabel'
+                    : numberLabel,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: isActive ? FontWeight.w900 : FontWeight.w600,
@@ -222,9 +237,12 @@ class _CartTabItem extends ConsumerWidget {
                 Padding(
                   padding: const EdgeInsets.only(left: 6),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                     decoration: BoxDecoration(
-                      color: isActive ? Colors.white24 : AppTheme.warning.withValues(alpha: 0.2),
+                      color: isActive
+                          ? Colors.white24
+                          : AppTheme.warning.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -374,7 +392,9 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
     super.initState();
     final cart = ref.read(cartProvider);
     _discountCtrl = TextEditingController(
-        text: cart.transDiscountValue == 0 ? '' : cart.transDiscountValue.toStringAsFixed(0));
+        text: cart.transDiscountValue == 0
+            ? ''
+            : cart.transDiscountValue.toStringAsFixed(0));
     _discountFocus = FocusNode();
     _customerCtrl = TextEditingController(text: cart.customerName ?? '');
   }
@@ -390,10 +410,14 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
   @override
   Widget build(BuildContext context) {
     // Watch granularly to avoid rebuilding the whole footer on small changes
-    final grossSubtotal = ref.watch(cartProvider.select((s) => s.grossSubtotal));
-    final itemDiscountTotal = ref.watch(cartProvider.select((s) => s.itemDiscountTotal));
-    final transDiscountValue = ref.watch(cartProvider.select((s) => s.transDiscountValue));
-    final transDiscountType = ref.watch(cartProvider.select((s) => s.transDiscountType));
+    final grossSubtotal =
+        ref.watch(cartProvider.select((s) => s.grossSubtotal));
+    final itemDiscountTotal =
+        ref.watch(cartProvider.select((s) => s.itemDiscountTotal));
+    final transDiscountValue =
+        ref.watch(cartProvider.select((s) => s.transDiscountValue));
+    final transDiscountType =
+        ref.watch(cartProvider.select((s) => s.transDiscountType));
     final taxEnabled = ref.watch(cartProvider.select((s) => s.taxEnabled));
     final taxAmount = ref.watch(cartProvider.select((s) => s.taxAmount));
     final total = ref.watch(cartProvider.select((s) => s.total));
@@ -417,25 +441,19 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
           onChanged: (v) => ref
               .read(cartProvider.notifier)
               .setCustomer(null, v.isEmpty ? null : v),
-          onSubmitted: (_) =>
-              isEmpty ? null : PaymentDialog.show(context),
+          onSubmitted: (_) => isEmpty ? null : PaymentDialog.show(context),
         ),
         const SizedBox(height: 12),
-
         _TotalRow(label: 'Subtotal', value: grossSubtotal),
-
         if (itemDiscountTotal > 0)
           _TotalRow(
               label: 'Potongan Item',
               value: -itemDiscountTotal,
               valueColor: AppTheme.success),
-
         const SizedBox(height: 8),
-
         Row(children: [
           const Text('Diskon Transaksi',
-              style:
-                  TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
           const Spacer(),
           SizedBox(
             width: 50,
@@ -446,8 +464,7 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
               underline: const SizedBox(),
               style: const TextStyle(fontSize: 12, color: AppTheme.accent),
               items: const [
-                DropdownMenuItem(
-                    value: DiscountType.fixed, child: Text('Rp')),
+                DropdownMenuItem(value: DiscountType.fixed, child: Text('Rp')),
                 DropdownMenuItem(
                     value: DiscountType.percentage, child: Text('%')),
               ],
@@ -491,13 +508,10 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
             ),
           ),
         ]),
-
         const SizedBox(height: 8),
-
         Row(children: [
           const Text('PPN (11%)',
-              style:
-                  TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
           const Spacer(),
           Switch.adaptive(
             value: taxEnabled,
@@ -510,14 +524,12 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
             child: Text(
               Formatters.currency(taxAmount),
               textAlign: TextAlign.right,
-              style: const TextStyle(
-                  color: AppTheme.textSecondary, fontSize: 13),
+              style:
+                  const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
             ),
           ),
         ]),
-
         const Divider(height: 24, color: AppTheme.border),
-
         Row(children: [
           Text('TOTAL',
               style: Theme.of(context)
@@ -536,13 +548,12 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
           width: double.infinity,
           height: 54,
           child: ElevatedButton.icon(
-            onPressed:
-                isEmpty ? null : () => PaymentDialog.show(context),
+            onPressed: isEmpty ? null : () => PaymentDialog.show(context),
             icon: const Icon(Icons.payments_rounded),
             label: const Text('BAYAR SEKARANG'),
             style: ElevatedButton.styleFrom(
-              textStyle: const TextStyle(
-                  fontSize: 16, fontWeight: FontWeight.w800),
+              textStyle:
+                  const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
               backgroundColor: AppTheme.accent,
               foregroundColor: Colors.white,
             ),
@@ -552,7 +563,6 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
     );
   }
 }
-
 
 class _TotalRow extends StatelessWidget {
   final String label;
@@ -589,20 +599,28 @@ class CartItemTile extends ConsumerStatefulWidget {
 
 class _CartItemTileState extends ConsumerState<CartItemTile> {
   late TextEditingController _qtyCtrl;
+  late TextEditingController _priceCtrl;
+  late TextEditingController _discountCtrl;
   late FocusNode _qtyFocus;
   bool _showProfit = false;
 
   @override
   void initState() {
     super.initState();
-    final item = ref.read(cartProvider).items.firstWhere((i) => i.id == widget.itemId);
+    final item =
+        ref.read(cartProvider).items.firstWhere((i) => i.id == widget.itemId);
     _qtyCtrl = TextEditingController(text: item.quantity.toString());
+    _priceCtrl = TextEditingController(text: item.soldPrice.toStringAsFixed(0));
+    _discountCtrl =
+        TextEditingController(text: item.discountValue.toStringAsFixed(0));
     _qtyFocus = FocusNode();
   }
 
   @override
   void dispose() {
     _qtyCtrl.dispose();
+    _priceCtrl.dispose();
+    _discountCtrl.dispose();
     _qtyFocus.dispose();
     super.dispose();
   }
@@ -620,12 +638,14 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Akses Keuntungan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        title: const Text('Akses Keuntungan',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Masukkan PIN untuk melihat estimasi keuntungan.', style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
+            const Text('Masukkan PIN untuk melihat estimasi keuntungan.',
+                style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
             const SizedBox(height: 16),
             TextField(
               controller: pinController,
@@ -638,23 +658,27 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                 prefixIcon: Icon(Icons.lock_outline, size: 20),
               ),
               onSubmitted: (_) {
-                 if (pinController.text == correctPin) {
-                    Navigator.pop(context, true);
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PIN Salah!')));
-                  }
+                if (pinController.text == correctPin) {
+                  Navigator.pop(context, true);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('PIN Salah!')));
+                }
               },
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Batal')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Batal')),
           ElevatedButton(
             onPressed: () {
               if (pinController.text == correctPin) {
                 Navigator.pop(context, true);
               } else {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PIN Salah!')));
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(const SnackBar(content: Text('PIN Salah!')));
               }
             },
             child: const Text('Verifikasi'),
@@ -671,21 +695,37 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
   @override
   Widget build(BuildContext context) {
     final item = ref.watch(cartProvider.select(
-      (s) => s.items.isEmpty 
-          ? null 
-          : s.items.cast<CartItem?>().firstWhere((i) => i?.id == widget.itemId, orElse: () => null),
+      (s) => s.items.isEmpty
+          ? null
+          : s.items
+              .cast<CartItem?>()
+              .firstWhere((i) => i?.id == widget.itemId, orElse: () => null),
     ));
-    
+
     if (item == null) return const SizedBox.shrink();
 
     final notifier = ref.read(cartProvider.notifier);
 
-    // Sync quantity controller if changed externally
+    // Sync controllers if changed externally
     if (!_qtyFocus.hasFocus) {
       final qStr = item.quantity.toString();
       if (_qtyCtrl.text != qStr) {
         _qtyCtrl.text = qStr;
       }
+    }
+
+    final priceStr = item.soldPrice.toStringAsFixed(0);
+    if (_priceCtrl.text != priceStr) {
+      _priceCtrl.text = priceStr;
+      _priceCtrl.selection =
+          TextSelection.collapsed(offset: _priceCtrl.text.length);
+    }
+
+    final discountStr = item.discountValue.toStringAsFixed(0);
+    if (_discountCtrl.text != discountStr) {
+      _discountCtrl.text = discountStr;
+      _discountCtrl.selection =
+          TextSelection.collapsed(offset: _discountCtrl.text.length);
     }
 
     return Container(
@@ -722,7 +762,8 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Unit / Qty', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                const Text('Unit / Qty',
+                    style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
                 const SizedBox(height: 4),
                 Row(
                   children: [
@@ -747,8 +788,8 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                                       ))
                                   .toList(),
                               onChanged: (v) {
-                                final u =
-                                    item.product.allUnits.firstWhere((u) => u.unitName == v);
+                                final u = item.product.allUnits
+                                    .firstWhere((u) => u.unitName == v);
                                 notifier.updateUnit(item.id, u);
                               },
                             )
@@ -761,7 +802,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                             ),
                     ),
                     const SizedBox(width: 8),
-                    
+
                     // Qty Controls
                     QtyButton(
                         icon: Icons.remove,
@@ -781,8 +822,8 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                           controller: _qtyCtrl,
                           focusNode: _qtyFocus,
                           textAlign: TextAlign.center,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
                           style: const TextStyle(
                               color: AppTheme.textPrimary,
                               fontSize: 13,
@@ -800,8 +841,8 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                               notifier.updateQuantity(item.id, qty);
                             }
                           },
-                          onSubmitted: (v) =>
-                              notifier.updateQuantity(item.id, double.tryParse(v) ?? 1),
+                          onSubmitted: (v) => notifier.updateQuantity(
+                              item.id, double.tryParse(v) ?? 1),
                         ),
                       ),
                     ),
@@ -824,21 +865,26 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Harga Jual (${item.selectedUnit.unitName})', 
-                    style: const TextStyle(fontSize: 10, color: AppTheme.textMuted),
+                  Text(
+                    'Harga Jual (${item.selectedUnit.unitName})',
+                    style: const TextStyle(
+                        fontSize: 10, color: AppTheme.textMuted),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
                   _StandardBox(
                     child: ScrollableQtyField(
-                      controller: TextEditingController(text: item.soldPrice.toStringAsFixed(0)),
+                      controller: _priceCtrl,
                       step: 1000,
                       onChanged: (v) => notifier.updateSoldPrice(item.id, v),
                       child: _InlineTextField(
-                        key: ValueKey('price_${item.id}_${item.selectedUnit.unitName}'),
+                        key: ValueKey(
+                            'price_${item.id}_${item.selectedUnit.unitName}'),
+                        controller: _priceCtrl,
                         initialValue: item.soldPrice.toStringAsFixed(0),
-                        onChanged: (v) => notifier.updateSoldPrice(item.id, double.tryParse(v) ?? item.originalPrice),
+                        onChanged: (v) => notifier.updateSoldPrice(
+                            item.id, double.tryParse(v) ?? item.originalPrice),
                         prefixText: 'Rp ',
                         isBare: true,
                       ),
@@ -854,20 +900,28 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Potongan', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                  const Text('Potongan',
+                      style:
+                          TextStyle(fontSize: 10, color: AppTheme.textMuted)),
                   const SizedBox(height: 4),
                   Row(
                     children: [
                       Expanded(
                         child: _StandardBox(
                           child: ScrollableQtyField(
-                            controller: TextEditingController(text: item.discountValue.toStringAsFixed(0)),
+                            controller: _discountCtrl,
                             step: 1000,
-                            onChanged: (v) => notifier.setItemDiscount(item.id, v, item.discountType),
+                            onChanged: (v) => notifier.setItemDiscount(
+                                item.id, v, item.discountType),
                             child: _InlineTextField(
                               key: ValueKey('discount_${item.id}'),
-                              initialValue: item.discountValue.toStringAsFixed(0),
-                              onChanged: (v) => notifier.setItemDiscount(item.id, double.tryParse(v) ?? 0, item.discountType),
+                              controller: _discountCtrl,
+                              initialValue:
+                                  item.discountValue.toStringAsFixed(0),
+                              onChanged: (v) => notifier.setItemDiscount(
+                                  item.id,
+                                  double.tryParse(v) ?? 0,
+                                  item.discountType),
                               isBare: true,
                             ),
                           ),
@@ -882,12 +936,20 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                           isDense: true,
                           isExpanded: true,
                           alignment: Alignment.center,
-                          style: const TextStyle(fontSize: 11, color: AppTheme.accent, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                              fontSize: 11,
+                              color: AppTheme.accent,
+                              fontWeight: FontWeight.bold),
                           items: const [
-                            DropdownMenuItem(value: DiscountType.fixed, child: Center(child: Text('Rp'))),
-                            DropdownMenuItem(value: DiscountType.percentage, child: Center(child: Text('%'))),
+                            DropdownMenuItem(
+                                value: DiscountType.fixed,
+                                child: Center(child: Text('Rp'))),
+                            DropdownMenuItem(
+                                value: DiscountType.percentage,
+                                child: Center(child: Text('%'))),
                           ],
-                          onChanged: (v) => notifier.setItemDiscount(item.id, item.discountValue, v!),
+                          onChanged: (v) => notifier.setItemDiscount(
+                              item.id, item.discountValue, v!),
                         ),
                       ),
                     ],
@@ -897,9 +959,9 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
             ),
           ],
         ),
-        
+
         const SizedBox(height: 12),
-        
+
         // Profit Indicator and Subtotal
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -912,7 +974,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 if (item.totalDiscount > 0)
-                   Text('-${Formatters.currency(item.totalDiscount)}',
+                  Text('-${Formatters.currency(item.totalDiscount)}',
                       style: const TextStyle(
                           color: AppTheme.success,
                           fontSize: 11,
@@ -939,13 +1001,18 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
             ),
             child: Column(
               children: [
-                _ProfitDetailRow(label: 'Harga Modal Unit', value: item.costPrice),
-                _ProfitDetailRow(label: 'Total Estimasi Untung', value: item.profit, isBold: true),
                 _ProfitDetailRow(
-                  label: 'Margin Profit', 
-                  value: (item.profit / (item.subtotal > 0 ? item.subtotal : 1)) * 100, 
-                  isPercent: true
-                ),
+                    label: 'Harga Modal Unit', value: item.costPrice),
+                _ProfitDetailRow(
+                    label: 'Total Estimasi Untung',
+                    value: item.profit,
+                    isBold: true),
+                _ProfitDetailRow(
+                    label: 'Margin Profit',
+                    value: (item.profit /
+                            (item.subtotal > 0 ? item.subtotal : 1)) *
+                        100,
+                    isPercent: true),
               ],
             ),
           ),
@@ -954,7 +1021,6 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
     );
   }
 }
-
 
 class ItemEditDialog extends ConsumerStatefulWidget {
   final CartItem item;
@@ -1014,7 +1080,9 @@ class _ItemEditDialogState extends ConsumerState<ItemEditDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(widget.item.product.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text(widget.item.product.name,
+              style:
+                  const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
           Text('Harga Modal: ${Formatters.currency(widget.item.costPrice)}',
               style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
@@ -1052,7 +1120,8 @@ class _ItemEditDialogState extends ConsumerState<ItemEditDialog> {
                   child: DropdownButtonFormField<DiscountType>(
                     initialValue: _discountType,
                     isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Tipe', isDense: true),
+                    decoration:
+                        const InputDecoration(labelText: 'Tipe', isDense: true),
                     items: const [
                       DropdownMenuItem(
                           value: DiscountType.fixed, child: Text('Rp')),
@@ -1069,14 +1138,19 @@ class _ItemEditDialogState extends ConsumerState<ItemEditDialog> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: isNegativeProfit ? AppTheme.danger.withValues(alpha: 0.1) : AppTheme.success.withValues(alpha: 0.1),
+              color: isNegativeProfit
+                  ? AppTheme.danger.withValues(alpha: 0.1)
+                  : AppTheme.success.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: isNegativeProfit ? AppTheme.danger : AppTheme.success),
+              border: Border.all(
+                  color: isNegativeProfit ? AppTheme.danger : AppTheme.success),
             ),
             child: Row(
               children: [
                 Icon(
-                  isNegativeProfit ? Icons.warning_amber_rounded : Icons.trending_up_rounded,
+                  isNegativeProfit
+                      ? Icons.warning_amber_rounded
+                      : Icons.trending_up_rounded,
                   color: isNegativeProfit ? AppTheme.danger : AppTheme.success,
                   size: 20,
                 ),
@@ -1089,7 +1163,9 @@ class _ItemEditDialogState extends ConsumerState<ItemEditDialog> {
                         'Estimasi Keuntungan',
                         style: TextStyle(
                           fontSize: 11,
-                          color: isNegativeProfit ? AppTheme.danger : AppTheme.textSecondary,
+                          color: isNegativeProfit
+                              ? AppTheme.danger
+                              : AppTheme.textSecondary,
                         ),
                       ),
                       Text(
@@ -1097,7 +1173,9 @@ class _ItemEditDialogState extends ConsumerState<ItemEditDialog> {
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
-                          color: isNegativeProfit ? AppTheme.danger : AppTheme.success,
+                          color: isNegativeProfit
+                              ? AppTheme.danger
+                              : AppTheme.success,
                         ),
                       ),
                     ],
@@ -1111,7 +1189,10 @@ class _ItemEditDialogState extends ConsumerState<ItemEditDialog> {
               padding: EdgeInsets.only(top: 8),
               child: Text(
                 'Peringatan: Harga jual di bawah modal!',
-                style: TextStyle(color: AppTheme.danger, fontSize: 11, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                    color: AppTheme.danger,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600),
               ),
             ),
         ],
@@ -1121,23 +1202,26 @@ class _ItemEditDialogState extends ConsumerState<ItemEditDialog> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Batal')),
         ElevatedButton(
-          onPressed: isNegativeProfit ? null : () {
-            final price =
-                double.tryParse(_priceCtrl.text) ?? widget.item.soldPrice;
-            final disc = double.tryParse(_discountCtrl.text) ?? 0;
+          onPressed: isNegativeProfit
+              ? null
+              : () {
+                  final price =
+                      double.tryParse(_priceCtrl.text) ?? widget.item.soldPrice;
+                  final disc = double.tryParse(_discountCtrl.text) ?? 0;
 
-            if (price <= 0) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Harga harus lebih dari 0')));
-              return;
-            }
+                  if (price <= 0) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('Harga harus lebih dari 0')));
+                    return;
+                  }
 
-            notifier.updateSoldPrice(widget.item.id, price);
-            notifier.setItemDiscount(widget.item.id, disc, _discountType);
-            Navigator.pop(context);
-          },
+                  notifier.updateSoldPrice(widget.item.id, price);
+                  notifier.setItemDiscount(widget.item.id, disc, _discountType);
+                  Navigator.pop(context);
+                },
           style: ElevatedButton.styleFrom(
-            backgroundColor: isNegativeProfit ? AppTheme.textMuted : AppTheme.accent,
+            backgroundColor:
+                isNegativeProfit ? AppTheme.textMuted : AppTheme.accent,
           ),
           child: const Text('Simpan'),
         ),
@@ -1151,13 +1235,15 @@ class _InlineTextField extends StatefulWidget {
   final Function(String) onChanged;
   final String? prefixText;
   final bool isBare;
+  final TextEditingController? controller;
 
   const _InlineTextField({
-    super.key, 
-    required this.initialValue, 
-    required this.onChanged, 
+    super.key,
+    required this.initialValue,
+    required this.onChanged,
     this.prefixText,
     this.isBare = false,
+    this.controller,
   });
 
   @override
@@ -1170,30 +1256,41 @@ class _InlineTextFieldState extends State<_InlineTextField> {
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.initialValue);
+    _controller =
+        widget.controller ?? TextEditingController(text: widget.initialValue);
   }
 
   @override
   void didUpdateWidget(_InlineTextField oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.initialValue != widget.initialValue) {
-      _controller.text = widget.initialValue;
+
+    final effectiveController = widget.controller ?? _controller;
+    final isFocused = FocusManager.instance.primaryFocus?.hasFocus ?? false;
+    if (oldWidget.initialValue != widget.initialValue && !isFocused) {
+      effectiveController.text = widget.initialValue;
+      effectiveController.selection = TextSelection.collapsed(
+        offset: effectiveController.text.length,
+      );
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    if (widget.controller == null) {
+      _controller.dispose();
+    }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final effectiveController = widget.controller ?? _controller;
+
     if (widget.isBare) {
       return TextField(
-        controller: _controller,
+        controller: effectiveController,
         onChanged: (v) {
-          final numericValue = v.replaceAll('.', '');
+          final numericValue = v.replaceAll(RegExp(r'[^0-9]'), '');
           widget.onChanged(numericValue);
         },
         inputFormatters: [CurrencyInputFormatter()],
@@ -1201,7 +1298,8 @@ class _InlineTextFieldState extends State<_InlineTextField> {
         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
         decoration: InputDecoration(
           isDense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           prefixText: widget.prefixText,
           prefixStyle: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
           border: InputBorder.none,
@@ -1214,9 +1312,9 @@ class _InlineTextFieldState extends State<_InlineTextField> {
     return SizedBox(
       height: 32,
       child: TextField(
-        controller: _controller,
+        controller: effectiveController,
         onChanged: (v) {
-          final numericValue = v.replaceAll('.', '');
+          final numericValue = v.replaceAll(RegExp(r'[^0-9]'), '');
           widget.onChanged(numericValue);
         },
         inputFormatters: [CurrencyInputFormatter()],
@@ -1224,7 +1322,8 @@ class _InlineTextFieldState extends State<_InlineTextField> {
         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
         decoration: InputDecoration(
           isDense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           prefixText: widget.prefixText,
           prefixStyle: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
           filled: true,
@@ -1285,14 +1384,17 @@ class _ProfitIndicator extends StatelessWidget {
       duration: const Duration(milliseconds: 200),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: isActive 
-            ? AppTheme.accent 
-            : (isLowMargin ? AppTheme.danger.withValues(alpha: 0.1) : AppTheme.success.withValues(alpha: 0.1)),
+        color: isActive
+            ? AppTheme.accent
+            : (isLowMargin
+                ? AppTheme.danger.withValues(alpha: 0.1)
+                : AppTheme.success.withValues(alpha: 0.1)),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
-          color: isActive ? AppTheme.accent : (isLowMargin ? AppTheme.danger : AppTheme.success),
-          width: 0.8
-        ),
+            color: isActive
+                ? AppTheme.accent
+                : (isLowMargin ? AppTheme.danger : AppTheme.success),
+            width: 0.8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1300,7 +1402,9 @@ class _ProfitIndicator extends StatelessWidget {
           Icon(
             isActive ? Icons.lock_open_rounded : Icons.show_chart_rounded,
             size: 12,
-            color: isActive ? Colors.white : (isLowMargin ? AppTheme.danger : AppTheme.success),
+            color: isActive
+                ? Colors.white
+                : (isLowMargin ? AppTheme.danger : AppTheme.success),
           ),
           const SizedBox(width: 6),
           Text(
@@ -1308,7 +1412,9 @@ class _ProfitIndicator extends StatelessWidget {
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w900,
-              color: isActive ? Colors.white : (isLowMargin ? AppTheme.danger : AppTheme.success),
+              color: isActive
+                  ? Colors.white
+                  : (isLowMargin ? AppTheme.danger : AppTheme.success),
             ),
           ),
         ],
@@ -1332,16 +1438,24 @@ class _ProfitDetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = value < 0 ? AppTheme.danger : (label.contains('Untung') || isPercent ? AppTheme.success : AppTheme.textPrimary);
-    
+    final color = value < 0
+        ? AppTheme.danger
+        : (label.contains('Untung') || isPercent
+            ? AppTheme.success
+            : AppTheme.textPrimary);
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         children: [
-          Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+          Text(label,
+              style:
+                  const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
           const Spacer(),
           Text(
-            isPercent ? '${value.toStringAsFixed(1)}%' : Formatters.currency(value),
+            isPercent
+                ? '${value.toStringAsFixed(1)}%'
+                : Formatters.currency(value),
             style: TextStyle(
               fontSize: 12,
               fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,

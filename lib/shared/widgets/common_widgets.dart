@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 
 // ── PageHeader ───────────────────────────────────────────────────────────
@@ -97,11 +98,11 @@ class AppCard extends StatelessWidget {
     return Card(
       color: color,
       child: InkWell(
-        onTap:        onTap,
+        onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: padding ?? const EdgeInsets.all(16),
-          child:   child,
+          child: child,
         ),
       ),
     );
@@ -111,10 +112,10 @@ class AppCard extends StatelessWidget {
 // ── StatCard ──────────────────────────────────────────────────────────────
 
 class StatCard extends StatelessWidget {
-  final String  label;
-  final String  value;
+  final String label;
+  final String value;
   final IconData icon;
-  final Color?  accentColor;
+  final Color? accentColor;
   final String? subtitle;
 
   const StatCard({
@@ -135,9 +136,9 @@ class StatCard extends StatelessWidget {
         children: [
           Row(children: [
             Container(
-              padding:     const EdgeInsets.all(8),
-              decoration:  BoxDecoration(
-                color:        color.withValues(alpha: 0.15),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(icon, color: color, size: 20),
@@ -149,8 +150,8 @@ class StatCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(value,
               style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                    color:      AppTheme.textPrimary,
-                    fontSize:   22,
+                    color: AppTheme.textPrimary,
+                    fontSize: 22,
                     fontWeight: FontWeight.w700,
                   )),
           const SizedBox(height: 4),
@@ -164,12 +165,13 @@ class StatCard extends StatelessWidget {
 // ── SectionHeader ─────────────────────────────────────────────────────────
 
 class SectionHeader extends StatelessWidget {
-  final String   title;
-  final Widget?  trailing;
+  final String title;
+  final Widget? trailing;
   final IconData? icon;
-  final Color?   color;
+  final Color? color;
 
-  const SectionHeader({super.key, required this.title, this.trailing, this.icon, this.color});
+  const SectionHeader(
+      {super.key, required this.title, this.trailing, this.icon, this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -178,7 +180,9 @@ class SectionHeader extends StatelessWidget {
         Icon(icon, color: color ?? AppTheme.accent, size: 18),
         const SizedBox(width: 8),
       ],
-      Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: color)),
+      Text(title,
+          style:
+              Theme.of(context).textTheme.titleLarge?.copyWith(color: color)),
       const Spacer(),
       if (trailing != null) trailing!,
     ]);
@@ -189,7 +193,7 @@ class SectionHeader extends StatelessWidget {
 
 class StatusChip extends StatelessWidget {
   final String label;
-  final Color  color;
+  final Color color;
   const StatusChip({super.key, required this.label, required this.color});
 
   @override
@@ -197,12 +201,13 @@ class StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color:        color.withValues(alpha: 0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(4),
-        border:       Border.all(color: color.withValues(alpha: 0.4)),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Text(label,
-          style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+          style: TextStyle(
+              color: color, fontSize: 11, fontWeight: FontWeight.w600)),
     );
   }
 }
@@ -231,12 +236,12 @@ class AppSearchField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
-      focusNode:  focusNode,
-      onChanged:  onChanged,
+      focusNode: focusNode,
+      onChanged: onChanged,
       onSubmitted: onSubmitted,
       style: const TextStyle(color: AppTheme.textPrimary),
       decoration: InputDecoration(
-        hintText:    hintText,
+        hintText: hintText,
         prefixIcon: ValueListenableBuilder<TextEditingValue>(
           valueListenable: controller,
           builder: (context, value, child) {
@@ -245,17 +250,18 @@ class AppSearchField extends StatelessWidget {
               children: [
                 const Padding(
                   padding: EdgeInsets.only(left: 12, right: 4),
-                  child: Icon(Icons.search, color: AppTheme.textMuted, size: 20),
+                  child:
+                      Icon(Icons.search, color: AppTheme.textMuted, size: 20),
                 ),
                 if (value.text.isNotEmpty)
                   IconButton(
-                    icon:    const Icon(Icons.cancel_rounded, size: 20),
+                    icon: const Icon(Icons.cancel_rounded, size: 20),
                     onPressed: () {
                       controller.clear();
                       if (onClear != null) onClear!();
                       if (onChanged != null) onChanged!('');
                     },
-                    color:   AppTheme.accent,
+                    color: AppTheme.accent,
                     tooltip: 'Hapus Pencarian',
                   ),
               ],
@@ -271,9 +277,9 @@ class AppSearchField extends StatelessWidget {
 
 class EmptyState extends StatelessWidget {
   final IconData icon;
-  final String   title;
-  final String?  subtitle;
-  final Widget?  action;
+  final String title;
+  final String? subtitle;
+  final Widget? action;
 
   const EmptyState({
     super.key,
@@ -291,10 +297,16 @@ class EmptyState extends StatelessWidget {
         children: [
           Icon(icon, size: 64, color: AppTheme.textMuted),
           const SizedBox(height: 16),
-          Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: AppTheme.textSecondary)),
+          Text(title,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(color: AppTheme.textSecondary)),
           if (subtitle != null) ...[
             const SizedBox(height: 8),
-            Text(subtitle!, style: Theme.of(context).textTheme.bodyMedium, textAlign: TextAlign.center),
+            Text(subtitle!,
+                style: Theme.of(context).textTheme.bodyMedium,
+                textAlign: TextAlign.center),
           ],
           if (action != null) ...[const SizedBox(height: 20), action!],
         ],
@@ -312,7 +324,7 @@ class AppDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Divider(
-      color:  AppTheme.border,
+      color: AppTheme.border,
       height: 1,
       thickness: 1,
     );
@@ -342,9 +354,9 @@ Future<bool> showConfirmDialog(
   Color confirmColor = AppTheme.danger,
 }) async {
   return await showDialog<bool>(
-        context:  context,
-        builder:  (_) => AlertDialog(
-          title:   Text(title),
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text(title),
           content: Text(content),
           actions: [
             TextButton(
@@ -352,7 +364,7 @@ Future<bool> showConfirmDialog(
               child: const Text('Batal'),
             ),
             ElevatedButton(
-              style:     ElevatedButton.styleFrom(backgroundColor: confirmColor),
+              style: ElevatedButton.styleFrom(backgroundColor: confirmColor),
               onPressed: () => Navigator.of(context).pop(true),
               child: Text(confirmLabel),
             ),
@@ -368,7 +380,8 @@ Future<bool> showLogoutDialog(BuildContext context) async {
   return await showConfirmDialog(
     context,
     title: 'Konfirmasi Keluar',
-    content: 'Apakah Anda yakin ingin keluar dari akun Anda? Anda perlu masuk kembali untuk mengakses data.',
+    content:
+        'Apakah Anda yakin ingin keluar dari akun Anda? Anda perlu masuk kembali untuk mengakses data.',
     confirmLabel: 'KELUAR',
     confirmColor: AppTheme.danger,
   );
@@ -385,7 +398,8 @@ void showSuccess(BuildContext context, String msg) {
       const SizedBox(width: 8),
       Expanded(child: Text(msg)),
     ]),
-    duration: const Duration(milliseconds: 1500), // Reduced to 1.5s for faster scanning
+    duration: const Duration(
+        milliseconds: 1500), // Reduced to 1.5s for faster scanning
     behavior: SnackBarBehavior.floating,
     width: 320,
   ));
@@ -427,7 +441,7 @@ class ScrollableQtyField extends StatelessWidget {
         if (pointerSignal is PointerScrollEvent) {
           final double delta = pointerSignal.scrollDelta.dy;
           double current = double.tryParse(controller.text) ?? 0;
-          
+
           if (delta < 0) {
             current += step;
           } else if (delta > 0) {
@@ -435,12 +449,14 @@ class ScrollableQtyField extends StatelessWidget {
           }
 
           if (current < minValue) current = minValue;
-          
-          final text = current == current.toInt() 
-              ? current.toInt().toString() 
+
+          final text = current == current.toInt()
+              ? current.toInt().toString()
               : current.toString();
-          
-          controller.text = text;
+          final formattedText =
+              NumberFormat.decimalPattern('id_ID').format(current.toInt());
+
+          controller.text = formattedText;
           if (onChanged != null) onChanged!(current);
         }
       },

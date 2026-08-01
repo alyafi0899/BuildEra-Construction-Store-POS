@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:barcode/barcode.dart';
@@ -30,7 +31,7 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
   String _sortBy = 'name'; 
   bool _sortAsc = true;
   String? _selectedProfileId;
-  bool _isRollMode = false;
+  bool _isRollMode = true;
   
   final Map<String, int> _selectedQuantities = {};
   
@@ -180,7 +181,7 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
     }
   }
 
-  Future<void> _openExternalPdf(List<Product> allProducts) async {
+  Future<pw.Document?> _generateDocument(List<Product> allProducts) async {
     final productsToPrint = <MapEntry<Product, int>>[];
     for (final id in _selectedQuantities.keys) {
       try {
@@ -193,7 +194,7 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
 
     if (productsToPrint.isEmpty) {
       showError(context, 'Pilih setidaknya satu produk dengan barcode');
-      return;
+      return null;
     }
 
     final doc = pw.Document();
@@ -207,8 +208,6 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
     const double mmToPt = 2.83465;
     
     if (_isRollMode) {
-      // Roll Mode: multiple labels across is possible (e.g. 2 up or 3 up rolls)
-      // Height is constant (label height + gap), width is (labelWidth * cols) + gaps
       final rollWidth = (_labelWidthMm * _columnCount) + (_labelMarginMm * (_columnCount - 1));
       final rollFormat = PdfPageFormat(
         rollWidth * mmToPt,
@@ -255,6 +254,41 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
         );
       }
     }
+    return doc;
+  }
+
+  Future<void> _printDirectly(List<Product> allProducts) async {
+    final doc = await _generateDocument(allProducts);
+    if (doc == null) return;
+
+    const double mmToPt = 2.83465;
+    PdfPageFormat? format;
+    
+    if (_isRollMode) {
+      final rollWidth = (_labelWidthMm * _columnCount) + (_labelMarginMm * (_columnCount - 1));
+      format = PdfPageFormat(
+        rollWidth * mmToPt,
+        (_labelHeightMm + _labelMarginMm) * mmToPt,
+        marginAll: 0,
+      );
+    } else {
+      format = PdfPageFormat(
+        _paperWidthMm * mmToPt,
+        _paperHeightMm * mmToPt,
+        marginAll: _paperMarginMm * mmToPt,
+      );
+    }
+
+    await Printing.layoutPdf(
+      onLayout: (f) async => doc.save(),
+      name: 'BuildEra_Labels_${DateTime.now().millisecondsSinceEpoch}',
+      format: format,
+    );
+  }
+
+  Future<void> _openExternalPdf(List<Product> allProducts) async {
+    final doc = await _generateDocument(allProducts);
+    if (doc == null) return;
 
     final bytes = await doc.save();
     final dir = await getTemporaryDirectory();
@@ -282,31 +316,35 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
           mainAxisAlignment: pw.MainAxisAlignment.start,
           crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
-            // 1. Store Name (Alignment: Left)
+            // 1. Store Name (Alignment: Left) - Solid Black
             pw.Align(
               alignment: pw.Alignment.centerLeft,
               child: pw.Text(
                 settings.businessName,
                 style: pw.TextStyle(
                   fontSize: _fontSizeStore, 
-                  fontWeight: pw.FontWeight.bold, // Default Bold
-                  color: PdfColors.grey700,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.black,
                 ),
               ),
             ),
             pw.SizedBox(height: 2),
 
-            // 2. Product Name (Alignment: Center)
+            // 2. Product Name (Alignment: Center) - Solid Black
             pw.Text(
               p.name,
               textAlign: pw.TextAlign.center,
               maxLines: 2,
               overflow: pw.TextOverflow.clip,
-              style: pw.TextStyle(fontSize: _fontSizeName, fontWeight: pw.FontWeight.bold),
+              style: pw.TextStyle(
+                fontSize: _fontSizeName, 
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.black,
+              ),
             ),
             pw.Spacer(),
             
-            // 3. Barcode (Alignment: Center)
+            // 3. Barcode (Alignment: Center) - Solid Black
             pw.SizedBox(
               height: _barcodeHeightMm * mmToPt,
               width: _barcodeWidthMm * mmToPt,
@@ -314,23 +352,29 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
                 barcode: bc,
                 data: p.barcode ?? '000000',
                 drawText: false,
+                color: PdfColors.black,
               ),
             ),
             
-            // 4. Barcode Number (Alignment: Center)
+            // 4. Barcode Number (Alignment: Center) - Solid Black
             pw.Text(
               p.barcode ?? '',
-              style: pw.TextStyle(fontSize: _fontSizeBarcode, letterSpacing: 1),
+              style: pw.TextStyle(
+                fontSize: _fontSizeBarcode, 
+                letterSpacing: 1,
+                color: PdfColors.black,
+              ),
             ),
             
             pw.Spacer(),
             
-            // 5. Price (Alignment: Center)
+            // 5. Price (Alignment: Center) - Solid Black
             pw.Text(
               'Rp. ${Formatters.currency(p.basePrice).replaceAll('Rp', '').trim()}',
               style: pw.TextStyle(
                 fontSize: _fontSizePrice, 
                 fontWeight: pw.FontWeight.bold,
+                color: PdfColors.black,
               ),
             ),
           ],
@@ -467,13 +511,27 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
                       Container(
                         padding: const EdgeInsets.all(24),
                         decoration: const BoxDecoration(border: Border(top: BorderSide(color: AppTheme.border))),
-                        child: SizedBox(
-                          width: double.infinity, height: 54,
-                          child: ElevatedButton.icon(
-                            onPressed: () => productsAsync.whenData((p) => _openExternalPdf(p)),
-                            icon: const Icon(Icons.open_in_new_rounded),
-                            label: const Text('BUKA PDF & PRINT'),
-                          ),
+                        child: Column(
+                          children: [
+                            SizedBox(
+                              width: double.infinity, height: 50,
+                              child: ElevatedButton.icon(
+                                onPressed: () => productsAsync.whenData((p) => _printDirectly(p)),
+                                icon: const Icon(Icons.print_rounded),
+                                label: const Text('CETAK LANGSUNG'),
+                                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accent),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity, height: 45,
+                              child: OutlinedButton.icon(
+                                onPressed: () => productsAsync.whenData((p) => _openExternalPdf(p)),
+                                icon: const Icon(Icons.picture_as_pdf_rounded),
+                                label: const Text('BUKA PDF'),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
