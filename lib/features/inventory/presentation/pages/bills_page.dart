@@ -187,7 +187,8 @@ class _BillsListState extends ConsumerState<_BillsList> {
             }
 
             if (status == PaymentStatus.notApplicable) {
-              matches = false;
+              // Only show N/A items when filter is 'all'
+              matches = (_filter == 'all');
             }
 
             if (matches) {

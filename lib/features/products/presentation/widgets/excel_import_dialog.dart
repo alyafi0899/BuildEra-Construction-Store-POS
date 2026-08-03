@@ -7,6 +7,9 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/models/product.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../providers/product_provider.dart';
+import '../../providers/entity_provider.dart';
+import '../../models/supplier.dart';
+import '../../models/product_financials.dart';
 
 class ExcelImportDialog extends ConsumerStatefulWidget {
   const ExcelImportDialog({super.key});
@@ -45,6 +48,7 @@ class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
       final bytes = result.files.first.bytes!;
       final excel = Excel.decodeBytes(bytes);
       final productsToImport = <Map<Product, List<ProductUnit>>>[];
+      final uniqueSuppliers = <String, Supplier>{};
 
       for (var table in excel.tables.keys) {
         final sheet = excel.tables[table]!;
@@ -71,6 +75,21 @@ class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
           final costPrice = double.tryParse(val(5)) ?? 0.0;
           final basePrice = double.tryParse(val(6)) ?? 0.0;
           
+          // New Columns for Supplier
+          final supplierName = val(7);
+          final supplierPhone = val(8);
+          final supplierAddress = val(9);
+
+          if (supplierName.isNotEmpty) {
+            uniqueSuppliers[supplierName] = Supplier(
+              id: _uuid.v4(),
+              name: supplierName,
+              phone: supplierPhone.isEmpty ? null : supplierPhone,
+              address: supplierAddress.isEmpty ? null : supplierAddress,
+              createdAt: DateTime.now(),
+            );
+          }
+          
           final productId = _uuid.v4();
           final product = Product(
             id: productId,
@@ -81,6 +100,10 @@ class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
             basePrice: basePrice,
             baseUnit: baseUnit,
             stock: stock,
+            financials: ProductFinancials(
+              supplierName: supplierName.isEmpty ? null : supplierName,
+              supplierPaymentStatus: PaymentStatus.notApplicable,
+            ),
             createdAt: DateTime.now(),
             updatedAt: DateTime.now(),
           );
@@ -91,6 +114,11 @@ class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
 
       if (productsToImport.isEmpty) {
         throw 'Tidak ada data produk yang valid ditemukan.';
+      }
+
+      setState(() => _status = 'Mendaftarkan ${uniqueSuppliers.length} supplier...');
+      for (final s in uniqueSuppliers.values) {
+        await ref.read(entityRepositoryProvider).saveSupplier(s);
       }
 
       setState(() => _status = 'Mengunggah ${productsToImport.length} produk...');
@@ -146,6 +174,9 @@ class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
                   Text('E: Stok Awal', style: TextStyle(fontSize: 12)),
                   Text('F: Harga Modal (Rp)', style: TextStyle(fontSize: 12, color: AppTheme.accent)),
                   Text('G: Harga Jual Dasar (Rp)', style: TextStyle(fontSize: 12)),
+                  Text('H: Nama Supplier (Opsional)', style: TextStyle(fontSize: 12)),
+                  Text('I: No HP Supplier', style: TextStyle(fontSize: 12)),
+                  Text('J: Alamat Supplier', style: TextStyle(fontSize: 12)),
                 ],
               ),
             ),
