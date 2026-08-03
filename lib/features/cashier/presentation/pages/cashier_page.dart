@@ -14,6 +14,9 @@ import '../../providers/barcode_event_provider.dart';
 import '../../providers/barcode_scanner_provider.dart';
 import '../widgets/cart_panel.dart';
 import '../widgets/barcode_listener.dart';
+import '../widgets/cashier_intents.dart';
+import '../../providers/cart_focus_provider.dart';
+import '../widgets/payment_dialog.dart';
 
 import '../../../../shared/widgets/product_detail_dialog.dart';
 
@@ -111,15 +114,79 @@ class _CashierPageState extends ConsumerState<CashierPage> {
     return BarcodeListener(
       autoAdd: true,
       child: Shortcuts(
-        shortcuts: {
-          LogicalKeySet(LogicalKeyboardKey.escape): const ClearFocusIntent(),
+        shortcuts: <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.escape): const EscFocusIntent(),
+          SingleActivator(LogicalKeyboardKey.f1): const FocusQtyIntent(),
+          SingleActivator(LogicalKeyboardKey.f2): const FocusPriceIntent(),
+          SingleActivator(LogicalKeyboardKey.f3): const FocusItemDiscIntent(),
+          SingleActivator(LogicalKeyboardKey.f4): const FocusTransDiscIntent(),
+          SingleActivator(LogicalKeyboardKey.f5): const FocusCustomerIntent(),
+          LogicalKeySet(LogicalKeyboardKey.altLeft): const ToggleTaxIntent(),
+          LogicalKeySet(LogicalKeyboardKey.altRight): const ToggleTaxIntent(),
+          LogicalKeySet(LogicalKeyboardKey.shiftRight): const OpenPaymentIntent(),
         },
         child: Actions(
           actions: {
-            ClearFocusIntent: CallbackAction<ClearFocusIntent>(
+            EscFocusIntent: CallbackAction<EscFocusIntent>(
               onInvoke: (_) {
                 _searchFocusNode.requestFocus();
                 _unfocusTimer?.cancel();
+                return null;
+              },
+            ),
+            FocusQtyIntent: CallbackAction<FocusQtyIntent>(
+              onInvoke: (_) {
+                final items = ref.read(cartProvider).items;
+                if (items.isNotEmpty) {
+                  final lastId = items.last.id;
+                  ref.read(cartFocusRegistryProvider)[lastId]?.qtyFocus.requestFocus();
+                }
+                return null;
+              },
+            ),
+            FocusPriceIntent: CallbackAction<FocusPriceIntent>(
+              onInvoke: (_) {
+                final items = ref.read(cartProvider).items;
+                if (items.isNotEmpty) {
+                  final lastId = items.last.id;
+                  ref.read(cartFocusRegistryProvider)[lastId]?.priceFocus.requestFocus();
+                }
+                return null;
+              },
+            ),
+            FocusItemDiscIntent: CallbackAction<FocusItemDiscIntent>(
+              onInvoke: (_) {
+                final items = ref.read(cartProvider).items;
+                if (items.isNotEmpty) {
+                  final lastId = items.last.id;
+                  ref.read(cartFocusRegistryProvider)[lastId]?.discountFocus.requestFocus();
+                }
+                return null;
+              },
+            ),
+            FocusTransDiscIntent: CallbackAction<FocusTransDiscIntent>(
+              onInvoke: (_) {
+                ref.read(cartTotalsFocusProvider).transDiscountFocus.requestFocus();
+                return null;
+              },
+            ),
+            FocusCustomerIntent: CallbackAction<FocusCustomerIntent>(
+              onInvoke: (_) {
+                ref.read(cartTotalsFocusProvider).customerFocus.requestFocus();
+                return null;
+              },
+            ),
+            ToggleTaxIntent: CallbackAction<ToggleTaxIntent>(
+              onInvoke: (_) {
+                ref.read(cartProvider.notifier).toggleTax();
+                return null;
+              },
+            ),
+            OpenPaymentIntent: CallbackAction<OpenPaymentIntent>(
+              onInvoke: (_) {
+                if (!ref.read(cartProvider).isEmpty) {
+                  PaymentDialog.show(context);
+                }
                 return null;
               },
             ),

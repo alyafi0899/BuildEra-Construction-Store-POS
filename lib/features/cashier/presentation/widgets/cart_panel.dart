@@ -7,6 +7,7 @@ import '../../models/cart_item.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/multi_cart_provider.dart';
 import '../../../settings/providers/settings_provider.dart';
+import '../../providers/cart_focus_provider.dart';
 import 'payment_dialog.dart';
 
 class CartPanel extends StatelessWidget {
@@ -422,6 +423,7 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
     final taxAmount = ref.watch(cartProvider.select((s) => s.taxAmount));
     final total = ref.watch(cartProvider.select((s) => s.total));
     final isEmpty = ref.watch(cartProvider.select((s) => s.isEmpty));
+    final focus = ref.watch(cartTotalsFocusProvider);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -431,6 +433,7 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
       child: Column(children: [
         TextField(
           controller: _customerCtrl,
+          focusNode: focus.customerFocus,
           style: const TextStyle(fontSize: 13),
           decoration: const InputDecoration(
             hintText: 'Nama Pelanggan (Opsional)',
@@ -484,7 +487,7 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
                   .setTransDiscount(v, transDiscountType),
               child: TextField(
                 controller: _discountCtrl,
-                focusNode: _discountFocus,
+                focusNode: focus.transDiscountFocus,
                 keyboardType: TextInputType.number,
                 textAlign: TextAlign.right,
                 style: const TextStyle(
@@ -602,6 +605,8 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
   late TextEditingController _priceCtrl;
   late TextEditingController _discountCtrl;
   late FocusNode _qtyFocus;
+  late FocusNode _priceFocus;
+  late FocusNode _discountFocus;
   bool _showProfit = false;
 
   @override
@@ -613,15 +618,37 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
     _priceCtrl = TextEditingController(text: item.soldPrice.toStringAsFixed(0));
     _discountCtrl =
         TextEditingController(text: item.discountValue.toStringAsFixed(0));
-    _qtyFocus = FocusNode();
+    
+    _qtyFocus = FocusNode(debugLabel: 'QtyFocus_${widget.itemId}');
+    _priceFocus = FocusNode(debugLabel: 'PriceFocus_${widget.itemId}');
+    _discountFocus = FocusNode(debugLabel: 'DiscFocus_${widget.itemId}');
+
+    // Register focus nodes to global registry for shortcut access
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(cartFocusRegistryProvider.notifier).register(
+            widget.itemId,
+            CartItemFocusNodes(
+              qtyFocus: _qtyFocus,
+              priceFocus: _priceFocus,
+              discountFocus: _discountFocus,
+            ),
+          );
+    });
   }
 
   @override
   void dispose() {
+    // SAFE FIX: Use ref.container.read instead of ref.read during dispose to avoid unmounted error
+    try {
+      ref.container.read(cartFocusRegistryProvider.notifier).unregister(widget.itemId);
+    } catch (_) {}
+
     _qtyCtrl.dispose();
     _priceCtrl.dispose();
     _discountCtrl.dispose();
     _qtyFocus.dispose();
+    _priceFocus.dispose();
+    _discountFocus.dispose();
     super.dispose();
   }
 
@@ -882,6 +909,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                         key: ValueKey(
                             'price_${item.id}_${item.selectedUnit.unitName}'),
                         controller: _priceCtrl,
+                        focusNode: _priceFocus,
                         initialValue: item.soldPrice.toStringAsFixed(0),
                         onChanged: (v) => notifier.updateSoldPrice(
                             item.id, double.tryParse(v) ?? item.originalPrice),
@@ -916,6 +944,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                             child: _InlineTextField(
                               key: ValueKey('discount_${item.id}'),
                               controller: _discountCtrl,
+                              focusNode: _discountFocus,
                               initialValue:
                                   item.discountValue.toStringAsFixed(0),
                               onChanged: (v) => notifier.setItemDiscount(
@@ -1236,6 +1265,7 @@ class _InlineTextField extends StatefulWidget {
   final String? prefixText;
   final bool isBare;
   final TextEditingController? controller;
+  final FocusNode? focusNode;
 
   const _InlineTextField({
     super.key,
@@ -1244,6 +1274,7 @@ class _InlineTextField extends StatefulWidget {
     this.prefixText,
     this.isBare = false,
     this.controller,
+    this.focusNode,
   });
 
   @override
@@ -1289,6 +1320,7 @@ class _InlineTextFieldState extends State<_InlineTextField> {
     if (widget.isBare) {
       return TextField(
         controller: effectiveController,
+        focusNode: widget.focusNode,
         onChanged: (v) {
           final numericValue = v.replaceAll(RegExp(r'[^0-9]'), '');
           widget.onChanged(numericValue);
@@ -1313,6 +1345,7 @@ class _InlineTextFieldState extends State<_InlineTextField> {
       height: 32,
       child: TextField(
         controller: effectiveController,
+        focusNode: widget.focusNode,
         onChanged: (v) {
           final numericValue = v.replaceAll(RegExp(r'[^0-9]'), '');
           widget.onChanged(numericValue);

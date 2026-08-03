@@ -9,6 +9,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../../../shared/models/transaction.dart';
+import '../widgets/cashier_intents.dart';
 import '../../providers/cart_provider.dart';
 import '../../../payment/providers/transaction_provider.dart';
 import '../../../../core/utils/invoice_helper.dart';
@@ -44,6 +45,12 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   final   _notesCtrl  = TextEditingController();
   final   _shippingFeeCtrl = TextEditingController(text: '0'); // New
   final   ScrollController _scrollController = ScrollController();
+  
+  // Focus Nodes for Shortcuts
+  final _shippingFocus = FocusNode(debugLabel: 'PaymentShippingFocus');
+  final _notesFocus = FocusNode(debugLabel: 'PaymentNotesFocus');
+  final _payAmountFocus = FocusNode(debugLabel: 'PaymentAmountFocus');
+
   bool    _processing = false;
   bool    _success    = false;
   Transaction? _tx;
@@ -60,6 +67,9 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
     _notesCtrl.dispose();
     _shippingFeeCtrl.dispose(); // New
     _scrollController.dispose();
+    _shippingFocus.dispose();
+    _notesFocus.dispose();
+    _payAmountFocus.dispose();
     super.dispose();
   }
 
@@ -122,23 +132,73 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
       );
     }
 
-    return Shortcuts(
-      shortcuts: {
-        LogicalKeySet(LogicalKeyboardKey.enter): const ActivateIntent(),
-        LogicalKeySet(LogicalKeyboardKey.numpadEnter): const ActivateIntent(),
+    return Focus(
+      autofocus: true,
+      debugLabel: 'PaymentFormFocus',
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+        final key = event.logicalKey;
+
+        // 1. Enter to Confirm
+        if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) {
+          // If focus is in a multiline field, let it handle Enter normally
+          final primaryFocus = FocusManager.instance.primaryFocus;
+          if (primaryFocus != null && primaryFocus.debugLabel == 'PaymentNotesFocus') {
+            return KeyEventResult.ignored;
+          }
+          _confirm();
+          return KeyEventResult.handled;
+        }
+
+        // 2. Right Shift for Exact Amount
+        if (key == LogicalKeyboardKey.shiftRight) {
+          final cart = ref.read(cartProvider);
+          final total = cart.total + _shippingFee;
+          _amountCtrl.text = Formatters.decimal(total);
+          setState(() => _paid = total);
+          return KeyEventResult.handled;
+        }
+
+        // 3. Right Alt to Cycle Payment Methods
+        if (key == LogicalKeyboardKey.altRight) {
+          final methods = AppConstants.paymentMethods;
+          final currentIndex = methods.indexOf(_method);
+          final nextIndex = (currentIndex + 1) % methods.length;
+          setState(() {
+            _method = methods[nextIndex];
+            if (_method != AppConstants.paymentCash && _method != AppConstants.paymentPiutang) {
+              _amountCtrl.clear();
+            }
+          });
+          return KeyEventResult.handled;
+        }
+
+        // 4. F1 for Shipping
+        if (key == LogicalKeyboardKey.f1) {
+          _shippingFocus.requestFocus();
+          return KeyEventResult.handled;
+        }
+
+        // 5. F2 for Notes
+        if (key == LogicalKeyboardKey.f2) {
+          _notesFocus.requestFocus();
+          return KeyEventResult.handled;
+        }
+
+        // 6. Home for Amount
+        if (key == LogicalKeyboardKey.home) {
+          _payAmountFocus.requestFocus();
+          return KeyEventResult.handled;
+        }
+
+        return KeyEventResult.ignored;
       },
-      child: Actions(
-        actions: {
-          ActivateIntent: CallbackAction<ActivateIntent>(
-            onInvoke: (intent) => _confirm(),
-          ),
-        },
-        child: Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-          child: SizedBox(
-            width: 1200, // Increased width for 3-column layout
-            child: _formPanel(context, cart),
-          ),
+      child: Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+        child: SizedBox(
+          width: 1200, // Increased width for 3-column layout
+          child: _formPanel(context, cart),
         ),
       ),
     );
@@ -150,58 +210,88 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
     final settings = ref.read(settingsProvider);
     final tx = _tx!;
 
-    return Padding(
-      padding: const EdgeInsets.all(40),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Container(
-          width: 70, height: 70,
-          decoration: const BoxDecoration(color: AppTheme.success, shape: BoxShape.circle),
-          child: const Icon(Icons.check_rounded, color: Colors.white, size: 40),
-        ),
-        const SizedBox(height: 20),
-        Text('Pembayaran Berhasil!', style: Theme.of(context).textTheme.headlineMedium),
-        const SizedBox(height: 8),
-        Text(tx.invoiceNumber, style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold, letterSpacing: 1)),
-        const SizedBox(height: 32),
+    return Focus(
+      autofocus: true,
+      debugLabel: 'PaymentSuccessFocus',
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+        final key = event.logicalKey;
         
-  // Actions
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _ActionBtn(
-              icon: Icons.print_rounded, 
-              label: 'Print', 
-              onTap: () => _handlePiutangAction(tx, settings, (c, d, p, s) => DebtInvoiceHelper.printDebtInvoice(c, d, p, s), InvoiceHelper.printInvoice)
-            ),
-            const SizedBox(width: 12),
-            _ActionBtn(
-              icon: Icons.share_rounded, 
-              label: 'Share', 
-              onTap: () => _handlePiutangAction(tx, settings, (c, d, p, s) async {
-                final pdfBytes = await DebtInvoiceHelper.generateDebtPdf(customer: c, debt: d, payments: p, settings: s);
-                await Printing.sharePdf(bytes: pdfBytes, filename: 'Piutang-${c.name}-${tx.invoiceNumber}.pdf');
-              }, InvoiceHelper.shareInvoice)
-            ),
-            const SizedBox(width: 12),
-            _ActionBtn(
-              icon: Icons.download_rounded, 
-              label: 'Simpan', 
-              onTap: () => _handlePiutangAction(tx, settings, (c, d, p, s) => DebtInvoiceHelper.downloadDebtInvoice(c, d, p, s), InvoiceHelper.saveInvoice)
-            ),
-          ],
-        ),
-        
-        const SizedBox(height: 40),
-        SizedBox(
-          width: double.infinity,
-          height: 50,
-          child: ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(),
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.surfaceAlt, foregroundColor: Colors.white),
-            child: const Text('TUTUP'),
+        // 1. Enter to Close
+        if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) {
+          // SAFE POP: Ensure context is still valid before popping
+          if (context.mounted) Navigator.of(context).pop();
+          return KeyEventResult.handled;
+        }
+
+        // 2. Shift to Print
+        if (key == LogicalKeyboardKey.shiftLeft || key == LogicalKeyboardKey.shiftRight) {
+          _handlePiutangAction(tx, settings, (c, d, p, s) => DebtInvoiceHelper.printDebtInvoice(c, d, p, s), InvoiceHelper.printInvoice);
+          return KeyEventResult.handled;
+        }
+
+        // 3. Right Alt to Download
+        if (key == LogicalKeyboardKey.altRight) {
+          _handlePiutangAction(tx, settings, (c, d, p, s) => DebtInvoiceHelper.downloadDebtInvoice(c, d, p, s), InvoiceHelper.saveInvoice);
+          return KeyEventResult.handled;
+        }
+
+        return KeyEventResult.ignored;
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 70, height: 70,
+            decoration: const BoxDecoration(color: AppTheme.success, shape: BoxShape.circle),
+            child: const Icon(Icons.check_rounded, color: Colors.white, size: 40),
           ),
-        ),
-      ]),
+          const SizedBox(height: 20),
+          Text('Pembayaran Berhasil!', style: Theme.of(context).textTheme.headlineMedium),
+          const SizedBox(height: 8),
+          Text(tx.invoiceNumber, style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          const SizedBox(height: 32),
+          
+    // Actions
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _ActionBtn(
+                icon: Icons.print_rounded, 
+                label: 'Print', 
+                onTap: () => _handlePiutangAction(tx, settings, (c, d, p, s) => DebtInvoiceHelper.printDebtInvoice(c, d, p, s), InvoiceHelper.printInvoice)
+              ),
+              const SizedBox(width: 12),
+              _ActionBtn(
+                icon: Icons.share_rounded, 
+                label: 'Share', 
+                onTap: () => _handlePiutangAction(tx, settings, (c, d, p, s) async {
+                  final pdfBytes = await DebtInvoiceHelper.generateDebtPdf(customer: c, debt: d, payments: p, settings: s);
+                  await Printing.sharePdf(bytes: pdfBytes, filename: 'Piutang-${c.name}-${tx.invoiceNumber}.pdf');
+                }, InvoiceHelper.shareInvoice)
+              ),
+              const SizedBox(width: 12),
+              _ActionBtn(
+                icon: Icons.download_rounded, 
+                label: 'Simpan', 
+                onTap: () => _handlePiutangAction(tx, settings, (c, d, p, s) => DebtInvoiceHelper.downloadDebtInvoice(c, d, p, s), InvoiceHelper.saveInvoice)
+              ),
+            ],
+          ),
+          
+          const SizedBox(height: 40),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.surfaceAlt, foregroundColor: Colors.white),
+              child: const Text('TUTUP'),
+            ),
+          ),
+        ]),
+      ),
     );
   }
 
@@ -393,6 +483,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
         onChanged: (v) => setState(() {}),
         child: TextField(
           controller: _shippingFeeCtrl,
+          focusNode: _shippingFocus,
           keyboardType: TextInputType.number,
           inputFormatters: [CurrencyInputFormatter()],
           style: const TextStyle(fontSize: 13),
@@ -431,6 +522,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
       const SizedBox(height: 16),
       TextField(
         controller: _notesCtrl,
+        focusNode: _notesFocus,
         maxLines: 2,
         keyboardType: TextInputType.multiline,
         style: const TextStyle(fontSize: 13),
@@ -521,6 +613,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
           },
           child: TextFormField(
             controller:   _amountCtrl,
+            focusNode: _payAmountFocus,
             keyboardType: TextInputType.number,
             inputFormatters: [CurrencyInputFormatter()],
             autofocus: true,
