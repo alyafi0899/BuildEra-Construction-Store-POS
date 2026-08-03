@@ -115,11 +115,9 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
 
   void _updateQty(String id, int next) {
     setState(() {
-      if (next <= 0) {
-        _selectedQuantities.remove(id);
-      } else {
-        _selectedQuantities[id] = next;
-      }
+      // Ensure minimum qty is 1 for selected items
+      final finalQty = next < 1 ? 1 : next;
+      _selectedQuantities[id] = finalQty;
     });
   }
 
@@ -211,9 +209,13 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
     final productsToPrint = <MapEntry<Product, int>>[];
     for (final id in _selectedQuantities.keys) {
       try {
+        final qty = _selectedQuantities[id]!;
+        // With minimum 1 logic, qty will be at least 1, but we keep the safety check
+        if (qty <= 0) continue;
+
         final p = allProducts.firstWhere((element) => element.id == id);
         if (p.barcode != null && p.barcode!.isNotEmpty) {
-          productsToPrint.add(MapEntry(p, _selectedQuantities[id]!));
+          productsToPrint.add(MapEntry(p, qty));
         }
       } catch (_) {}
     }
@@ -954,6 +956,8 @@ class _ProductSelectionTileState extends State<_ProductSelectionTile> {
                     OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
               ),
               onChanged: (v) {
+                // If user clears the field or types 0, we send 0 to the update method
+                // which will handle resetting it to 1.
                 final val = int.tryParse(v) ?? 0;
                 widget.onQtyChanged(val);
               },
