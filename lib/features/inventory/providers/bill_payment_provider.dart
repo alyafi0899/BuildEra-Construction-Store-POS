@@ -40,7 +40,7 @@ class BillPaymentRepository {
       data:       payment.toMap(),
     );
     
-    await _recalculateBillStatus(payment.billId, payment.isInitialBill);
+    await _recalculateBillStatus(payment.billId, payment.isInitialBill, targetIsSupplier: payment.isForSupplier);
   }
 
   Future<void> deletePayment(BillPayment payment) async {
@@ -54,10 +54,10 @@ class BillPaymentRepository {
       data:       {},
     );
 
-    await _recalculateBillStatus(payment.billId, payment.isInitialBill);
+    await _recalculateBillStatus(payment.billId, payment.isInitialBill, targetIsSupplier: payment.isForSupplier);
   }
 
-  Future<void> _recalculateBillStatus(String billId, bool isInitial) async {
+  Future<void> _recalculateBillStatus(String billId, bool isInitial, {bool? targetIsSupplier}) async {
     final box = await _getBox();
     final allPayments = _paymentsFromBox(box).where((p) => p.billId == billId).toList();
     
@@ -74,35 +74,37 @@ class BillPaymentRepository {
         final f = p.financials;
 
         // --- 1. Supplier Status Calculation ---
-        final sDue = f.supplierPrice;
-        PaymentStatus sStatus;
-        if (sDue <= 0) {
-          sStatus = PaymentStatus.notApplicable;
-        } else if (totalSupplierPaid >= (sDue - epsilon)) {
-          sStatus = PaymentStatus.paid;
-        } else if (totalSupplierPaid > epsilon) {
-          sStatus = PaymentStatus.partial;
-        } else {
-          // If no payments yet, only set to unpaid if it wasn't already dismissed (notApplicable)
-          sStatus = f.supplierPaymentStatus == PaymentStatus.notApplicable 
-              ? PaymentStatus.notApplicable 
-              : PaymentStatus.unpaid;
+        PaymentStatus sStatus = f.supplierPaymentStatus;
+        if (targetIsSupplier == null || targetIsSupplier == true) {
+          final sDue = f.supplierPrice;
+          if (sDue <= 0) {
+            sStatus = PaymentStatus.notApplicable;
+          } else if (totalSupplierPaid >= (sDue - epsilon)) {
+            sStatus = PaymentStatus.paid;
+          } else if (totalSupplierPaid > epsilon) {
+            sStatus = PaymentStatus.partial;
+          } else {
+            sStatus = f.supplierPaymentStatus == PaymentStatus.notApplicable 
+                ? PaymentStatus.notApplicable 
+                : PaymentStatus.unpaid;
+          }
         }
         
         // --- 2. Shipping Status Calculation ---
-        final shDue = f.supplierShippingCost;
-        PaymentStatus shStatus;
-        if (shDue <= 0) {
-          shStatus = PaymentStatus.notApplicable;
-        } else if (totalShippingPaid >= (shDue - epsilon)) {
-          shStatus = PaymentStatus.paid;
-        } else if (totalShippingPaid > epsilon) {
-          shStatus = PaymentStatus.partial;
-        } else {
-          // If no payments yet, only set to unpaid if it wasn't already dismissed (notApplicable)
-          shStatus = f.shippingPaymentStatus == PaymentStatus.notApplicable 
-              ? PaymentStatus.notApplicable 
-              : PaymentStatus.unpaid;
+        PaymentStatus shStatus = f.shippingPaymentStatus;
+        if (targetIsSupplier == null || targetIsSupplier == false) {
+          final shDue = f.supplierShippingCost;
+          if (shDue <= 0) {
+            shStatus = PaymentStatus.notApplicable;
+          } else if (totalShippingPaid >= (shDue - epsilon)) {
+            shStatus = PaymentStatus.paid;
+          } else if (totalShippingPaid > epsilon) {
+            shStatus = PaymentStatus.partial;
+          } else {
+            shStatus = f.shippingPaymentStatus == PaymentStatus.notApplicable 
+                ? PaymentStatus.notApplicable 
+                : PaymentStatus.unpaid;
+          }
         }
 
         final updated = p.copyWith(
@@ -125,33 +127,37 @@ class BillPaymentRepository {
         final r = RestockRecord.fromMap(Map<String, dynamic>.from(rData as Map));
         
         // --- 1. Supplier Status Calculation ---
-        final sDue = r.supplierPrice;
-        PaymentStatus sStatus;
-        if (sDue <= 0) {
-          sStatus = PaymentStatus.notApplicable;
-        } else if (totalSupplierPaid >= (sDue - epsilon)) {
-          sStatus = PaymentStatus.paid;
-        } else if (totalSupplierPaid > epsilon) {
-          sStatus = PaymentStatus.partial;
-        } else {
-          sStatus = r.supplierPaymentStatus == PaymentStatus.notApplicable 
-              ? PaymentStatus.notApplicable 
-              : PaymentStatus.unpaid;
+        PaymentStatus sStatus = r.supplierPaymentStatus;
+        if (targetIsSupplier == null || targetIsSupplier == true) {
+          final sDue = r.supplierPrice;
+          if (sDue <= 0) {
+            sStatus = PaymentStatus.notApplicable;
+          } else if (totalSupplierPaid >= (sDue - epsilon)) {
+            sStatus = PaymentStatus.paid;
+          } else if (totalSupplierPaid > epsilon) {
+            sStatus = PaymentStatus.partial;
+          } else {
+            sStatus = r.supplierPaymentStatus == PaymentStatus.notApplicable 
+                ? PaymentStatus.notApplicable 
+                : PaymentStatus.unpaid;
+          }
         }
         
         // --- 2. Shipping Status Calculation ---
-        final shDue = r.shippingCost;
-        PaymentStatus shStatus;
-        if (shDue <= 0) {
-          shStatus = PaymentStatus.notApplicable;
-        } else if (totalShippingPaid >= (shDue - epsilon)) {
-          shStatus = PaymentStatus.paid;
-        } else if (totalShippingPaid > epsilon) {
-          shStatus = PaymentStatus.partial;
-        } else {
-          shStatus = r.shippingPaymentStatus == PaymentStatus.notApplicable 
-              ? PaymentStatus.notApplicable 
-              : PaymentStatus.unpaid;
+        PaymentStatus shStatus = r.shippingPaymentStatus;
+        if (targetIsSupplier == null || targetIsSupplier == false) {
+          final shDue = r.shippingCost;
+          if (shDue <= 0) {
+            shStatus = PaymentStatus.notApplicable;
+          } else if (totalShippingPaid >= (shDue - epsilon)) {
+            shStatus = PaymentStatus.paid;
+          } else if (totalShippingPaid > epsilon) {
+            shStatus = PaymentStatus.partial;
+          } else {
+            shStatus = r.shippingPaymentStatus == PaymentStatus.notApplicable 
+                ? PaymentStatus.notApplicable 
+                : PaymentStatus.unpaid;
+          }
         }
         
         final updated = r.copyWith(

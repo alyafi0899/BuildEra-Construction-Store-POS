@@ -167,7 +167,7 @@ class _BillsList extends ConsumerStatefulWidget {
 }
 
 class _BillsListState extends ConsumerState<_BillsList> {
-  String _filter = 'unpaid';
+  String _filter = 'all';
 
   @override
   Widget build(BuildContext context) {
@@ -255,7 +255,120 @@ class _BillsListState extends ConsumerState<_BillsList> {
         _filterChip('Sudah Lunas', 'paid'),
         const SizedBox(width: 8),
         _filterChip('Semua', 'all'),
+        const Spacer(),
+        ElevatedButton.icon(
+          onPressed: () => widget.isSupplier ? _showAddSupplier(context, ref) : _showAddShipping(context, ref),
+          icon: const Icon(Icons.add_rounded, size: 16),
+          label: Text('Tambah ${widget.isSupplier ? "Supplier" : "Ekspedisi"}', style: const TextStyle(fontSize: 11)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.accent,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+            visualDensity: VisualDensity.compact,
+          ),
+        ),
       ]),
+    );
+  }
+
+  void _showAddSupplier(BuildContext context, WidgetRef ref, {Supplier? supplier}) {
+    final nameCtrl = TextEditingController(text: supplier?.name);
+    final phoneCtrl = TextEditingController(text: supplier?.phone);
+    final addrCtrl = TextEditingController(text: supplier?.address);
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(supplier == null ? 'Tambah Supplier' : 'Edit Supplier'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Nama Perusahaan/Sales *', isDense: true),
+                validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: phoneCtrl,
+                decoration: const InputDecoration(labelText: 'Nomor HP/WA', isDense: true),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: addrCtrl,
+                decoration: const InputDecoration(labelText: 'Alamat', isDense: true),
+                maxLines: 2,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () async {
+              if (formKey.currentState!.validate()) {
+                final s = (supplier ?? Supplier(id: const Uuid().v4(), name: '', createdAt: DateTime.now())).copyWith(
+                  name: nameCtrl.text.trim(),
+                  phone: phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+                  address: addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
+                );
+                await ref.read(entityRepositoryProvider).saveSupplier(s);
+                if (context.mounted) Navigator.pop(context);
+              }
+            },
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddShipping(BuildContext context, WidgetRef ref, {ShippingService? shipping}) {
+    final nameCtrl = TextEditingController(text: shipping?.name);
+    final phoneCtrl = TextEditingController(text: shipping?.phone);
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(shipping == null ? 'Tambah Ekspedisi' : 'Edit Ekspedisi'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: Map<String, dynamic>.from({}).isEmpty ? MainAxisSize.min : MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Nama Ekspedisi/Supir *', isDense: true),
+                validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: phoneCtrl,
+                decoration: const InputDecoration(labelText: 'Nomor HP/WA', isDense: true),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () async {
+              if (formKey.currentState!.validate()) {
+                final s = (shipping ?? ShippingService(id: const Uuid().v4(), name: '', createdAt: DateTime.now())).copyWith(
+                  name: nameCtrl.text.trim(),
+                  phone: phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+                );
+                await ref.read(entityRepositoryProvider).saveShippingService(s);
+                if (context.mounted) Navigator.pop(context);
+              }
+            },
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -319,7 +432,7 @@ class _BillsListState extends ConsumerState<_BillsList> {
   }
 }
 
-class _EntityExpandableGroup extends StatefulWidget {
+class _EntityExpandableGroup extends ConsumerStatefulWidget {
   final String entityName;
   final bool isSupplier;
   final double totalBill;
@@ -339,10 +452,10 @@ class _EntityExpandableGroup extends StatefulWidget {
   });
 
   @override
-  State<_EntityExpandableGroup> createState() => _EntityExpandableGroupState();
+  ConsumerState<_EntityExpandableGroup> createState() => _EntityExpandableGroupState();
 }
 
-class _EntityExpandableGroupState extends State<_EntityExpandableGroup> {
+class _EntityExpandableGroupState extends ConsumerState<_EntityExpandableGroup> {
   bool _isExpanded = false;
 
   @override
@@ -395,7 +508,29 @@ class _EntityExpandableGroupState extends State<_EntityExpandableGroup> {
                 _summarySmallItem('Terbayar', widget.totalPaid, AppTheme.success),
                 const SizedBox(width: 20),
                 _summarySmallItem('Sisa Hutang', widget.totalRemaining, AppTheme.warning),
-                const SizedBox(width: 12),
+                const SizedBox(width: 20),
+                
+                // --- Action Buttons and Dropdown at the far right ---
+                if (widget.entity != null) ...[
+                  IconButton(
+                    icon: const Icon(Icons.edit_rounded, size: 18, color: AppTheme.info),
+                    onPressed: () => widget.isSupplier 
+                        ? _showEditSupplier(context, (widget.entity as Supplier))
+                        : _showEditShipping(context, (widget.entity as ShippingService)),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    tooltip: 'Edit Data',
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline_rounded, size: 18, color: AppTheme.danger),
+                    onPressed: () => _handleDelete(context, widget.entityName),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    tooltip: 'Hapus Data',
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 Icon(
                   _isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, 
                   color: AppTheme.textMuted
@@ -412,6 +547,125 @@ class _EntityExpandableGroupState extends State<_EntityExpandableGroup> {
             ),
           ),
       ],
+    );
+  }
+
+  Future<void> _handleDelete(BuildContext context, String name) async {
+    final ok = await showConfirmDialog(context, 
+      title: 'Hapus Data Master', 
+      content: 'Yakin hapus data "$name"? Menghapus data ini juga akan membersihkan nama ${widget.isSupplier ? "supplier" : "ekspedisi"} di seluruh histori tagihan.');
+    
+    if (ok) {
+      if (widget.isSupplier) {
+        final id = (widget.entity as Supplier).id;
+        await ref.read(entityRepositoryProvider).deleteSupplierCompletely(id, name);
+      } else {
+        final id = (widget.entity as ShippingService).id;
+        await ref.read(entityRepositoryProvider).deleteShippingServiceCompletely(id, name);
+      }
+      if (context.mounted) showSuccess(context, 'Data berhasil dihapus secara komplit');
+    }
+  }
+
+  void _showEditSupplier(BuildContext context, Supplier supplier) {
+    final nameCtrl = TextEditingController(text: supplier.name);
+    final phoneCtrl = TextEditingController(text: supplier.phone);
+    final addrCtrl = TextEditingController(text: supplier.address);
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Supplier'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Nama Perusahaan/Sales *', isDense: true),
+                validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: phoneCtrl,
+                decoration: const InputDecoration(labelText: 'Nomor HP/WA', isDense: true),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: addrCtrl,
+                decoration: const InputDecoration(labelText: 'Alamat', isDense: true),
+                maxLines: 2,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () async {
+              if (formKey.currentState!.validate()) {
+                final s = supplier.copyWith(
+                  name: nameCtrl.text.trim(),
+                  phone: phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+                  address: addrCtrl.text.trim().isEmpty ? null : addrCtrl.text.trim(),
+                );
+                await ref.read(entityRepositoryProvider).saveSupplier(s);
+                if (context.mounted) Navigator.pop(context);
+              }
+            },
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditShipping(BuildContext context, ShippingService shipping) {
+    final nameCtrl = TextEditingController(text: shipping.name);
+    final phoneCtrl = TextEditingController(text: shipping.phone);
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Ekspedisi'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Nama Ekspedisi/Supir *', isDense: true),
+                validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: phoneCtrl,
+                decoration: const InputDecoration(labelText: 'Nomor HP/WA', isDense: true),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () async {
+              if (formKey.currentState!.validate()) {
+                final s = shipping.copyWith(
+                  name: nameCtrl.text.trim(),
+                  phone: phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+                );
+                await ref.read(entityRepositoryProvider).saveShippingService(s);
+                if (context.mounted) Navigator.pop(context);
+              }
+            },
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -527,7 +781,7 @@ class _BillTile extends ConsumerWidget {
     
     return paymentsAsync.when(
       data: (allPayments) {
-        final itemPayments = allPayments.where((p) => p.billId == item.id).toList();
+        final itemPayments = allPayments.where((p) => p.billId == item.id && p.isForSupplier == isSupplier).toList();
         if (itemPayments.isEmpty && item.paidAmount == 0) return const SizedBox();
 
         return Column(
@@ -582,11 +836,11 @@ class _BillTile extends ConsumerWidget {
 
   void _showPaymentDialog(BuildContext context, WidgetRef ref) {
     final remaining = item.amount - item.paidAmount;
-    final amountCtrl = TextEditingController(text: remaining.toStringAsFixed(0));
+    final amountCtrl = TextEditingController(text: Formatters.decimal(remaining));
     final notesCtrl = TextEditingController();
 
     Future<void> submit() async {
-      final val = double.tryParse(amountCtrl.text) ?? 0;
+      final val = Formatters.parseDecimal(amountCtrl.text);
       if (val <= 0) return;
 
       final payment = BillPayment(

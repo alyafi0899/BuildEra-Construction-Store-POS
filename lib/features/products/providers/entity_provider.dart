@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/supplier.dart';
 import '../models/shipping_service.dart';
+import '../../inventory/models/restock_record.dart';
+import './product_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../core/sync/models/sync_task.dart';
 import '../../../core/sync/providers/sync_provider.dart';
@@ -56,6 +58,39 @@ class EntityRepository {
     );
   }
 
+  Future<void> deleteSupplierCompletely(String id, String name) async {
+    // 1. Delete Master Record
+    await deleteSupplier(id);
+
+    // 2. Clean up Products
+    final prodRepo = _ref.read(productRepositoryProvider);
+    final products = await prodRepo.getAllProducts();
+    for (final p in products) {
+      if (p.financials.supplierName == name) {
+        final updated = p.copyWith(
+          financials: p.financials.copyWith(supplierName: null),
+        );
+        await prodRepo.saveProduct(updated, updated.units);
+      }
+    }
+
+    // 3. Clean up Restock History
+    final restockBox = await LocalDatabase.openBox(_uid, 'restock_history');
+    final restocks = restockBox.values.map((d) => RestockRecord.fromMap(Map<String, dynamic>.from(d as Map))).toList();
+    for (final r in restocks) {
+      if (r.supplierName == name) {
+        final updated = r.copyWith(supplierName: null);
+        await restockBox.put(r.id, updated.toMap());
+        await _ref.read(syncProvider.notifier).addToQueue(
+          collection: 'restock_history',
+          documentId: r.id,
+          action: SyncAction.update,
+          data: updated.toMap(),
+        );
+      }
+    }
+  }
+
   // ── Shipping Services ───────────────────────────────────────────────────
 
   Stream<List<ShippingService>> getShippingServicesStream() async* {
@@ -93,6 +128,39 @@ class EntityRepository {
       action:     SyncAction.delete,
       data:       {},
     );
+  }
+
+  Future<void> deleteShippingServiceCompletely(String id, String name) async {
+    // 1. Delete Master Record
+    await deleteShippingService(id);
+
+    // 2. Clean up Products
+    final prodRepo = _ref.read(productRepositoryProvider);
+    final products = await prodRepo.getAllProducts();
+    for (final p in products) {
+      if (p.financials.shippingServiceName == name) {
+        final updated = p.copyWith(
+          financials: p.financials.copyWith(shippingServiceName: null),
+        );
+        await prodRepo.saveProduct(updated, updated.units);
+      }
+    }
+
+    // 3. Clean up Restock History
+    final restockBox = await LocalDatabase.openBox(_uid, 'restock_history');
+    final restocks = restockBox.values.map((d) => RestockRecord.fromMap(Map<String, dynamic>.from(d as Map))).toList();
+    for (final r in restocks) {
+      if (r.shippingServiceName == name) {
+        final updated = r.copyWith(shippingServiceName: null);
+        await restockBox.put(r.id, updated.toMap());
+        await _ref.read(syncProvider.notifier).addToQueue(
+          collection: 'restock_history',
+          documentId: r.id,
+          action: SyncAction.update,
+          data: updated.toMap(),
+        );
+      }
+    }
   }
 }
 

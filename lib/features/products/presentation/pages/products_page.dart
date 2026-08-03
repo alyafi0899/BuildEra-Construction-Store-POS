@@ -20,6 +20,7 @@ import '../../../inventory/providers/restock_provider.dart';
 import '../../../inventory/models/restock_record.dart';
 import '../../../inventory/presentation/widgets/restock_dialog.dart';
 import '../../../../shared/widgets/security_gate.dart';
+import '../../../../core/providers/navigation_provider.dart';
 
 class ProductsPage extends ConsumerStatefulWidget {
   const ProductsPage({super.key});
@@ -195,6 +196,14 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     final categoryFilter = ref.watch(productCategoryFilterProvider);
     final sort = ref.watch(productSortProvider);
     final filters = ref.watch(productFiltersProvider);
+
+    // Reset search when navigating back to this page
+    ref.listen(navigationIndexProvider, (prev, next) {
+      if (next == 1) { // Index of ProductsPage in MainShell
+        _searchCtrl.clear();
+        ref.read(productSearchQueryProvider.notifier).set('');
+      }
+    });
 
     return Scaffold(
       backgroundColor: AppTheme.bg,

@@ -331,8 +331,8 @@ class _DebtTileState extends ConsumerState<_DebtTile> {
 
   String _statusLabel(DebtStatus s) {
     switch(s) {
-      case DebtStatus.unpaid: return 'BELUM BAYAR';
-      case DebtStatus.partiallyPaid: return 'DICICIL';
+      case DebtStatus.unpaid: return 'BELUM LUNAS';
+      case DebtStatus.partiallyPaid: return 'CICILAN';
       case DebtStatus.paid: return 'LUNAS';
       case DebtStatus.overdue: return 'TERLAMBAT';
     }

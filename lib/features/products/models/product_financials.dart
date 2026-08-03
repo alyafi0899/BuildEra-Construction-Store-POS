@@ -11,11 +11,11 @@ extension PaymentStatusX on PaymentStatus {
       case PaymentStatus.paid:
         return 'Lunas';
       case PaymentStatus.unpaid:
-        return 'Belum Bayar';
+        return 'Belum Lunas';
       case PaymentStatus.partial:
-        return 'Dibayar Sebagian';
+        return 'Cicilan';
       case PaymentStatus.notApplicable:
-        return 'N/A';
+        return 'Tidak Ada';
     }
   }
 }

@@ -42,7 +42,7 @@ class ProductFormDialog extends ConsumerStatefulWidget {
 class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _name, _barcode, _description, _costPrice, _basePrice, _stock, _categoryCtrl, _baseUnitCtrl, _profitPercentCtrl;
-  late final TextEditingController _supplierPrice, _supplierShippingCost, _supplierName, _shippingServiceName;
+  late final TextEditingController _supplierPrice, _supplierShippingCost, _supplierName, _shippingServiceName, _supplierPaidAmount, _shippingPaidAmount;
   String? _defaultUnitName;
   late List<_UnitEntry> _units;
   Uint8List? _imageBytes;
@@ -83,6 +83,8 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
     _supplierShippingCost = TextEditingController(text: f.supplierShippingCost > 0 ? f.supplierShippingCost.toStringAsFixed(0) : '');
     _supplierName = TextEditingController(text: f.supplierName ?? '');
     _shippingServiceName = TextEditingController(text: f.shippingServiceName ?? '');
+    _supplierPaidAmount = TextEditingController(text: f.supplierPaidAmount > 0 ? f.supplierPaidAmount.toStringAsFixed(0) : '0');
+    _shippingPaidAmount = TextEditingController(text: f.shippingPaidAmount > 0 ? f.shippingPaidAmount.toStringAsFixed(0) : '0');
     
     _isManualCost = f.isManualCost;
     _supplierPaymentStatus = f.supplierPaymentStatus;
@@ -108,6 +110,8 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
     _supplierShippingCost.dispose();
     _supplierName.dispose();
     _shippingServiceName.dispose();
+    _supplierPaidAmount.dispose();
+    _shippingPaidAmount.dispose();
     super.dispose();
   }
 
@@ -242,6 +246,8 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
         financials: ProductFinancials(
           supplierPrice: Formatters.parseDecimal(_supplierPrice.text),
           supplierShippingCost: Formatters.parseDecimal(_supplierShippingCost.text),
+          supplierPaidAmount: Formatters.parseDecimal(_supplierPaidAmount.text),
+          shippingPaidAmount: Formatters.parseDecimal(_shippingPaidAmount.text),
           isManualCost: _isManualCost,
           supplierName: supplierName,
           supplierPaymentStatus: _supplierPaymentStatus,
@@ -758,8 +764,27 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                 _paymentStatusDropdown(
                                   label: 'Status Bayar Barang',
                                   value: _supplierPaymentStatus,
-                                  onChanged: (v) => setState(() => _supplierPaymentStatus = v!),
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _supplierPaymentStatus = v!;
+                                      if (v == PaymentStatus.paid) {
+                                        _supplierPaidAmount.text = _supplierPrice.text.isEmpty ? '0' : _supplierPrice.text;
+                                      } else {
+                                        _supplierPaidAmount.text = '0';
+                                      }
+                                    });
+                                  },
                                 ),
+                                if (_supplierPaymentStatus == PaymentStatus.partial) ...[
+                                  const SizedBox(height: 8),
+                                  TextFormField(
+                                    controller: _supplierPaidAmount,
+                                    decoration: const InputDecoration(labelText: 'Jumlah Cicilan Awal (Rp) *', prefixText: 'Rp ', isDense: true),
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: [CurrencyInputFormatter()],
+                                    validator: (v) => Formatters.parseDecimal(v ?? '') <= 0 ? 'Wajib diisi untuk status Cicilan' : null,
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -839,8 +864,27 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                 _paymentStatusDropdown(
                                   label: 'Status Bayar Ongkir',
                                   value: _shippingPaymentStatus,
-                                  onChanged: (v) => setState(() => _shippingPaymentStatus = v!),
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _shippingPaymentStatus = v!;
+                                      if (v == PaymentStatus.paid) {
+                                        _shippingPaidAmount.text = _supplierShippingCost.text.isEmpty ? '0' : _supplierShippingCost.text;
+                                      } else {
+                                        _shippingPaidAmount.text = '0';
+                                      }
+                                    });
+                                  },
                                 ),
+                                if (_shippingPaymentStatus == PaymentStatus.partial) ...[
+                                  const SizedBox(height: 8),
+                                  TextFormField(
+                                    controller: _shippingPaidAmount,
+                                    decoration: const InputDecoration(labelText: 'Jumlah Cicilan Awal (Rp) *', prefixText: 'Rp ', isDense: true),
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: [CurrencyInputFormatter()],
+                                    validator: (v) => Formatters.parseDecimal(v ?? '') <= 0 ? 'Wajib diisi untuk status Cicilan' : null,
+                                  ),
+                                ],
                               ],
                             ),
                           ),

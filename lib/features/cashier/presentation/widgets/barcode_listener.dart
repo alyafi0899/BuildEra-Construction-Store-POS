@@ -101,10 +101,12 @@ class _BarcodeListenerState extends ConsumerState<BarcodeListener> {
                 // We use a longer delay (5s) for "safety", but the important part is 
                 // that if isUserInField is TRUE, we NEVER request focus back.
                 if (!isUserInField && primaryFocus != _focusNode) {
-                  Future.delayed(const Duration(seconds: 5), () {
+                  Future.delayed(const Duration(milliseconds: 500), () {
                     if (mounted) {
                       final currentFocus = FocusManager.instance.primaryFocus;
                       if (currentFocus == null || currentFocus.debugLabel == 'Root Focus') {
+                        // Clear buffer before regaining focus to ensure fresh scan
+                        ref.read(barcodeScannerProvider.notifier).clearBuffer();
                         _focusNode.requestFocus();
                       }
                     }

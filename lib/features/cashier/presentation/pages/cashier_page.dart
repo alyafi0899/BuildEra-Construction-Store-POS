@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
@@ -9,6 +11,7 @@ import '../../../products/providers/product_provider.dart';
 
 import '../../providers/cart_provider.dart';
 import '../../providers/barcode_event_provider.dart';
+import '../../providers/barcode_scanner_provider.dart';
 import '../widgets/cart_panel.dart';
 import '../widgets/barcode_listener.dart';
 
@@ -23,34 +26,81 @@ class CashierPage extends ConsumerStatefulWidget {
 
 class _CashierPageState extends ConsumerState<CashierPage> {
   final _searchCtrl = TextEditingController();
+  final _searchFocusNode = FocusNode(debugLabel: 'CashierSearchFocus');
+  Timer? _unfocusTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initial focus on search bar
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _searchFocusNode.requestFocus();
+    });
+  }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _searchFocusNode.dispose();
+    _unfocusTimer?.cancel();
     super.dispose();
+  }
+
+  void _reclaimFocus() {
+    if (!mounted) return;
+    
+    // Rule 3: Do NOT reclaim if a modal dialog is open
+    if (ModalRoute.of(context)?.isCurrent == false) return;
+
+    final primaryFocus = FocusManager.instance.primaryFocus;
+    
+    // Rule 2: Absolute Protection for Cart fields
+    // We check if the focus is on an EditableText (input field).
+    // If it is, we NEVER pull back.
+    bool isInAnyInputField = primaryFocus != null && 
+                            primaryFocus.context?.widget is EditableText;
+
+    if (isInAnyInputField) return;
+
+    // Only reclaim if focus is null or lost to a non-input area
+    _searchFocusNode.requestFocus();
+  }
+
+  void _resetUnfocusTimer() {
+    _unfocusTimer?.cancel();
+    
+    if (ModalRoute.of(context)?.isCurrent == false) return;
+
+    // Rule 2: If we are in an input field, DO NOT start the timer.
+    final primaryFocus = FocusManager.instance.primaryFocus;
+    if (primaryFocus != null && primaryFocus.context?.widget is EditableText) {
+      return;
+    }
+
+    _unfocusTimer = Timer(const Duration(seconds: 10), () {
+      if (mounted) {
+        _reclaimFocus();
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final category = ref.watch(productCategoryFilterProvider);
 
-    // Listen to global barcode events to update the local search field
+    // Listen to global barcode events
     ref.listen<BarcodeEvent?>(barcodeEventProvider, (prev, next) {
       if (next == null) return;
+      
+      _unfocusTimer?.cancel();
 
-      // If a barcode was scanned while the field was focused, it likely wrote
-      // the barcode into the field. We clear it to prevent the scanner's 'Enter'
-      // from triggering the payment dialog.
-      if (next.wasFocused) {
-        _searchCtrl.text = next.barcode;
-        _searchCtrl.selection = TextSelection.fromPosition(
-          TextPosition(offset: next.barcode.length),
-        );
-        ref.read(productSearchQueryProvider.notifier).set(next.barcode);
+      if (!next.wasFocused) {
+        _searchCtrl.clear();
+        ref.read(productSearchQueryProvider.notifier).set('');
+        _searchFocusNode.requestFocus();
         return;
       }
 
-      // Only react if NOT in focus, to update search results visually
       _searchCtrl.text = next.barcode;
       _searchCtrl.selection = TextSelection.fromPosition(
         TextPosition(offset: next.barcode.length),
@@ -60,63 +110,102 @@ class _CashierPageState extends ConsumerState<CashierPage> {
 
     return BarcodeListener(
       autoAdd: true,
-      child: Row(children: [
-        // ── Left: Product Search & Grid ──────────────────────────────────
-        Expanded(
-          flex: 6,
-          child: Column(
-              children: [
-                // Header
-                PageHeader(
-                  title: 'Kasir',
-                  icon: Icons.point_of_sale_rounded,
-                  actions: [
-                    const SizedBox(width: 16),
-                    Text(Formatters.date(DateTime.now()),
-                        style: Theme.of(context).textTheme.bodyMedium),
-                  ],
-                ),
+      child: Shortcuts(
+        shortcuts: {
+          LogicalKeySet(LogicalKeyboardKey.escape): const ClearFocusIntent(),
+        },
+        child: Actions(
+          actions: {
+            ClearFocusIntent: CallbackAction<ClearFocusIntent>(
+              onInvoke: (_) {
+                _searchFocusNode.requestFocus();
+                _unfocusTimer?.cancel();
+                return null;
+              },
+            ),
+          },
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: () {
+              // Reset timer on any click
+              _resetUnfocusTimer();
+              // Short delay to let the click focus the target field first
+              Future.delayed(const Duration(milliseconds: 150), _reclaimFocus);
+            },
+            child: Row(children: [
+              // ── Left: Product Search & Grid ──────────────────────────────────
+              Expanded(
+                flex: 6,
+                child: Column(
+                    children: [
+                      // Header
+                      PageHeader(
+                        title: 'Kasir',
+                        icon: Icons.point_of_sale_rounded,
+                        actions: [
+                          const SizedBox(width: 16),
+                          Text(Formatters.date(DateTime.now()),
+                              style: Theme.of(context).textTheme.bodyMedium),
+                        ],
+                      ),
 
-                // Search Field (Separated from Header for consistency)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      // Search Field
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                        color: AppTheme.surface,
+                        child: AppSearchField(
+                          controller: _searchCtrl,
+                          focusNode: _searchFocusNode,
+                          hintText: 'Cari produk atau scan barcode...',
+                          onChanged: (v) {
+                            ref.read(productSearchQueryProvider.notifier).set(v);
+                            _resetUnfocusTimer();
+                          },
+                          onClear: () {
+                            _searchCtrl.clear();
+                            ref.read(productSearchQueryProvider.notifier).set('');
+                            _searchFocusNode.requestFocus();
+                          },
+                          onSubmitted: (v) {
+                            ref.read(productSearchQueryProvider.notifier).set(v);
+                            ref.read(barcodeScannerProvider.notifier).clearBuffer();
+                            _searchFocusNode.requestFocus();
+                            _unfocusTimer?.cancel();
+                          },
+                        ),
+                      ),
+
+                      // Category filter chips
+                      _CategoryFilter(
+                        selected: category,
+                        onSelected: (c) => ref.read(productCategoryFilterProvider.notifier).set(c),
+                      ),
+
+                      // Product grid
+                    Expanded(
+                        child: _ProductGrid(onAction: () => _searchFocusNode.requestFocus())),
+                  ]),
+              ),
+
+              // ── Right: Cart Panel ────────────────────────────────────────────
+              Container(
+                width: 480,
+                decoration: const BoxDecoration(
                   color: AppTheme.surface,
-                  child: AppSearchField(
-                    controller: _searchCtrl,
-                    hintText: 'Cari produk atau scan barcode...',
-                    onChanged: (v) => ref.read(productSearchQueryProvider.notifier).set(v),
-                    onClear: () {
-                      _searchCtrl.clear();
-                      ref.read(productSearchQueryProvider.notifier).set('');
-                    },
-                    onSubmitted: (v) => ref.read(productSearchQueryProvider.notifier).set(v),
-                  ),
+                  border: Border(left: BorderSide(color: AppTheme.border)),
                 ),
-
-                // Category filter chips
-                _CategoryFilter(
-                  selected: category,
-                  onSelected: (c) => ref.read(productCategoryFilterProvider.notifier).set(c),
-                ),
-
-                // Product grid
-                const Expanded(
-                    child: _ProductGrid()),
-              ]),
-        ),
-
-        // ── Right: Cart Panel ────────────────────────────────────────────
-        Container(
-          width: 480,
-          decoration: const BoxDecoration(
-            color: AppTheme.surface,
-            border: Border(left: BorderSide(color: AppTheme.border)),
+                child: const CartPanel(),
+              ),
+            ]),
           ),
-          child: const CartPanel(),
         ),
-      ]),
+      ),
     );
   }
+}
+
+class ClearFocusIntent extends Intent {
+  const ClearFocusIntent();
 }
 
 // ── Category Filter ────────────────────────────────────────────────────────
@@ -191,7 +280,8 @@ class _Chip extends StatelessWidget {
 // ── Product Grid ───────────────────────────────────────────────────────────
 
 class _ProductGrid extends ConsumerStatefulWidget {
-  const _ProductGrid();
+  final VoidCallback? onAction;
+  const _ProductGrid({this.onAction});
 
   @override
   ConsumerState<_ProductGrid> createState() => _ProductGridState();
@@ -231,6 +321,7 @@ class _ProductGridState extends ConsumerState<_ProductGrid> {
           child: _ProductListTile(
             key: ValueKey('cashier_prod_${products[i].id}'),
             product: products[i],
+            onTap: widget.onAction,
           ),
         ),
       ),
@@ -240,7 +331,8 @@ class _ProductGridState extends ConsumerState<_ProductGrid> {
 
 class _ProductListTile extends ConsumerWidget {
   final Product product;
-  const _ProductListTile({super.key, required this.product});
+  final VoidCallback? onTap;
+  const _ProductListTile({super.key, required this.product, this.onTap});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -251,7 +343,12 @@ class _ProductListTile extends ConsumerWidget {
       borderRadius: BorderRadius.circular(12),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => ref.read(cartProvider.notifier).addProduct(product),
+        onTap: () {
+          ref.read(cartProvider.notifier).addProduct(product);
+          // Rule 1: Instant Pull back to search after manual add
+          ref.read(barcodeScannerProvider.notifier).clearBuffer();
+          if (onTap != null) onTap!();
+        },
         onLongPress: () => ProductDetailDialog.show(context, product),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

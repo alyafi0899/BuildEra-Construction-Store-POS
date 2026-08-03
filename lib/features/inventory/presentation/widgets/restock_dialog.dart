@@ -36,7 +36,7 @@ class RestockDialog extends ConsumerStatefulWidget {
 
 class _RestockDialogState extends ConsumerState<RestockDialog> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _qty, _supplierPrice, _supplierShippingCost, _totalCostPerUnit, _basePrice, _supplierName, _shippingServiceName, _notes;
+  late final TextEditingController _qty, _supplierPrice, _supplierShippingCost, _totalCostPerUnit, _basePrice, _supplierName, _shippingServiceName, _notes, _supplierPaidAmount, _shippingPaidAmount;
   
   bool _isManualCost = false;
   PaymentStatus _supplierPaymentStatus = PaymentStatus.paid;
@@ -63,6 +63,8 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
     _supplierName = TextEditingController();
     _shippingServiceName = TextEditingController();
     _notes = TextEditingController(text: r?.notes ?? '');
+    _supplierPaidAmount = TextEditingController(text: r != null ? r.supplierPaidAmount.toStringAsFixed(0) : '0');
+    _shippingPaidAmount = TextEditingController(text: r != null ? r.shippingPaidAmount.toStringAsFixed(0) : '0');
     
     _selectedUnit = r != null 
         ? (p.allUnits.firstWhereOrNull((u) => u.unitName == r.unitName) ?? p.allUnits.first)
@@ -101,6 +103,8 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
     _supplierName.dispose();
     _shippingServiceName.dispose();
     _notes.dispose();
+    _supplierPaidAmount.dispose();
+    _shippingPaidAmount.dispose();
     super.dispose();
   }
 
@@ -164,6 +168,8 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
         shippingCost: Formatters.parseDecimal(_supplierShippingCost.text),
         totalCostPerUnit: Formatters.parseDecimal(_totalCostPerUnit.text),
         sellingPrice: Formatters.parseDecimal(_basePrice.text),
+        supplierPaidAmount: Formatters.parseDecimal(_supplierPaidAmount.text),
+        shippingPaidAmount: Formatters.parseDecimal(_shippingPaidAmount.text),
         supplierName: supplierName,
         supplierPaymentStatus: _supplierPaymentStatus,
         shippingServiceName: shippingName,
@@ -539,8 +545,27 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                 _paymentStatusDropdown(
                                   label: 'Status Bayar Barang',
                                   value: _supplierPaymentStatus,
-                                  onChanged: (v) => setState(() => _supplierPaymentStatus = v!),
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _supplierPaymentStatus = v!;
+                                      if (v == PaymentStatus.paid) {
+                                        _supplierPaidAmount.text = _supplierPrice.text.isEmpty ? '0' : _supplierPrice.text;
+                                      } else {
+                                        _supplierPaidAmount.text = '0';
+                                      }
+                                    });
+                                  },
                                 ),
+                                if (_supplierPaymentStatus == PaymentStatus.partial) ...[
+                                  const SizedBox(height: 8),
+                                  TextFormField(
+                                    controller: _supplierPaidAmount,
+                                    decoration: const InputDecoration(labelText: 'Jumlah Cicilan Awal (Rp) *', prefixText: 'Rp ', isDense: true),
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: [CurrencyInputFormatter()],
+                                    validator: (v) => Formatters.parseDecimal(v ?? '') <= 0 ? 'Wajib diisi untuk status Cicilan' : null,
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -620,8 +645,27 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                 _paymentStatusDropdown(
                                   label: 'Status Bayar Ongkir',
                                   value: _shippingPaymentStatus,
-                                  onChanged: (v) => setState(() => _shippingPaymentStatus = v!),
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _shippingPaymentStatus = v!;
+                                      if (v == PaymentStatus.paid) {
+                                        _shippingPaidAmount.text = _supplierShippingCost.text.isEmpty ? '0' : _supplierShippingCost.text;
+                                      } else {
+                                        _shippingPaidAmount.text = '0';
+                                      }
+                                    });
+                                  },
                                 ),
+                                if (_shippingPaymentStatus == PaymentStatus.partial) ...[
+                                  const SizedBox(height: 8),
+                                  TextFormField(
+                                    controller: _shippingPaidAmount,
+                                    decoration: const InputDecoration(labelText: 'Jumlah Cicilan Awal (Rp) *', prefixText: 'Rp ', isDense: true),
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: [CurrencyInputFormatter()],
+                                    validator: (v) => Formatters.parseDecimal(v ?? '') <= 0 ? 'Wajib diisi untuk status Cicilan' : null,
+                                  ),
+                                ],
                               ],
                             ),
                           ),
