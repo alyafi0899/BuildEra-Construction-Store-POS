@@ -5,6 +5,7 @@
 // No code generation, no native plugins, no platform channels beyond SP.
 // ─────────────────────────────────────────────────────────────────────────────
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class LocalDb {
@@ -25,28 +26,37 @@ class LocalDb {
   // ── Generic collection helpers ────────────────────────────────────────────
 
   /// Read every row in [collection].
-  static List<Map<String, dynamic>> _readAll(String collection) {
+  static Future<List<Map<String, dynamic>>> _readAll(String collection) async {
     final raw = _prefs!.getString(collection);
     if (raw == null) return [];
+    
+    // If data is large (> 50KB), decode in background isolate to avoid UI jank
+    if (raw.length > 50 * 1024) {
+      final list = await compute(jsonDecode, raw) as List<dynamic>;
+      return list.cast<Map<String, dynamic>>();
+    }
+    
     final list = jsonDecode(raw) as List<dynamic>;
     return list.cast<Map<String, dynamic>>();
   }
 
   /// Persist [rows] to [collection].
   static Future<void> _writeAll(String collection, List<Map<String, dynamic>> rows) async {
-    await _prefs!.setString(collection, jsonEncode(rows));
+    // For writes, we can also offload encoding if it's potentially large
+    final encoded = jsonEncode(rows);
+    await _prefs!.setString(collection, encoded);
   }
 
   // ── Public API (mirrors the old DatabaseHelper signature) ─────────────────
 
-  static List<Map<String, dynamic>> query(
+  static Future<List<Map<String, dynamic>>> query(
     String collection, {
     String? where,
     List<dynamic>? whereArgs,
     String? orderBy,
-  }) {
+  }) async {
     assert(_seeded, 'Call LocalDb.init() before using the database');
-    var rows = _readAll(collection);
+    var rows = await _readAll(collection);
 
     if (where != null && whereArgs != null) {
       rows = _applyWhere(rows, where, whereArgs);
@@ -76,7 +86,7 @@ class LocalDb {
     Map<String, dynamic> values, {
     bool replace = true,
   }) async {
-    final rows = _readAll(collection);
+    final rows = await _readAll(collection);
     final id   = values['id'] as String?;
     if (id != null && replace) {
       final idx = rows.indexWhere((r) => r['id'] == id);
@@ -96,7 +106,7 @@ class LocalDb {
     required String where,
     required List<dynamic> whereArgs,
   }) async {
-    final rows    = _readAll(collection);
+    final rows    = await _readAll(collection);
     final updated = rows.map((r) {
       if (_rowMatches(r, where, whereArgs)) {
         return {...r, ...updates};
@@ -111,7 +121,7 @@ class LocalDb {
     String? where,
     List<dynamic>? whereArgs,
   }) async {
-    var rows = _readAll(collection);
+    var rows = await _readAll(collection);
     if (where != null && whereArgs != null) {
       rows = rows.where((r) => !_rowMatches(r, where, whereArgs)).toList();
     } else {
@@ -128,7 +138,7 @@ class LocalDb {
     required String where,
     required List<dynamic> whereArgs,
   }) async {
-    final rows = _readAll(collection);
+    final rows = await _readAll(collection);
     final updated = rows.map((r) {
       if (_rowMatches(r, where, whereArgs)) {
         final cur = (r[field] as num?)?.toDouble() ?? 0;

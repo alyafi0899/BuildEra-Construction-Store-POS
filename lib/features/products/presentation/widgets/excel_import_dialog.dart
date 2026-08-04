@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart' hide Border;
@@ -9,6 +11,7 @@ import '../../../../shared/widgets/common_widgets.dart';
 import '../../providers/product_provider.dart';
 import '../../providers/entity_provider.dart';
 import '../../models/supplier.dart';
+import '../../models/shipping_service.dart';
 import '../../models/product_financials.dart';
 
 class ExcelImportDialog extends ConsumerStatefulWidget {
@@ -46,71 +49,12 @@ class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
 
     try {
       final bytes = result.files.first.bytes!;
-      final excel = Excel.decodeBytes(bytes);
-      final productsToImport = <Map<Product, List<ProductUnit>>>[];
-      final uniqueSuppliers = <String, Supplier>{};
-
-      for (var table in excel.tables.keys) {
-        final sheet = excel.tables[table]!;
-        // Skip header row
-        for (var i = 1; i < sheet.maxRows; i++) {
-          final row = sheet.rows[i];
-          if (row.isEmpty) continue;
-
-          // Robust value extraction helper
-          String val(int idx) {
-            if (idx >= row.length || row[idx] == null) return '';
-            final cellValue = row[idx]!.value;
-            if (cellValue == null) return '';
-            return cellValue.toString().trim();
-          }
-
-          final name = val(0);
-          if (name.isEmpty) continue;
-
-          final barcode   = val(1).isEmpty ? null : val(1);
-          final category  = val(2).isEmpty ? 'Lainnya' : val(2);
-          final baseUnit  = val(3).isEmpty ? 'pcs' : val(3);
-          final stock     = double.tryParse(val(4)) ?? 0.0;
-          final costPrice = double.tryParse(val(5)) ?? 0.0;
-          final basePrice = double.tryParse(val(6)) ?? 0.0;
-          
-          // New Columns for Supplier
-          final supplierName = val(7);
-          final supplierPhone = val(8);
-          final supplierAddress = val(9);
-
-          if (supplierName.isNotEmpty) {
-            uniqueSuppliers[supplierName] = Supplier(
-              id: _uuid.v4(),
-              name: supplierName,
-              phone: supplierPhone.isEmpty ? null : supplierPhone,
-              address: supplierAddress.isEmpty ? null : supplierAddress,
-              createdAt: DateTime.now(),
-            );
-          }
-          
-          final productId = _uuid.v4();
-          final product = Product(
-            id: productId,
-            name: name,
-            category: category,
-            barcode: barcode,
-            costPrice: costPrice,
-            basePrice: basePrice,
-            baseUnit: baseUnit,
-            stock: stock,
-            financials: ProductFinancials(
-              supplierName: supplierName.isEmpty ? null : supplierName,
-              supplierPaymentStatus: PaymentStatus.notApplicable,
-            ),
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          );
-
-          productsToImport.add({product: []});
-        }
-      }
+      
+      // Use compute to parse Excel in background
+      final parseResult = await compute(_parseExcelIsolate, bytes);
+      
+      final productsToImport = parseResult.products;
+      final uniqueSuppliers = parseResult.suppliers;
 
       if (productsToImport.isEmpty) {
         throw 'Tidak ada data produk yang valid ditemukan.';
@@ -119,6 +63,11 @@ class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
       setState(() => _status = 'Mendaftarkan ${uniqueSuppliers.length} supplier...');
       for (final s in uniqueSuppliers.values) {
         await ref.read(entityRepositoryProvider).saveSupplier(s);
+      }
+      
+      setState(() => _status = 'Mendaftarkan ${parseResult.shipping.length} expedisi...');
+      for (final s in parseResult.shipping.values) {
+        await ref.read(entityRepositoryProvider).saveShippingService(s);
       }
 
       setState(() => _status = 'Mengunggah ${productsToImport.length} produk...');
@@ -177,6 +126,9 @@ class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
                   Text('H: Nama Supplier (Opsional)', style: TextStyle(fontSize: 12)),
                   Text('I: No HP Supplier', style: TextStyle(fontSize: 12)),
                   Text('J: Alamat Supplier', style: TextStyle(fontSize: 12)),
+                  Text('K: Nama Expedisi (Opsional)', style: TextStyle(fontSize: 12)),
+                  Text('L: No HP Expedisi', style: TextStyle(fontSize: 12)),
+                  Text('M: Alamat Expedisi', style: TextStyle(fontSize: 12)),
                 ],
               ),
             ),
@@ -208,4 +160,95 @@ class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
       ),
     );
   }
+}
+
+// ── Background Parser ───────────────────────────────────────────────────────
+
+class _ExcelParseResult {
+  final List<Map<Product, List<ProductUnit>>> products;
+  final Map<String, Supplier> suppliers;
+  final Map<String, ShippingService> shipping;
+  _ExcelParseResult(this.products, this.suppliers, this.shipping);
+}
+
+_ExcelParseResult _parseExcelIsolate(Uint8List bytes) {
+  final excel = Excel.decodeBytes(bytes);
+  final productsToImport = <Map<Product, List<ProductUnit>>>[];
+  final uniqueSuppliers = <String, Supplier>{};
+  final uniqueShipping = <String, ShippingService>{};
+  final uuid = const Uuid();
+
+  for (var table in excel.tables.keys) {
+    final sheet = excel.tables[table]!;
+    for (var i = 1; i < sheet.maxRows; i++) {
+      final row = sheet.rows[i];
+      if (row.isEmpty) continue;
+
+      String val(int idx) {
+        if (idx >= row.length || row[idx] == null) return '';
+        final cellValue = row[idx]!.value;
+        if (cellValue == null) return '';
+        return cellValue.toString().trim();
+      }
+
+      final name = val(0);
+      if (name.isEmpty) continue;
+
+      final barcode = val(1).isEmpty ? null : val(1);
+      final category = val(2).isEmpty ? 'Lainnya' : val(2);
+      final baseUnit = val(3).isEmpty ? 'pcs' : val(3);
+      final stock = double.tryParse(val(4)) ?? 0.0;
+      final costPrice = double.tryParse(val(5)) ?? 0.0;
+      final basePrice = double.tryParse(val(6)) ?? 0.0;
+
+      final supplierName = val(7);
+      final supplierPhone = val(8);
+      final supplierAddress = val(9);
+      
+      final shippingName = val(10);
+      final shippingPhone = val(11);
+      final shippingAddress = val(12);
+
+      if (supplierName.isNotEmpty) {
+        uniqueSuppliers[supplierName] = Supplier(
+          id: uuid.v4(),
+          name: supplierName,
+          phone: supplierPhone.isEmpty ? null : supplierPhone,
+          address: supplierAddress.isEmpty ? null : supplierAddress,
+          createdAt: DateTime.now(),
+        );
+      }
+      
+      if (shippingName.isNotEmpty) {
+        uniqueShipping[shippingName] = ShippingService(
+          id: uuid.v4(),
+          name: shippingName,
+          phone: shippingPhone.isEmpty ? null : shippingPhone,
+          createdAt: DateTime.now(),
+        );
+      }
+
+      final product = Product(
+        id: uuid.v4(),
+        name: name,
+        category: category,
+        barcode: barcode,
+        costPrice: costPrice,
+        basePrice: basePrice,
+        baseUnit: baseUnit,
+        stock: stock,
+        financials: ProductFinancials(
+          supplierName: supplierName.isEmpty ? null : supplierName,
+          supplierPaymentStatus: supplierName.isEmpty ? PaymentStatus.notApplicable : PaymentStatus.unpaid,
+          shippingServiceName: shippingName.isEmpty ? null : shippingName,
+          shippingPaymentStatus: shippingName.isEmpty ? PaymentStatus.notApplicable : PaymentStatus.unpaid,
+        ),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      productsToImport.add({product: []});
+    }
+  }
+  return _ExcelParseResult(productsToImport, uniqueSuppliers, uniqueShipping);
 }

@@ -412,7 +412,7 @@ class _RecordPaymentDialogState extends ConsumerState<_RecordPaymentDialog> {
   }
 
   Future<void> _submit() async {
-    final amount = double.tryParse(_amountCtrl.text) ?? 0;
+    final amount = Formatters.parseDecimal(_amountCtrl.text);
     if (amount <= 0) return;
     
     setState(() => _loading = true);

@@ -605,5 +605,22 @@ final salesSummaryProvider = FutureProvider<SalesSummary>((ref) async {
   final products = await ref.watch(productsProvider.future);
   final restocks = await ref.watch(restockHistoryProvider.future);
   final period = ref.watch(analyticsPeriodProvider);
-  return buildSummary(txs, products, restocks, period: period);
+  
+  // Use compute to run the heavy summary calculation in a background isolate
+  return compute(_buildSummaryIsolate, {
+    'txs': txs,
+    'products': products,
+    'restocks': restocks,
+    'period': period,
+  });
 });
+
+/// Top-level helper for background computation
+SalesSummary _buildSummaryIsolate(Map<String, dynamic> data) {
+  return buildSummary(
+    data['txs'] as List<Transaction>,
+    data['products'] as List<Product>,
+    data['restocks'] as List<RestockRecord>,
+    period: data['period'] as AnalyticsPeriod,
+  );
+}
