@@ -196,6 +196,8 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     final categoryFilter = ref.watch(productCategoryFilterProvider);
     final sort = ref.watch(productSortProvider);
     final filters = ref.watch(productFiltersProvider);
+    
+    final isTablet = MediaQuery.sizeOf(context).width > 1100;
 
     // Reset search when navigating back to this page
     ref.listen(navigationIndexProvider, (prev, next) {
@@ -259,7 +261,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                 final totalSKU  = products.length;
                 final outOfStock = products.where((p) => p.stock <= 0).length;
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  padding: EdgeInsets.symmetric(horizontal: isTablet ? 16 : 24, vertical: isTablet ? 12 : 20),
                   color: AppTheme.surface,
                   child: Row(children: [
                     Expanded(child: StatCard(label: 'Total SKU',     value: totalSKU.toString(),  icon: Icons.inventory_2_rounded)),
@@ -274,16 +276,16 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
 
             // Filters & Sorting
             Container(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+              padding: EdgeInsets.fromLTRB(isTablet ? 16 : 24, 16, isTablet ? 16 : 24, 16),
               color:   AppTheme.surface,
               child:   Column(
                 children: [
                   Row(children: [
                     SizedBox(
-                      width: 260,
+                      width: isTablet ? 220 : 260,
                       child: AppSearchField(
                         controller: _searchCtrl,
-                        hintText:   'Cari produk atau barcode...',
+                        hintText:   'Cari produk...',
                         onChanged:  (v) => ref.read(productSearchQueryProvider.notifier).set(v),
                         onClear:    () {
                           _searchCtrl.clear();
@@ -291,9 +293,9 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                         },
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 12),
                     SizedBox(
-                      width: 160,
+                      width: isTablet ? 140 : 160,
                       height: 48,
                       child: DropdownButtonFormField<String?>(
                         initialValue:   categoryFilter,
@@ -307,9 +309,9 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                         onChanged: (v) => ref.read(productCategoryFilterProvider.notifier).set(v),
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 12),
                     SizedBox(
-                      width: 160,
+                      width: isTablet ? 140 : 160,
                       height: 48,
                       child: DropdownButtonFormField<ProductSortField>(
                         initialValue:   sort.field,
@@ -329,17 +331,17 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                         onChanged: (v) => ref.read(productSortProvider.notifier).setField(v!),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
                     IconButton(
                       onPressed: () => ref.read(productSortProvider.notifier).toggleOrder(),
                       icon: Icon(sort.ascending ? Icons.south_rounded : Icons.north_rounded, color: AppTheme.accent),
                       tooltip: sort.ascending ? 'Ascending' : 'Descending',
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 12),
                     if (_selectedIds.isNotEmpty)
                       ElevatedButton.icon(
                         onPressed: _bulkDelete,
-                        style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
+                        style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger, padding: const EdgeInsets.symmetric(horizontal: 16)),
                         icon: const Icon(Icons.delete_sweep_rounded, size: 18),
                         label: Text('Hapus (${_selectedIds.length})'),
                       ),
@@ -360,14 +362,14 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                     _FilterTab(label: 'Rendah', selected: filters.stock == 'low', onTap: () => ref.read(productFiltersProvider.notifier).setStock('low')),
                     _FilterTab(label: 'Habis', selected: filters.stock == 'out', onTap: () => ref.read(productFiltersProvider.notifier).setStock('out')),
 
-                    const SizedBox(width: 24),
-                    const _FilterLabel('Bayar Supplier:'),
+                    SizedBox(width: isTablet ? 16 : 24),
+                    const _FilterLabel('Supplier:'),
                     _FilterTab(label: 'Semua', selected: filters.supplier == 'all', onTap: () => ref.read(productFiltersProvider.notifier).setSupplier('all')),
                     _FilterTab(label: 'Lunas', selected: filters.supplier == 'paid', onTap: () => ref.read(productFiltersProvider.notifier).setSupplier('paid')),
                     _FilterTab(label: 'Belum', selected: filters.supplier == 'unpaid', onTap: () => ref.read(productFiltersProvider.notifier).setSupplier('unpaid')),
 
-                    const SizedBox(width: 24),
-                    const _FilterLabel('Bayar Ongkir:'),
+                    SizedBox(width: isTablet ? 16 : 24),
+                    const _FilterLabel('Ongkir:'),
                     _FilterTab(label: 'Semua', selected: filters.shipping == 'all', onTap: () => ref.read(productFiltersProvider.notifier).setShipping('all')),
                     _FilterTab(label: 'Lunas', selected: filters.shipping == 'paid', onTap: () => ref.read(productFiltersProvider.notifier).setShipping('paid')),
                     _FilterTab(label: 'Belum', selected: filters.shipping == 'unpaid', onTap: () => ref.read(productFiltersProvider.notifier).setShipping('unpaid')),
@@ -430,6 +432,7 @@ class _ProductTableState extends State<_ProductTable> {
   Widget build(BuildContext context) {
     final allSelected = widget.products.isNotEmpty &&
         widget.selectedIds.length == widget.products.length;
+    final isTablet = MediaQuery.sizeOf(context).width > 1100;
 
     return Scrollbar(
       controller: _scrollController,
@@ -437,13 +440,13 @@ class _ProductTableState extends State<_ProductTable> {
       trackVisibility: true,
       child: ListView.builder(
         controller: _scrollController,
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(isTablet ? 12 : 24),
         itemCount: widget.products.length + 1, // Header + rows
         itemBuilder: (context, index) {
           if (index == 0) {
             // Table header
             return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: EdgeInsets.symmetric(horizontal: isTablet ? 12 : 16, vertical: 12),
               decoration: BoxDecoration(
                 color:        AppTheme.surfaceAlt,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
@@ -451,16 +454,17 @@ class _ProductTableState extends State<_ProductTable> {
               ),
               child: Row(children: [
                 SizedBox(
-                  width: 40,
+                  width: isTablet ? 32 : 40,
                   child: Checkbox(
                     value: allSelected,
                     onChanged: (_) => widget.onSelectAll(),
                     activeColor: AppTheme.accent,
+                    visualDensity: VisualDensity.compact,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                   ),
                 ),
-                const SizedBox(width: 32), // Added space for expand icon
-                _th('Produk',    flex: 4),
+                SizedBox(width: isTablet ? 24 : 32), // Added space for expand icon
+                _th('Produk',    flex: isTablet ? 3 : 4),
                 _th('Kategori',  flex: 1),
                 _th('Supplier & Ongkir', flex: 1),
                 _th('Stok',      flex: 1, align: TextAlign.right),
@@ -468,7 +472,7 @@ class _ProductTableState extends State<_ProductTable> {
                 _th('Harga Jual',  flex: 1, align: TextAlign.right),
                 _th('Profit', flex: 1, align: TextAlign.right),
                 _th('Update Stok', flex: 1, align: TextAlign.center),
-                _th('Aksi',      flex: 2, align: TextAlign.center),
+                _th('Aksi',      flex: isTablet ? 1 : 2, align: TextAlign.center),
               ]),
             );
           }
@@ -549,11 +553,12 @@ class _ProductRowState extends ConsumerState<_ProductRow> {
   Widget build(BuildContext context) {
     final profit = widget.product.basePrice - widget.product.costPrice;
     final f = widget.product.financials;
+    final isTablet = MediaQuery.sizeOf(context).width > 1100;
 
     return Column(
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: EdgeInsets.symmetric(horizontal: isTablet ? 12 : 16, vertical: 12),
           decoration: BoxDecoration(
             color:  widget.isSelected
                 ? AppTheme.accent.withValues(alpha: 0.05)
@@ -566,11 +571,12 @@ class _ProductRowState extends ConsumerState<_ProductRow> {
           ),
           child: Row(children: [
             SizedBox(
-              width: 40,
+              width: isTablet ? 32 : 40,
               child: Checkbox(
                 value: widget.isSelected,
                 onChanged: (_) => widget.onToggleSelect(),
                 activeColor: AppTheme.accent,
+                visualDensity: VisualDensity.compact,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
               ),
             ),
@@ -583,10 +589,10 @@ class _ProductRowState extends ConsumerState<_ProductRow> {
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: isTablet ? 8 : 12),
 
             // Product name + icon
-            Expanded(flex: 4, child: InkWell(
+            Expanded(flex: isTablet ? 3 : 4, child: InkWell(
               onTap: () => ProductDetailDialog.show(context, widget.product),
               child: Row(children: [
                 ProductImage(imagePath: widget.product.imagePath, size: 36),
@@ -672,7 +678,7 @@ class _ProductRowState extends ConsumerState<_ProductRow> {
               ),
             ])),
 
-            Expanded(flex: 2, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Expanded(flex: isTablet ? 1 : 2, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
               // Restock Formal
               IconButton(
                 onPressed: () => RestockDialog.show(context, widget.product),
@@ -681,7 +687,7 @@ class _ProductRowState extends ConsumerState<_ProductRow> {
                 constraints: const BoxConstraints(),
                 tooltip: 'Restock Formal',
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: isTablet ? 4 : 8),
 
               IconButton(
                 onPressed: () => ProductFormDialog.show(context, product: widget.product),
@@ -690,7 +696,7 @@ class _ProductRowState extends ConsumerState<_ProductRow> {
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: isTablet ? 4 : 8),
               _DeleteButton(product: widget.product),
             ])),
           ]),
