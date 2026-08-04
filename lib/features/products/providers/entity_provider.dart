@@ -3,6 +3,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../models/supplier.dart';
 import '../models/shipping_service.dart';
 import '../../inventory/models/restock_record.dart';
+import '../../../shared/models/product.dart';
 import './product_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../core/sync/models/sync_task.dart';
@@ -62,19 +63,23 @@ class EntityRepository {
     // 1. Delete Master Record
     await deleteSupplier(id);
 
-    // 2. Clean up Products
+    // 2. Clean up Products (BATCH)
     final prodRepo = _ref.read(productRepositoryProvider);
     final products = await prodRepo.getAllProducts();
+    final toUpdate = <Map<Product, List<ProductUnit>>>[];
     for (final p in products) {
       if (p.financials.supplierName == name) {
         final updated = p.copyWith(
           financials: p.financials.copyWith(supplierName: null),
         );
-        await prodRepo.saveProduct(updated, updated.units);
+        toUpdate.add({updated: updated.units});
       }
     }
+    if (toUpdate.isNotEmpty) {
+      await prodRepo.saveProductsBatch(toUpdate);
+    }
 
-    // 3. Clean up Restock History
+    // 3. Clean up Restock History (BATCH)
     final restockBox = await LocalDatabase.openBox(_uid, 'restock_history');
     final restocks = restockBox.values.map((d) => RestockRecord.fromMap(Map<String, dynamic>.from(d as Map))).toList();
     for (final r in restocks) {
@@ -134,19 +139,23 @@ class EntityRepository {
     // 1. Delete Master Record
     await deleteShippingService(id);
 
-    // 2. Clean up Products
+    // 2. Clean up Products (BATCH)
     final prodRepo = _ref.read(productRepositoryProvider);
     final products = await prodRepo.getAllProducts();
+    final toUpdate = <Map<Product, List<ProductUnit>>>[];
     for (final p in products) {
       if (p.financials.shippingServiceName == name) {
         final updated = p.copyWith(
           financials: p.financials.copyWith(shippingServiceName: null),
         );
-        await prodRepo.saveProduct(updated, updated.units);
+        toUpdate.add({updated: updated.units});
       }
     }
+    if (toUpdate.isNotEmpty) {
+      await prodRepo.saveProductsBatch(toUpdate);
+    }
 
-    // 3. Clean up Restock History
+    // 3. Clean up Restock History (BATCH)
     final restockBox = await LocalDatabase.openBox(_uid, 'restock_history');
     final restocks = restockBox.values.map((d) => RestockRecord.fromMap(Map<String, dynamic>.from(d as Map))).toList();
     for (final r in restocks) {

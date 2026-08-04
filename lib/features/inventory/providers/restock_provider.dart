@@ -72,6 +72,23 @@ class RestockRepository {
       data:       data,
     );
 
+    // --- NEW: Auto-create payment record for restock initial bills ---
+    final payRepo = _ref.read(billPaymentRepositoryProvider);
+    if (record.supplierPaidAmount > 0) {
+      await payRepo.createInitialPayment(
+        billId: record.id, 
+        amount: record.supplierPaidAmount, 
+        isForSupplier: true
+      );
+    }
+    if (record.shippingPaidAmount > 0) {
+      await payRepo.createInitialPayment(
+        billId: record.id, 
+        amount: record.shippingPaidAmount, 
+        isForSupplier: false
+      );
+    }
+
     // 2. Update Product Stock and Financials
     await _refreshProductState(record.productId);
   }

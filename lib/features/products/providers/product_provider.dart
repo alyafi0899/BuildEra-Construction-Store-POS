@@ -14,6 +14,7 @@ import '../../../shared/models/product.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/product_financials.dart';
 import '../providers/barcode_history_provider.dart';
+import '../../inventory/providers/bill_payment_provider.dart';
 
 final _uuid = Uuid();
 
@@ -93,6 +94,23 @@ class ProductRepository {
 
     if (product.barcode != null && product.barcode!.isNotEmpty) {
       await _historyRepo.logBarcode(product.barcode!, product.name, product.id);
+    }
+
+    // --- NEW: Auto-create payment record for initial bills ---
+    final f = product.financials;
+    if (f.supplierPaidAmount > 0) {
+      await _ref.read(billPaymentRepositoryProvider).createInitialPayment(
+        billId: product.id, 
+        amount: f.supplierPaidAmount, 
+        isForSupplier: true
+      );
+    }
+    if (f.shippingPaidAmount > 0) {
+      await _ref.read(billPaymentRepositoryProvider).createInitialPayment(
+        billId: product.id, 
+        amount: f.shippingPaidAmount, 
+        isForSupplier: false
+      );
     }
   }
 

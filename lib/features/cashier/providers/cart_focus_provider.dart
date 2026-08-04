@@ -35,13 +35,11 @@ class CartFocusRegistry extends Notifier<Map<String, CartItemFocusNodes>> {
     }
   }
 
-  @override
-  // Note: dispose in Notifier is handled by the provider container
-  // but if we need a custom cleanup when the notifier itself is destroyed:
-  void dispose() {
-    // Note: In Riverpod 2.x Notifier, there isn't a direct @override dispose() 
-    // like in StateNotifier. Instead we use ref.onDispose in build if needed.
-    // However, since these are FocusNodes attached to UI, we'll let the UI dispose them.
+  // Note: In Riverpod 2.x Notifier, there isn't a direct dispose() 
+  // like in StateNotifier. Instead we use ref.onDispose in build if needed.
+  // However, since these are FocusNodes attached to UI, we'll let the UI dispose them.
+  void cleanup() {
+    // Custom cleanup if needed
   }
 }
 

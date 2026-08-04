@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
@@ -841,10 +842,18 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                     const SizedBox(width: 4),
                     _StandardBox(
                       width: 45,
-                      child: ScrollableQtyField(
-                        controller: _qtyCtrl,
-                        minValue: 1,
-                        onChanged: (v) => notifier.updateQuantity(item.id, v),
+                      child: Listener(
+                        onPointerSignal: (pointerSignal) {
+                          if (pointerSignal is PointerScrollEvent) {
+                            if (pointerSignal.scrollDelta.dy == 0) return;
+                            // UP scroll = dy < 0 = Increase
+                            final delta = pointerSignal.scrollDelta.dy < 0 ? 1.0 : -1.0;
+                            final newQty = item.quantity + delta;
+                            if (newQty >= 1) {
+                              notifier.updateQuantity(item.id, newQty);
+                            }
+                          }
+                        },
                         child: TextField(
                           controller: _qtyCtrl,
                           focusNode: _qtyFocus,

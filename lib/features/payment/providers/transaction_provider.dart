@@ -384,9 +384,9 @@ SalesSummary buildSummary(List<Transaction> txs, List<Product> products, List<Re
   
   void addBill(String? name, double total, double paid, PaymentStatus status, bool isShip) {
     if (status == PaymentStatus.notApplicable) return;
-    final n = (name ?? (isShip ? 'Ekspedisi Umum' : 'Supplier Umum')).trim();
-    if (n.isEmpty) return;
+    if (name == null || name.trim().isEmpty) return;
 
+    final n = name.trim();
     if (isShip) {
       final prev = shippingMap[n] ?? (amount: 0.0, paid: 0.0, count: 0);
       shippingMap[n] = (amount: prev.amount + total, paid: prev.paid + paid, count: prev.count + 1);

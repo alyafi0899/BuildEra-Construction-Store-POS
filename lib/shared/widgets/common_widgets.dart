@@ -418,12 +418,13 @@ void showError(BuildContext context, String msg) {
 
 // ── Qty Scroll Wrapper ────────────────────────────────────────────────────
 
-class ScrollableQtyField extends StatelessWidget {
+class ScrollableQtyField extends StatefulWidget {
   final Widget child;
   final TextEditingController controller;
   final Function(double)? onChanged;
   final double step;
   final double minValue;
+  final bool isCurrency;
 
   const ScrollableQtyField({
     super.key,
@@ -432,32 +433,79 @@ class ScrollableQtyField extends StatelessWidget {
     this.onChanged,
     this.step = 1.0,
     this.minValue = 0,
+    this.isCurrency = true,
   });
+
+  @override
+  State<ScrollableQtyField> createState() => _ScrollableQtyFieldState();
+}
+
+class _ScrollableQtyFieldState extends State<ScrollableQtyField> {
+  // Use a local numeric state as the source of truth to avoid parsing loops
+  late double _currentValue;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentValue = _parseValue(widget.controller.text);
+  }
+
+  @override
+  void didUpdateWidget(covariant ScrollableQtyField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Sync internal value if controller text changed externally (e.g. new product added)
+    if (widget.controller.text != oldWidget.controller.text) {
+      _currentValue = _parseValue(widget.controller.text);
+    }
+  }
+
+  double _parseValue(String text) {
+    final clean = text.replaceAll('.', '').replaceAll(',', '.');
+    return double.tryParse(clean) ?? 0.0;
+  }
+
+  void _updateValue(double delta) {
+    // Re-sync with controller in case user typed something manually
+    _currentValue = _parseValue(widget.controller.text);
+
+    if (delta < 0) {
+      _currentValue += widget.step;
+    } else {
+      _currentValue -= widget.step;
+    }
+
+    if (_currentValue < widget.minValue) _currentValue = widget.minValue;
+
+    // Format for display
+    String formatted;
+    if (widget.isCurrency) {
+      formatted = NumberFormat.decimalPattern('id_ID').format(_currentValue.toInt());
+    } else {
+      // Qty: precise decimal handling
+      formatted = _currentValue % 1 == 0 
+          ? _currentValue.toInt().toString() 
+          : _currentValue.toStringAsFixed(2).replaceAll(RegExp(r'\.?0+$'), '');
+    }
+
+    // Update UI atomicly
+    widget.controller.value = TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+
+    if (widget.onChanged != null) widget.onChanged!(_currentValue);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Listener(
       onPointerSignal: (pointerSignal) {
         if (pointerSignal is PointerScrollEvent) {
-          final double delta = pointerSignal.scrollDelta.dy;
-          double current = double.tryParse(controller.text) ?? 0;
-
-          if (delta < 0) {
-            current += step;
-          } else if (delta > 0) {
-            current -= step;
-          }
-
-          if (current < minValue) current = minValue;
-
-          final formattedText =
-              NumberFormat.decimalPattern('id_ID').format(current.toInt());
-
-          controller.text = formattedText;
-          if (onChanged != null) onChanged!(current);
+          if (pointerSignal.scrollDelta.dy == 0) return;
+          _updateValue(pointerSignal.scrollDelta.dy);
         }
       },
-      child: child,
+      child: widget.child,
     );
   }
 }

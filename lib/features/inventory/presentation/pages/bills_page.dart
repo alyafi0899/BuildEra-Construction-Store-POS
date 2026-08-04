@@ -177,6 +177,8 @@ class _BillsListState extends ConsumerState<_BillsList> {
           final bills = <_BillItem>[];
 
           void addIfMatch(String id, String name, String? entity, double total, double paid, PaymentStatus status, DateTime date, bool isInitial, dynamic original) {
+            if (entity == null || entity.trim().isEmpty) return;
+
             bool matches = false;
             if (_filter == 'all') {
               matches = true;
@@ -195,7 +197,7 @@ class _BillsListState extends ConsumerState<_BillsList> {
               bills.add(_BillItem(
                 id: id,
                 name: name,
-                entityName: entity ?? 'Umum / Manual',
+                entityName: entity,
                 amount: total,
                 paidAmount: paid,
                 status: status,

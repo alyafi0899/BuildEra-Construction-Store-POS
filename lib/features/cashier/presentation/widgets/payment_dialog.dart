@@ -9,7 +9,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../../../shared/models/transaction.dart';
-import '../widgets/cashier_intents.dart';
+
 import '../../providers/cart_provider.dart';
 import '../../../payment/providers/transaction_provider.dart';
 import '../../../../core/utils/invoice_helper.dart';
@@ -31,7 +31,7 @@ class PaymentDialog extends ConsumerStatefulWidget {
 
   static Future<void> show(BuildContext context) => showDialog(
         context:            context,
-        barrierDismissible: false,
+        barrierDismissible: true,
         builder:            (_) => const PaymentDialog(),
       );
 
@@ -61,6 +61,11 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
 
   double _paid = 0;
 
+  // Shortcut refinement state
+  DateTime? _lastEscPress;
+  Timer? _altFocusTimer;
+  final _neutralFocusNode = FocusNode(debugLabel: 'PaymentNeutralFocus');
+
   @override
   void dispose() {
     _amountCtrl.dispose();
@@ -70,6 +75,8 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
     _shippingFocus.dispose();
     _notesFocus.dispose();
     _payAmountFocus.dispose();
+    _neutralFocusNode.dispose();
+    _altFocusTimer?.cancel();
     super.dispose();
   }
 
@@ -171,6 +178,13 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
               _amountCtrl.clear();
             }
           });
+          
+          // Auto neutral focus after 250ms
+          _altFocusTimer?.cancel();
+          _altFocusTimer = Timer(const Duration(milliseconds: 250), () {
+            if (mounted) _neutralFocusNode.requestFocus();
+          });
+
           return KeyEventResult.handled;
         }
 
@@ -192,14 +206,35 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
           return KeyEventResult.handled;
         }
 
+        // 7. ESC Handling: Single tap to neutralize, Double tap to close
+        if (key == LogicalKeyboardKey.escape) {
+          final now = DateTime.now();
+          if (_lastEscPress != null && 
+              now.difference(_lastEscPress!) < const Duration(milliseconds: 500)) {
+            // Double tap detected: Close
+            if (context.mounted) Navigator.of(context).pop();
+          } else {
+            // Single tap detected: Neutralize focus
+            _neutralFocusNode.requestFocus();
+            _lastEscPress = now;
+          }
+          return KeyEventResult.handled;
+        }
+
         return KeyEventResult.ignored;
       },
-      child: Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-        child: SizedBox(
-          width: 1200, // Increased width for 3-column layout
-          child: _formPanel(context, cart),
-        ),
+      child: Stack(
+        children: [
+          // Hidden focus node for neutralization
+          Focus(focusNode: _neutralFocusNode, child: const SizedBox.shrink()),
+          Dialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+            child: SizedBox(
+              width: 1200, // Increased width for 3-column layout
+              child: _formPanel(context, cart),
+            ),
+          ),
+        ],
       ),
     );
   }

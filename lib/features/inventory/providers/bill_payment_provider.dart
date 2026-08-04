@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:uuid/uuid.dart';
 import '../models/bill_payment.dart';
 import '../models/restock_record.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -41,6 +42,50 @@ class BillPaymentRepository {
     );
     
     await _recalculateBillStatus(payment.billId, payment.isInitialBill, targetIsSupplier: payment.isForSupplier);
+  }
+
+  Future<void> createInitialPayment({
+    required String billId,
+    required double amount,
+    required bool isForSupplier,
+  }) async {
+    // SECURITY: Get current entity names before creating payment
+    final repo = _ref.read(productRepositoryProvider);
+    final products = await repo.getAllProducts();
+    final p = products.where((item) => item.id == billId).firstOrNull;
+    
+    String? entityName;
+    if (p != null) {
+      entityName = isForSupplier ? p.financials.supplierName : p.financials.shippingServiceName;
+    } else {
+      // Check restock history if product not found (could be a restock bill ID)
+      final restockBox = await LocalDatabase.openBox(_uid, 'restock_history');
+      final rData = restockBox.get(billId);
+      if (rData != null) {
+        final r = RestockRecord.fromMap(Map<String, dynamic>.from(rData as Map));
+        entityName = isForSupplier ? r.supplierName : r.shippingServiceName;
+      }
+    }
+
+    // ONLY create payment record if entity name is NOT null/empty
+    if (entityName == null || entityName.trim().isEmpty) return;
+
+    final box = await _getBox();
+    final allPayments = _paymentsFromBox(box).where((p) => p.billId == billId && p.isForSupplier == isForSupplier).toList();
+    
+    // Only create if NO payments exist yet for this bill/entity (prevent duplicates on edit)
+    if (allPayments.isEmpty) {
+      final payment = BillPayment(
+        id: Uuid().v4(),
+        billId: billId,
+        amount: amount,
+        notes: 'Pembayaran Awal / DP',
+        createdAt: DateTime.now(),
+        isInitialBill: true,
+        isForSupplier: isForSupplier,
+      );
+      await savePayment(payment);
+    }
   }
 
   Future<void> deletePayment(BillPayment payment) async {

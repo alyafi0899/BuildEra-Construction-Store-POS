@@ -79,12 +79,13 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
 
     _units = p.units.map((u) => _UnitEntry.fromUnit(u)).toList();
     
-    // Resolve entity IDs
+    // Resolve initial IDs from names to keep dropdowns in sync
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final sList = ref.read(suppliersProvider).asData?.value ?? [];
       final shList = ref.read(shippingServicesProvider).asData?.value ?? [];
-      final sName = r?.supplierName ?? p.financials.supplierName;
-      final shName = r?.shippingServiceName ?? p.financials.shippingServiceName;
+      final sName = r?.supplierName ?? (r == null ? p.financials.supplierName : null);
+      final shName = r?.shippingServiceName ?? (r == null ? p.financials.shippingServiceName : null);
       
       setState(() {
         if (sName != null) _selectedSupplierId = sList.firstWhereOrNull((s) => s.name == sName)?.id;
@@ -346,7 +347,15 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                       Text('Otomatis', style: TextStyle(fontSize: 11, fontWeight: !_isManualCost ? FontWeight.bold : FontWeight.normal, color: !_isManualCost ? AppTheme.accent : AppTheme.textMuted)),
                                       Switch(
                                         value: _isManualCost,
-                                        onChanged: (v) => setState(() => _isManualCost = v),
+                                        onChanged: (v) => setState(() {
+                                          _isManualCost = v;
+                                          if (v) {
+                                            // Reset shipping if switching to manual mode
+                                            _supplierShippingCost.text = '';
+                                            _selectedShippingId = null;
+                                            _shippingPaymentStatus = PaymentStatus.notApplicable;
+                                          }
+                                        }),
                                         activeThumbColor: AppTheme.accent,
                                       ),
                                       Text('Manual', style: TextStyle(fontSize: 11, fontWeight: _isManualCost ? FontWeight.bold : FontWeight.normal, color: _isManualCost ? AppTheme.accent : AppTheme.textMuted)),
@@ -370,7 +379,13 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                       ),
                                       keyboardType: TextInputType.number,
                                       inputFormatters: [CurrencyInputFormatter()],
-                                      onChanged: (_) => _calculateCost(),
+                                      onChanged: (v) {
+                                        _calculateCost();
+                                        // Auto-transition status from N/A to Unpaid if price > 0
+                                        if (Formatters.parseDecimal(v) > 0 && _supplierPaymentStatus == PaymentStatus.notApplicable) {
+                                          setState(() => _supplierPaymentStatus = PaymentStatus.unpaid);
+                                        }
+                                      },
                                     ),
                                   ),
                                   const SizedBox(width: 16),
@@ -384,7 +399,13 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                       ),
                                       keyboardType: TextInputType.number,
                                       inputFormatters: [CurrencyInputFormatter()],
-                                      onChanged: (_) => _calculateCost(),
+                                      onChanged: (v) {
+                                        _calculateCost();
+                                        // Auto-transition status from N/A to Unpaid if cost > 0
+                                        if (Formatters.parseDecimal(v) > 0 && _shippingPaymentStatus == PaymentStatus.notApplicable) {
+                                          setState(() => _shippingPaymentStatus = PaymentStatus.unpaid);
+                                        }
+                                      },
                                     ),
                                   ),
                                 ],
@@ -474,74 +495,51 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  children: [
-                                    const Text('Informasi Supplier', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                    const Spacer(),
-                                    IconButton(
-                                      onPressed: () => _showQuickAddSupplier(context),
-                                      icon: const Icon(Icons.add_business_rounded, size: 16, color: AppTheme.accent),
-                                      tooltip: 'Supplier Baru',
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(),
-                                    ),
-                                  ],
-                                ),
+                                const Text('Informasi Supplier', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                                 const SizedBox(height: 12),
                                 ref.watch(suppliersProvider).when(
-                                  data: (list) => SizedBox(
-                                    height: 48,
-                                    child: DropdownButtonFormField<String?>(
-                                      initialValue: _selectedSupplierId,
-                                      isExpanded: true,
-                                      decoration: const InputDecoration(labelText: 'Pilih Supplier', isDense: true),
-                                      dropdownColor: AppTheme.surfaceAlt,
-                                      items: [
-                                        const DropdownMenuItem(value: null, child: Text('Input Manual / Umum', style: TextStyle(fontSize: 12))),
-                                        ...list.map((s) => DropdownMenuItem(
-                                          value: s.id,
-                                          child: Row(
-                                            children: [
-                                              Expanded(child: Text(s.name, style: const TextStyle(fontSize: 12))),
-                                              IconButton(
-                                                icon: const Icon(Icons.edit_rounded, size: 14, color: AppTheme.textMuted),
-                                                onPressed: () => _showQuickAddSupplier(context, supplier: s),
-                                                padding: EdgeInsets.zero,
-                                                constraints: const BoxConstraints(),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              IconButton(
-                                                icon: const Icon(Icons.delete_outline_rounded, size: 14, color: AppTheme.danger),
-                                                onPressed: () async {
-                                                  final ok = await showConfirmDialog(context, 
-                                                    title: 'Hapus Supplier', 
-                                                    content: 'Yakin hapus supplier "${s.name}"?');
-                                                  if (ok) {
-                                                    await ref.read(entityRepositoryProvider).deleteSupplier(s.id);
-                                                    setState(() => _selectedSupplierId = null);
-                                                  }
-                                                },
-                                                padding: EdgeInsets.zero,
-                                                constraints: const BoxConstraints(),
-                                              ),
-                                            ],
-                                          ),
-                                        )),
-                                      ],
-                                      onChanged: (v) => setState(() => _selectedSupplierId = v),
-                                    ),
+                                  data: (list) => Column(
+                                    children: [
+                                      SizedBox(
+                                        height: 48,
+                                        child: DropdownButtonFormField<String?>(
+                                          initialValue: _selectedSupplierId,
+                                          isExpanded: true,
+                                          decoration: const InputDecoration(labelText: 'Pilih Supplier', isDense: true),
+                                          dropdownColor: AppTheme.surfaceAlt,
+                                          items: [
+                                            const DropdownMenuItem(value: null, child: Text('Belum Dipilih', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic))),
+                                            ...list.map((s) => DropdownMenuItem(
+                                              value: s.id,
+                                              child: Text(s.name, style: const TextStyle(fontSize: 12)),
+                                            )),
+                                          ],
+                                          onChanged: (v) => setState(() => _selectedSupplierId = v),
+                                          validator: (v) {
+                                            // Mandatory if Price > 0 in Auto mode
+                                            if (!_isManualCost && Formatters.parseDecimal(_supplierPrice.text) > 0 && v == null) {
+                                              return 'Wajib pilih supplier';
+                                            }
+                                            return null;
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      SizedBox(
+                                        width: double.infinity,
+                                        child: OutlinedButton.icon(
+                                          onPressed: () => _showQuickAddSupplier(context),
+                                          icon: const Icon(Icons.add_business_rounded, size: 16),
+                                          label: const Text('Daftarkan Supplier Baru', style: TextStyle(fontSize: 11)),
+                                          style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                   loading: () => const AppLoading(),
                                   error: (_, __) => const Text('Gagal memuat'),
                                 ),
-                                if (_selectedSupplierId == null) ...[
-                                  const SizedBox(height: 8),
-                                  TextFormField(
-                                    controller: _supplierName,
-                                    decoration: const InputDecoration(labelText: 'Nama Supplier (Manual)', hintText: 'Opsional', isDense: true),
-                                  ),
-                                ],
-                                const SizedBox(height: 8),
+                                const SizedBox(height: 12),
                                 _paymentStatusDropdown(
                                   label: 'Status Bayar Barang',
                                   value: _supplierPaymentStatus,
@@ -554,6 +552,13 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                         _supplierPaidAmount.text = '0';
                                       }
                                     });
+                                  },
+                                  validator: (v) {
+                                    // Mandatory if Price > 0 in Auto mode
+                                    if (!_isManualCost && Formatters.parseDecimal(_supplierPrice.text) > 0 && (v == null || v == PaymentStatus.notApplicable)) {
+                                      return 'Pilih status bayar';
+                                    }
+                                    return null;
                                   },
                                 ),
                                 if (_supplierPaymentStatus == PaymentStatus.partial) ...[
@@ -570,78 +575,56 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                             ),
                           ),
                           const SizedBox(width: 24),
+                          if (!_isManualCost)
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  children: [
-                                    const Text('Informasi Ekspedisi / Kurir', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                    const Spacer(),
-                                    IconButton(
-                                      onPressed: () => _showQuickAddShipping(context),
-                                      icon: const Icon(Icons.local_shipping_rounded, size: 16, color: AppTheme.accent),
-                                      tooltip: 'Ekspedisi Baru',
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(),
-                                    ),
-                                  ],
-                                ),
+                                const Text('Informasi Ekspedisi / Kurir', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                                 const SizedBox(height: 12),
                                 ref.watch(shippingServicesProvider).when(
-                                  data: (list) => SizedBox(
-                                    height: 48,
-                                    child: DropdownButtonFormField<String?>(
-                                      initialValue: _selectedShippingId,
-                                      isExpanded: true,
-                                      decoration: const InputDecoration(labelText: 'Pilih Ekspedisi', isDense: true),
-                                      dropdownColor: AppTheme.surfaceAlt,
-                                      items: [
-                                        const DropdownMenuItem(value: null, child: Text('Input Manual / Umum', style: TextStyle(fontSize: 12))),
-                                        ...list.map((s) => DropdownMenuItem(
-                                          value: s.id,
-                                          child: Row(
-                                            children: [
-                                              Expanded(child: Text(s.name, style: const TextStyle(fontSize: 12))),
-                                              IconButton(
-                                                icon: const Icon(Icons.edit_rounded, size: 14, color: AppTheme.textMuted),
-                                                onPressed: () => _showQuickAddShipping(context, shipping: s),
-                                                padding: EdgeInsets.zero,
-                                                constraints: const BoxConstraints(),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              IconButton(
-                                                icon: const Icon(Icons.delete_outline_rounded, size: 14, color: AppTheme.danger),
-                                                onPressed: () async {
-                                                  final ok = await showConfirmDialog(context, 
-                                                    title: 'Hapus Ekspedisi', 
-                                                    content: 'Yakin hapus ekspedisi "${s.name}"?');
-                                                  if (ok) {
-                                                    await ref.read(entityRepositoryProvider).deleteShippingService(s.id);
-                                                    setState(() => _selectedShippingId = null);
-                                                  }
-                                                },
-                                                padding: EdgeInsets.zero,
-                                                constraints: const BoxConstraints(),
-                                              ),
-                                            ],
-                                          ),
-                                        )),
-                                      ],
-                                      onChanged: (v) => setState(() => _selectedShippingId = v),
-                                    ),
+                                  data: (list) => Column(
+                                    children: [
+                                      SizedBox(
+                                        height: 48,
+                                        child: DropdownButtonFormField<String?>(
+                                          initialValue: _selectedShippingId,
+                                          isExpanded: true,
+                                          decoration: const InputDecoration(labelText: 'Pilih Ekspedisi', isDense: true),
+                                          dropdownColor: AppTheme.surfaceAlt,
+                                          items: [
+                                            const DropdownMenuItem(value: null, child: Text('Belum Dipilih', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic))),
+                                            ...list.map((s) => DropdownMenuItem(
+                                              value: s.id,
+                                              child: Text(s.name, style: const TextStyle(fontSize: 12)),
+                                            )),
+                                          ],
+                                          onChanged: (v) => setState(() => _selectedShippingId = v),
+                                          validator: (v) {
+                                            // Mandatory if Shipping Cost > 0
+                                            if (Formatters.parseDecimal(_supplierShippingCost.text) > 0 && v == null) {
+                                              return 'Wajib pilih ekspedisi';
+                                            }
+                                            return null;
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      SizedBox(
+                                        width: double.infinity,
+                                        child: OutlinedButton.icon(
+                                          onPressed: () => _showQuickAddShipping(context),
+                                          icon: const Icon(Icons.local_shipping_rounded, size: 16),
+                                          label: const Text('Daftarkan Ekspedisi Baru', style: TextStyle(fontSize: 11)),
+                                          style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                   loading: () => const AppLoading(),
                                   error: (_, __) => const Text('Gagal memuat'),
                                 ),
-                                if (_selectedShippingId == null) ...[
-                                  const SizedBox(height: 8),
-                                  TextFormField(
-                                    controller: _shippingServiceName,
-                                    decoration: const InputDecoration(labelText: 'Nama Ekspedisi (Manual)', hintText: 'Opsional', isDense: true),
-                                  ),
-                                ],
-                                const SizedBox(height: 8),
+                                const SizedBox(height: 12),
                                 _paymentStatusDropdown(
                                   label: 'Status Bayar Ongkir',
                                   value: _shippingPaymentStatus,
@@ -655,6 +638,13 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                       }
                                     });
                                   },
+                                  validator: (v) {
+                                    // Mandatory if Shipping Cost > 0
+                                    if (Formatters.parseDecimal(_supplierShippingCost.text) > 0 && (v == null || v == PaymentStatus.notApplicable)) {
+                                      return 'Pilih status bayar';
+                                    }
+                                    return null;
+                                  },
                                 ),
                                 if (_shippingPaymentStatus == PaymentStatus.partial) ...[
                                   const SizedBox(height: 8),
@@ -663,7 +653,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                     decoration: const InputDecoration(labelText: 'Jumlah Cicilan Awal (Rp) *', prefixText: 'Rp ', isDense: true),
                                     keyboardType: TextInputType.number,
                                     inputFormatters: [CurrencyInputFormatter()],
-                                    validator: (v) => Formatters.parseDecimal(v ?? '') <= 0 ? 'Wajib diisi untuk status Cicilan' : null,
+                                    validator: (v) => Formatters.parseDecimal(v ?? '') <= 0 ? 'Wajib diisi for status Cicilan' : null,
                                   ),
                                 ],
                               ],
@@ -795,6 +785,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
     required String label,
     required PaymentStatus value,
     required ValueChanged<PaymentStatus?> onChanged,
+    String? Function(PaymentStatus?)? validator,
   }) {
     return SizedBox(
       height: 48,
@@ -803,7 +794,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
         isExpanded: true,
         decoration: InputDecoration(labelText: label, isDense: true),
         dropdownColor: AppTheme.surfaceAlt,
-        items: [PaymentStatus.paid, PaymentStatus.unpaid, PaymentStatus.partial].map((s) => DropdownMenuItem(
+        items: PaymentStatus.values.map((s) => DropdownMenuItem(
           value: s,
           child: Row(
             children: [
@@ -817,6 +808,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
           ),
         )).toList(),
         onChanged: onChanged,
+        validator: validator,
       ),
     );
   }

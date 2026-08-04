@@ -39,7 +39,7 @@ class SyncStatusBar extends ConsumerWidget {
       icon = Icons.cloud_done_rounded;
       label = 'Tersinkronisasi';
       if (syncState.lastSyncAt != null) {
-        subLabel = 'Terakhir: ${Formatters.dateTime(syncState.lastSyncAt!)}';
+        subLabel = 'Terakhir:${Formatters.dateTime(syncState.lastSyncAt!)}';
       }
     }
 
@@ -48,7 +48,7 @@ class SyncStatusBar extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
@@ -74,8 +74,6 @@ class SyncStatusBar extends ConsumerWidget {
                       Text(
                         subLabel,
                         style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 11),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
                       ),
                   ],
                 ),
