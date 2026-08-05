@@ -159,7 +159,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
         }
 
         // 2. Right Shift for Exact Amount
-        if (key == LogicalKeyboardKey.shiftRight) {
+        if (key == LogicalKeyboardKey.pageDown) {
           final cart = ref.read(cartProvider);
           final total = cart.total + _shippingFee;
           _amountCtrl.text = Formatters.decimal(total);
@@ -201,7 +201,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
         }
 
         // 6. Home for Amount
-        if (key == LogicalKeyboardKey.home) {
+        if (key == LogicalKeyboardKey.pageUp) {
           _payAmountFocus.requestFocus();
           return KeyEventResult.handled;
         }

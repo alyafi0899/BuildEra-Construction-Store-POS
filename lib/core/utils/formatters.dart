@@ -8,7 +8,7 @@ class Formatters {
     decimalDigits: 0,
   );
 
-  static final NumberFormat _decimal = NumberFormat('#,##0.##', 'id_ID');
+  static final NumberFormat _decimal = NumberFormat('#,##0.#####', 'id_ID');
   static final DateFormat _date = DateFormat('dd/MM/yyyy', 'id_ID');
   static final DateFormat _dateTime = DateFormat('dd/MM/yyyy HH:mm', 'id_ID');
 
@@ -36,9 +36,28 @@ class Formatters {
     return months[month];
   }
 
-  static double parseDecimal(String s) {
+  /// Parses price/currency inputs.
+  /// Treats '.' as thousands separator and ',' as decimal point.
+  static double parsePrice(String s) {
+    if (s.isEmpty) return 0;
+    // Remove dots (thousands) and replace comma with dot (decimal)
     final clean = s.replaceAll('.', '').replaceAll(',', '.');
     return double.tryParse(clean) ?? 0;
+  }
+
+  /// Parses quantity and conversion inputs.
+  /// Treats BOTH '.' and ',' as decimal points.
+  /// Ignores thousand separators entirely for QTY.
+  static double parseQuantity(String s) {
+    if (s.isEmpty) return 0;
+    // Replace comma with dot to standardize decimal point
+    final clean = s.replaceAll(',', '.');
+    return double.tryParse(clean) ?? 0;
+  }
+
+  @Deprecated('Use parsePrice or parseQuantity instead')
+  static double parseDecimal(String s) {
+    return parsePrice(s);
   }
 }
 

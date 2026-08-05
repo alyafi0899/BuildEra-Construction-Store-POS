@@ -501,9 +501,9 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
                       EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 ),
                 onChanged: (v) {
-                  final numericValue = v.replaceAll('.', '');
+                  final numericValue = Formatters.parsePrice(v);
                   ref.read(cartProvider.notifier).setTransDiscount(
-                      double.tryParse(numericValue) ?? 0, transDiscountType);
+                      numericValue, transDiscountType);
                 },
                 inputFormatters: [CurrencyInputFormatter()],
                 onSubmitted: (_) =>
@@ -736,7 +736,9 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
 
     // Sync controllers if changed externally
     if (!_qtyFocus.hasFocus) {
-      final qStr = item.quantity.toString();
+      final qStr = item.quantity % 1 == 0 
+          ? item.quantity.toInt().toString() 
+          : item.quantity.toStringAsFixed(5).replaceAll(RegExp(r'\.?0+$'), '');
       if (_qtyCtrl.text != qStr) {
         _qtyCtrl.text = qStr;
       }
@@ -842,16 +844,11 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                     const SizedBox(width: 4),
                     _StandardBox(
                       width: 45,
-                      child: Listener(
-                        onPointerSignal: (pointerSignal) {
-                          if (pointerSignal is PointerScrollEvent) {
-                            if (pointerSignal.scrollDelta.dy == 0) return;
-                            // UP scroll = dy < 0 = Increase
-                            final delta = pointerSignal.scrollDelta.dy < 0 ? 1.0 : -1.0;
-                            final newQty = item.quantity + delta;
-                            if (newQty >= 1) {
-                              notifier.updateQuantity(item.id, newQty);
-                            }
+                      child: ScrollableQtyField(
+                        controller: _qtyCtrl,
+                        onChanged: (v) {
+                          if (v >= 1) {
+                            notifier.updateQuantity(item.id, v);
                           }
                         },
                         child: TextField(
@@ -872,13 +869,13 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                             focusedBorder: InputBorder.none,
                           ),
                           onChanged: (v) {
-                            final qty = double.tryParse(v) ?? 0;
+                            final qty = Formatters.parseQuantity(v);
                             if (qty > 0) {
                               notifier.updateQuantity(item.id, qty);
                             }
                           },
                           onSubmitted: (v) => notifier.updateQuantity(
-                              item.id, double.tryParse(v) ?? 1),
+                              item.id, Formatters.parseQuantity(v) > 0 ? Formatters.parseQuantity(v) : 1),
                         ),
                       ),
                     ),
@@ -921,7 +918,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                         focusNode: _priceFocus,
                         initialValue: item.soldPrice.toStringAsFixed(0),
                         onChanged: (v) => notifier.updateSoldPrice(
-                            item.id, double.tryParse(v) ?? item.originalPrice),
+                            item.id, Formatters.parsePrice(v) > 0 ? Formatters.parsePrice(v) : item.originalPrice),
                         prefixText: 'Rp ',
                         isBare: true,
                       ),
@@ -958,7 +955,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                                   item.discountValue.toStringAsFixed(0),
                               onChanged: (v) => notifier.setItemDiscount(
                                   item.id,
-                                  double.tryParse(v) ?? 0,
+                                  Formatters.parsePrice(v),
                                   item.discountType),
                               isBare: true,
                             ),
@@ -1331,8 +1328,7 @@ class _InlineTextFieldState extends State<_InlineTextField> {
         controller: effectiveController,
         focusNode: widget.focusNode,
         onChanged: (v) {
-          final numericValue = v.replaceAll(RegExp(r'[^0-9]'), '');
-          widget.onChanged(numericValue);
+          widget.onChanged(v);
         },
         inputFormatters: [CurrencyInputFormatter()],
         keyboardType: TextInputType.number,
@@ -1356,8 +1352,7 @@ class _InlineTextFieldState extends State<_InlineTextField> {
         controller: effectiveController,
         focusNode: widget.focusNode,
         onChanged: (v) {
-          final numericValue = v.replaceAll(RegExp(r'[^0-9]'), '');
-          widget.onChanged(numericValue);
+          widget.onChanged(v);
         },
         inputFormatters: [CurrencyInputFormatter()],
         keyboardType: TextInputType.number,

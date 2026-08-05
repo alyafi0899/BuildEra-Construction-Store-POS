@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart' hide Border;
@@ -31,7 +30,6 @@ class ExcelImportDialog extends ConsumerStatefulWidget {
 class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
   bool _importing = false;
   String? _status;
-  final _uuid = const Uuid();
 
   Future<void> _pickAndImport() async {
     final result = await FilePicker.platform.pickFiles(
@@ -207,7 +205,6 @@ _ExcelParseResult _parseExcelIsolate(Uint8List bytes) {
       
       final shippingName = val(10);
       final shippingPhone = val(11);
-      final shippingAddress = val(12);
 
       if (supplierName.isNotEmpty) {
         uniqueSuppliers[supplierName] = Supplier(

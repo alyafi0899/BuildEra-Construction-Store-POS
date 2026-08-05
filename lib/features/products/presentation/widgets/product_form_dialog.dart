@@ -133,9 +133,9 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   void _updateCalculatedCost() {
     if (_isManualCost) return;
     
-    final supplierPrice = Formatters.parseDecimal(_supplierPrice.text);
-    final shippingCost = Formatters.parseDecimal(_supplierShippingCost.text);
-    final qty = Formatters.parseDecimal(_stock.text);
+    final supplierPrice = Formatters.parsePrice(_supplierPrice.text);
+    final shippingCost = Formatters.parsePrice(_supplierShippingCost.text);
+    final qty = Formatters.parseQuantity(_stock.text);
     
     if (qty > 0) {
       final totalCost = (supplierPrice + shippingCost) / qty;
@@ -147,7 +147,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   }
 
   void _applyProfitPercentage() {
-    final cost = Formatters.parseDecimal(_costPrice.text);
+    final cost = Formatters.parsePrice(_costPrice.text);
     final percent = double.tryParse(_profitPercentCtrl.text) ?? 0;
     if (cost > 0 && percent > 0) {
       final sell = cost + (cost * percent / 100);
@@ -158,8 +158,8 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   }
 
   void _onBasePriceChanged() {
-    final cost = Formatters.parseDecimal(_costPrice.text);
-    final sell = Formatters.parseDecimal(_basePrice.text);
+    final cost = Formatters.parsePrice(_costPrice.text);
+    final sell = Formatters.parsePrice(_basePrice.text);
     if (cost > 0 && sell > 0) {
       final percent = ((sell - cost) / cost) * 100;
       _profitPercentCtrl.text = percent.toStringAsFixed(0);
@@ -168,8 +168,8 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   }
 
   double get _netProfit {
-    final cost = Formatters.parseDecimal(_costPrice.text);
-    final sell = Formatters.parseDecimal(_basePrice.text);
+    final cost = Formatters.parsePrice(_costPrice.text);
+    final sell = Formatters.parsePrice(_basePrice.text);
     return sell - cost;
   }
 
@@ -252,17 +252,17 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
         category:  _categoryCtrl.text.trim().isEmpty ? 'Umum' : _categoryCtrl.text.trim(),
         barcode:   _barcode.text.trim().isEmpty ? null : _barcode.text.trim(),
         description: _description.text.trim().isEmpty ? null : _description.text.trim(),
-        costPrice: Formatters.parseDecimal(_costPrice.text),
-        basePrice: Formatters.parseDecimal(_basePrice.text),
+        costPrice: Formatters.parsePrice(_costPrice.text),
+        basePrice: Formatters.parsePrice(_basePrice.text),
         baseUnit:  _baseUnitCtrl.text.trim().isEmpty ? 'pcs' : _baseUnitCtrl.text.trim(),
         defaultUnitName: _defaultUnitName,
-        stock:     Formatters.parseDecimal(_stock.text),
+        stock:     Formatters.parseQuantity(_stock.text),
         imagePath: imagePath,
         financials: ProductFinancials(
-          supplierPrice: Formatters.parseDecimal(_supplierPrice.text),
-          supplierShippingCost: Formatters.parseDecimal(_supplierShippingCost.text),
-          supplierPaidAmount: Formatters.parseDecimal(_supplierPaidAmount.text),
-          shippingPaidAmount: Formatters.parseDecimal(_shippingPaidAmount.text),
+          supplierPrice: Formatters.parsePrice(_supplierPrice.text),
+          supplierShippingCost: Formatters.parsePrice(_supplierShippingCost.text),
+          supplierPaidAmount: Formatters.parsePrice(_supplierPaidAmount.text),
+          shippingPaidAmount: Formatters.parsePrice(_shippingPaidAmount.text),
           isManualCost: _isManualCost,
           supplierName: supplierName,
           supplierPaymentStatus: _supplierPaymentStatus,
@@ -434,19 +434,19 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                             if (controller.text.isEmpty && _categoryCtrl.text.isNotEmpty) {
                                               controller.text = _categoryCtrl.text;
                                             }
-                                  return TextFormField(
-                                    controller: controller,
-                                    focusNode: focusNode,
-                                    onChanged: (v) => _categoryCtrl.text = v,
-                                    keyboardType: TextInputType.text,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Kategori Produk *',
-                                      hintText: 'Pilih atau ketik baru...',
-                                      suffixIcon: Icon(Icons.arrow_drop_down, size: 20),
-                                    ),
-                                    validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
-                                  );
-                                },
+                                            return TextFormField(
+                                              controller: controller,
+                                              focusNode: focusNode,
+                                              onChanged: (v) => _categoryCtrl.text = v,
+                                              keyboardType: TextInputType.text,
+                                              decoration: const InputDecoration(
+                                                labelText: 'Kategori Produk *',
+                                                hintText: 'Pilih atau ketik baru...',
+                                                suffixIcon: Icon(Icons.arrow_drop_down, size: 20),
+                                              ),
+                                              validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
+                                            );
+                                          },
                               ),
                             ],
                           ),
@@ -483,7 +483,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                   hintText: 'e.g. pcs, kg, m',
                                   suffixIcon: Icon(Icons.arrow_drop_down, size: 20),
                                 ),
-                                validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+                                validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
                               );
                             },
                           ),
@@ -498,7 +498,11 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                   decoration:   const InputDecoration(labelText: 'Jumlah Barang *'),
                                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                   onChanged: (_) => _updateCalculatedCost(),
-                                  validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+                                  validator: (v) {
+                                    if (v == null || v.isEmpty) return 'Wajib diisi';
+                                    if (Formatters.parseQuantity(v) <= 0) return 'Format salah';
+                                    return null;
+                                  },
                                 ),
                               ),
                             ),
@@ -581,7 +585,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                       onChanged: (v) {
                                         _updateCalculatedCost();
                                         // Auto-transition status from N/A to Unpaid if price > 0
-                                        if (Formatters.parseDecimal(v) > 0 && _supplierPaymentStatus == PaymentStatus.notApplicable) {
+                                        if (Formatters.parsePrice(v) > 0 && _supplierPaymentStatus == PaymentStatus.notApplicable) {
                                           setState(() => _supplierPaymentStatus = PaymentStatus.unpaid);
                                         }
                                       },
@@ -601,7 +605,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                       onChanged: (v) {
                                         _updateCalculatedCost();
                                         // Auto-transition status from N/A to Unpaid if cost > 0
-                                        if (Formatters.parseDecimal(v) > 0 && _shippingPaymentStatus == PaymentStatus.notApplicable) {
+                                        if (Formatters.parsePrice(v) > 0 && _shippingPaymentStatus == PaymentStatus.notApplicable) {
                                           setState(() => _shippingPaymentStatus = PaymentStatus.unpaid);
                                         }
                                       },
@@ -632,7 +636,12 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                       setState(() {});
                                       _applyProfitPercentage();
                                     },
-                                    validator: (v) => Formatters.parseDecimal(v ?? '') == 0 && (v ?? '').isNotEmpty && (v ?? '') != '0' ? 'Format salah' : (Formatters.parseDecimal(v ?? '') == 0 && (v ?? '').isEmpty ? 'Wajib diisi' : null),
+                                    validator: (v) {
+                                      final val = Formatters.parsePrice(v ?? '');
+                                      if (val == 0 && (v ?? '').isNotEmpty && (v ?? '') != '0') return 'Format salah';
+                                      if (val == 0 && (v ?? '').isEmpty) return 'Wajib diisi';
+                                      return null;
+                                    },
                                   ),
                                 ),
                                 const SizedBox(width: 16),
@@ -681,8 +690,8 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                           inputFormatters: [CurrencyInputFormatter()],
                                           onChanged: (_) => _onBasePriceChanged(),
                                           validator: (v) {
-                                            final sell = Formatters.parseDecimal(v ?? '');
-                                            final cost = Formatters.parseDecimal(_costPrice.text);
+                                            final sell = Formatters.parsePrice(v ?? '');
+                                            final cost = Formatters.parsePrice(_costPrice.text);
                                             if (sell <= 0) return 'Wajib diisi';
                                             if (sell < cost) return 'Harga jual di bawah modal';
                                             return null;
@@ -751,7 +760,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                           onChanged: (v) => setState(() => _selectedSupplierId = v),
                                           validator: (v) {
                                             // Mandatory if Price > 0 in Auto mode
-                                            if (!_isManualCost && Formatters.parseDecimal(_supplierPrice.text) > 0 && v == null) {
+                                            if (!_isManualCost && Formatters.parsePrice(_supplierPrice.text) > 0 && v == null) {
                                               return 'Wajib pilih supplier';
                                             }
                                             return null;
@@ -789,7 +798,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                   },
                                   validator: (v) {
                                     // Mandatory if Price > 0 in Auto mode
-                                    if (!_isManualCost && Formatters.parseDecimal(_supplierPrice.text) > 0 && (v == null || v == PaymentStatus.notApplicable)) {
+                                    if (!_isManualCost && Formatters.parsePrice(_supplierPrice.text) > 0 && (v == null || v == PaymentStatus.notApplicable)) {
                                       return 'Pilih status bayar';
                                     }
                                     return null;
@@ -802,7 +811,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                     decoration: const InputDecoration(labelText: 'Jumlah Cicilan Awal (Rp) *', prefixText: 'Rp ', isDense: true),
                                     keyboardType: TextInputType.number,
                                     inputFormatters: [CurrencyInputFormatter()],
-                                    validator: (v) => Formatters.parseDecimal(v ?? '') <= 0 ? 'Wajib diisi untuk status Cicilan' : null,
+                                    validator: (v) => Formatters.parsePrice(v ?? '') <= 0 ? 'Wajib diisi untuk status Cicilan' : null,
                                   ),
                                 ],
                               ],
@@ -836,7 +845,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                           onChanged: (v) => setState(() => _selectedShippingId = v),
                                           validator: (v) {
                                             // Mandatory if Shipping Cost > 0
-                                            if (Formatters.parseDecimal(_supplierShippingCost.text) > 0 && v == null) {
+                                            if (Formatters.parsePrice(_supplierShippingCost.text) > 0 && v == null) {
                                               return 'Wajib pilih ekspedisi';
                                             }
                                             return null;
@@ -874,7 +883,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                   },
                                   validator: (v) {
                                     // Mandatory if Shipping Cost > 0
-                                    if (Formatters.parseDecimal(_supplierShippingCost.text) > 0 && (v == null || v == PaymentStatus.notApplicable)) {
+                                    if (Formatters.parsePrice(_supplierShippingCost.text) > 0 && (v == null || v == PaymentStatus.notApplicable)) {
                                       return 'Pilih status bayar';
                                     }
                                     return null;
@@ -887,7 +896,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                     decoration: const InputDecoration(labelText: 'Jumlah Cicilan Awal (Rp) *', prefixText: 'Rp ', isDense: true),
                                     keyboardType: TextInputType.number,
                                     inputFormatters: [CurrencyInputFormatter()],
-                                    validator: (v) => Formatters.parseDecimal(v ?? '') <= 0 ? 'Wajib diisi untuk status Cicilan' : null,
+                                    validator: (v) => Formatters.parsePrice(v ?? '') <= 0 ? 'Wajib diisi untuk status Cicilan' : null,
                                   ),
                                 ],
                               ],
@@ -1226,7 +1235,9 @@ class _UnitEntry {
         id:             u.id,
         productId:      u.productId,
         unitName:       u.unitName,
-        conversionRate: u.conversionRate.toStringAsFixed(u.conversionRate % 1 == 0 ? 0 : 2),
+        conversionRate: u.conversionRate % 1 == 0 
+            ? u.conversionRate.toStringAsFixed(0) 
+            : u.conversionRate.toStringAsFixed(5).replaceAll(RegExp(r'\.?0+$'), ''),
         sellPrice:      u.sellPrice.toStringAsFixed(0),
       );
 
@@ -1234,8 +1245,8 @@ class _UnitEntry {
         id:             id,
         productId:      pid,
         unitName:       unitName.trim(),
-        conversionRate: Formatters.parseDecimal(conversionRate),
-        sellPrice:      Formatters.parseDecimal(sellPrice),
+        conversionRate: Formatters.parseQuantity(conversionRate),
+        sellPrice:      Formatters.parsePrice(sellPrice),
       );
 }
 

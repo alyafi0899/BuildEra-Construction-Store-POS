@@ -648,8 +648,8 @@ class _ProductRowState extends ConsumerState<_ProductRow> {
                   controller: _adjCtrl,
                   keyboardType: const TextInputType.numberWithOptions(signed: true, decimal: true),
                   onSubmitted: (v) {
-                    final val = double.tryParse(v);
-                    if (val != null) _adjust(val);
+                    final val = Formatters.parseQuantity(v);
+                    if (val != 0 || v.trim() == '0') _adjust(val);
                   },
                   style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
                   decoration: const InputDecoration(
@@ -662,8 +662,8 @@ class _ProductRowState extends ConsumerState<_ProductRow> {
               const SizedBox(width: 4),
               IconButton(
                 onPressed: () {
-                  final v = double.tryParse(_adjCtrl.text);
-                  if (v != null) _adjust(v);
+                  final v = Formatters.parseQuantity(_adjCtrl.text);
+                  if (v != 0 || _adjCtrl.text.trim() == '0') _adjust(v);
                 },
                 icon: const Icon(Icons.check_circle_outline_rounded, color: AppTheme.accent, size: 20),
                 padding: EdgeInsets.zero,

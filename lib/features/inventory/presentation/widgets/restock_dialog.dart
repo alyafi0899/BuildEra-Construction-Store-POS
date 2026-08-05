@@ -55,7 +55,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
     final p = widget.product;
     final r = widget.record;
     
-    _qty = TextEditingController(text: r != null ? r.quantityAdded.toStringAsFixed(r.quantityAdded % 1 == 0 ? 0 : 2) : '1');
+    _qty = TextEditingController(text: r != null ? (r.quantityAdded % 1 == 0 ? r.quantityAdded.toStringAsFixed(0) : r.quantityAdded.toStringAsFixed(5).replaceAll(RegExp(r'\.?0+$'), '')) : '1');
     _supplierPrice = TextEditingController(text: r != null ? r.supplierPrice.toStringAsFixed(0) : '');
     _supplierShippingCost = TextEditingController(text: r != null ? r.shippingCost.toStringAsFixed(0) : '');
     _totalCostPerUnit = TextEditingController(text: r != null ? r.totalCostPerUnit.toStringAsFixed(0) : p.costPrice.toStringAsFixed(0));
@@ -112,9 +112,9 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
   void _calculateCost() {
     if (_isManualCost) return;
     
-    final q = Formatters.parseDecimal(_qty.text);
-    final sp = Formatters.parseDecimal(_supplierPrice.text);
-    final sc = Formatters.parseDecimal(_supplierShippingCost.text);
+    final q = Formatters.parseQuantity(_qty.text);
+    final sp = Formatters.parsePrice(_supplierPrice.text);
+    final sc = Formatters.parsePrice(_supplierShippingCost.text);
     
     if (q > 0) {
       final totalBaseQty = q * _selectedUnit.conversionRate;
@@ -126,7 +126,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
   }
 
   void _suggestPrice() {
-    final cost = Formatters.parseDecimal(_totalCostPerUnit.text);
+    final cost = Formatters.parsePrice(_totalCostPerUnit.text);
     if (cost > 0) {
       final suggested = cost * 1.1; // +10%
       setState(() {
@@ -136,8 +136,8 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
   }
 
   double get _netProfit {
-    final cost = Formatters.parseDecimal(_totalCostPerUnit.text);
-    final sell = Formatters.parseDecimal(_basePrice.text);
+    final cost = Formatters.parsePrice(_totalCostPerUnit.text);
+    final sell = Formatters.parsePrice(_basePrice.text);
     return sell - cost;
   }
 
@@ -157,7 +157,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
           ? shippings.firstWhereOrNull((s) => s.id == _selectedShippingId)?.name 
           : _shippingServiceName.text.trim().isEmpty ? null : _shippingServiceName.text.trim();
 
-      final totalBaseQty = Formatters.parseDecimal(_qty.text) * _selectedUnit.conversionRate;
+      final totalBaseQty = Formatters.parseQuantity(_qty.text) * _selectedUnit.conversionRate;
 
       final record = RestockRecord(
         id: widget.record?.id ?? const Uuid().v4(),
@@ -165,12 +165,12 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
         productName: widget.product.name,
         quantityAdded: totalBaseQty,
         unitName: _selectedUnit.unitName,
-        supplierPrice: Formatters.parseDecimal(_supplierPrice.text),
-        shippingCost: Formatters.parseDecimal(_supplierShippingCost.text),
-        totalCostPerUnit: Formatters.parseDecimal(_totalCostPerUnit.text),
-        sellingPrice: Formatters.parseDecimal(_basePrice.text),
-        supplierPaidAmount: Formatters.parseDecimal(_supplierPaidAmount.text),
-        shippingPaidAmount: Formatters.parseDecimal(_shippingPaidAmount.text),
+        supplierPrice: Formatters.parsePrice(_supplierPrice.text),
+        shippingCost: Formatters.parsePrice(_supplierShippingCost.text),
+        totalCostPerUnit: Formatters.parsePrice(_totalCostPerUnit.text),
+        sellingPrice: Formatters.parsePrice(_basePrice.text),
+        supplierPaidAmount: Formatters.parsePrice(_supplierPaidAmount.text),
+        shippingPaidAmount: Formatters.parsePrice(_shippingPaidAmount.text),
         supplierName: supplierName,
         supplierPaymentStatus: _supplierPaymentStatus,
         shippingServiceName: shippingName,
@@ -281,13 +281,13 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                           child: ScrollableQtyField(
                             controller: _qty,
                             onChanged: (_) => _calculateCost(),
-                            child: TextFormField(
-                              controller: _qty,
-                              decoration: const InputDecoration(labelText: 'Jumlah Tambahan *'),
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              onChanged: (_) => _calculateCost(),
-                              validator: (v) => (double.tryParse(v ?? '') ?? 0) <= 0 ? 'Wajib diisi' : null,
-                            ),
+                              child: TextFormField(
+                                controller: _qty,
+                                decoration: const InputDecoration(labelText: 'Jumlah Tambahan *'),
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                onChanged: (_) => _calculateCost(),
+                                validator: (v) => (Formatters.parseQuantity(v ?? '')) <= 0 ? 'Wajib diisi' : null,
+                              ),
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -382,7 +382,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                       onChanged: (v) {
                                         _calculateCost();
                                         // Auto-transition status from N/A to Unpaid if price > 0
-                                        if (Formatters.parseDecimal(v) > 0 && _supplierPaymentStatus == PaymentStatus.notApplicable) {
+                                        if (Formatters.parsePrice(v) > 0 && _supplierPaymentStatus == PaymentStatus.notApplicable) {
                                           setState(() => _supplierPaymentStatus = PaymentStatus.unpaid);
                                         }
                                       },
@@ -402,7 +402,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                       onChanged: (v) {
                                         _calculateCost();
                                         // Auto-transition status from N/A to Unpaid if cost > 0
-                                        if (Formatters.parseDecimal(v) > 0 && _shippingPaymentStatus == PaymentStatus.notApplicable) {
+                                        if (Formatters.parsePrice(v) > 0 && _shippingPaymentStatus == PaymentStatus.notApplicable) {
                                           setState(() => _shippingPaymentStatus = PaymentStatus.unpaid);
                                         }
                                       },
@@ -430,7 +430,12 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                     keyboardType: TextInputType.number,
                                     inputFormatters: [CurrencyInputFormatter()],
                                     onChanged: (_) => setState(() {}),
-                                    validator: (v) => Formatters.parseDecimal(v ?? '') == 0 && (v ?? '').isNotEmpty && (v ?? '') != '0' ? 'Format salah' : (Formatters.parseDecimal(v ?? '') == 0 && (v ?? '').isEmpty ? 'Wajib diisi' : null),
+                                    validator: (v) {
+                                      final val = Formatters.parsePrice(v ?? '');
+                                      if (val == 0 && (v ?? '').isNotEmpty && (v ?? '') != '0') return 'Format salah';
+                                      if (val == 0 && (v ?? '').isEmpty) return 'Wajib diisi';
+                                      return null;
+                                    },
                                   ),
                                 ),
                                 const SizedBox(width: 16),
@@ -450,8 +455,8 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                     inputFormatters: [CurrencyInputFormatter()],
                                     onChanged: (_) => setState(() {}),
                                     validator: (v) {
-                                      final sell = Formatters.parseDecimal(v ?? '');
-                                      final cost = Formatters.parseDecimal(_totalCostPerUnit.text);
+                                      final sell = Formatters.parsePrice(v ?? '');
+                                      final cost = Formatters.parsePrice(_totalCostPerUnit.text);
                                       if (sell <= 0) return 'Wajib diisi';
                                       if (sell < cost) return 'Harga jual di bawah modal';
                                       return null;
@@ -517,7 +522,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                           onChanged: (v) => setState(() => _selectedSupplierId = v),
                                           validator: (v) {
                                             // Mandatory if Price > 0 in Auto mode
-                                            if (!_isManualCost && Formatters.parseDecimal(_supplierPrice.text) > 0 && v == null) {
+                                            if (!_isManualCost && Formatters.parsePrice(_supplierPrice.text) > 0 && v == null) {
                                               return 'Wajib pilih supplier';
                                             }
                                             return null;
@@ -555,7 +560,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                   },
                                   validator: (v) {
                                     // Mandatory if Price > 0 in Auto mode
-                                    if (!_isManualCost && Formatters.parseDecimal(_supplierPrice.text) > 0 && (v == null || v == PaymentStatus.notApplicable)) {
+                                    if (!_isManualCost && Formatters.parsePrice(_supplierPrice.text) > 0 && (v == null || v == PaymentStatus.notApplicable)) {
                                       return 'Pilih status bayar';
                                     }
                                     return null;
@@ -568,7 +573,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                     decoration: const InputDecoration(labelText: 'Jumlah Cicilan Awal (Rp) *', prefixText: 'Rp ', isDense: true),
                                     keyboardType: TextInputType.number,
                                     inputFormatters: [CurrencyInputFormatter()],
-                                    validator: (v) => Formatters.parseDecimal(v ?? '') <= 0 ? 'Wajib diisi untuk status Cicilan' : null,
+                                    validator: (v) => Formatters.parsePrice(v ?? '') <= 0 ? 'Wajib diisi untuk status Cicilan' : null,
                                   ),
                                 ],
                               ],
@@ -602,7 +607,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                           onChanged: (v) => setState(() => _selectedShippingId = v),
                                           validator: (v) {
                                             // Mandatory if Shipping Cost > 0
-                                            if (Formatters.parseDecimal(_supplierShippingCost.text) > 0 && v == null) {
+                                            if (Formatters.parsePrice(_supplierShippingCost.text) > 0 && v == null) {
                                               return 'Wajib pilih ekspedisi';
                                             }
                                             return null;
@@ -640,7 +645,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                   },
                                   validator: (v) {
                                     // Mandatory if Shipping Cost > 0
-                                    if (Formatters.parseDecimal(_supplierShippingCost.text) > 0 && (v == null || v == PaymentStatus.notApplicable)) {
+                                    if (Formatters.parsePrice(_supplierShippingCost.text) > 0 && (v == null || v == PaymentStatus.notApplicable)) {
                                       return 'Pilih status bayar';
                                     }
                                     return null;
@@ -653,7 +658,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                     decoration: const InputDecoration(labelText: 'Jumlah Cicilan Awal (Rp) *', prefixText: 'Rp ', isDense: true),
                                     keyboardType: TextInputType.number,
                                     inputFormatters: [CurrencyInputFormatter()],
-                                    validator: (v) => Formatters.parseDecimal(v ?? '') <= 0 ? 'Wajib diisi for status Cicilan' : null,
+                                    validator: (v) => Formatters.parsePrice(v ?? '') <= 0 ? 'Wajib diisi for status Cicilan' : null,
                                   ),
                                 ],
                               ],
@@ -970,7 +975,9 @@ class _UnitEntry {
         id:             u.id,
         productId:      u.productId,
         unitName:       u.unitName,
-        conversionRate: u.conversionRate.toStringAsFixed(u.conversionRate % 1 == 0 ? 0 : 2),
+        conversionRate: u.conversionRate % 1 == 0 
+            ? u.conversionRate.toStringAsFixed(0) 
+            : u.conversionRate.toStringAsFixed(5).replaceAll(RegExp(r'\.?0+$'), ''),
         sellPrice:      u.sellPrice.toStringAsFixed(0),
       );
 
@@ -978,8 +985,8 @@ class _UnitEntry {
         id:             id,
         productId:      pid,
         unitName:       unitName.trim(),
-        conversionRate: Formatters.parseDecimal(conversionRate),
-        sellPrice:      Formatters.parseDecimal(sellPrice),
+        conversionRate: Formatters.parseQuantity(conversionRate),
+        sellPrice:      Formatters.parsePrice(sellPrice),
       );
 }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/formatters.dart';
 
 // ── PageHeader ───────────────────────────────────────────────────────────
 
@@ -460,8 +461,7 @@ class _ScrollableQtyFieldState extends State<ScrollableQtyField> {
   }
 
   double _parseValue(String text) {
-    final clean = text.replaceAll('.', '').replaceAll(',', '.');
-    return double.tryParse(clean) ?? 0.0;
+    return Formatters.parseQuantity(text);
   }
 
   void _updateValue(double delta) {
@@ -481,10 +481,10 @@ class _ScrollableQtyFieldState extends State<ScrollableQtyField> {
     if (widget.isCurrency) {
       formatted = NumberFormat.decimalPattern('id_ID').format(_currentValue.toInt());
     } else {
-      // Qty: precise decimal handling
+      // Qty: precise decimal handling (up to 5 decimals)
       formatted = _currentValue % 1 == 0 
           ? _currentValue.toInt().toString() 
-          : _currentValue.toStringAsFixed(2).replaceAll(RegExp(r'\.?0+$'), '');
+          : _currentValue.toStringAsFixed(5).replaceAll(RegExp(r'\.?0+$'), '');
     }
 
     // Update UI atomicly
