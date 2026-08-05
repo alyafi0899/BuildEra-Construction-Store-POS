@@ -47,6 +47,8 @@ class SyncNotifier extends Notifier<SyncState> {
   String? _uid;
   Timer? _syncTimer;
   StreamSubscription? _signalSub;
+  final String _sessionId = const Uuid().v4();
+  bool _isFetchingDeltas = false;
 
   @override
   SyncState build() {
@@ -107,13 +109,20 @@ class SyncNotifier extends Notifier<SyncState> {
     _signalSub = doc.snapshots().listen((snap) async {
       if (!snap.exists) return;
       
-      final remoteLastUpdate = (snap.data()?['last_update'] as Timestamp?)?.toDate();
+      final data = snap.data();
+      final lastUpdateBy = data?['updated_by_session'] as String?;
+      
+      // Skip if the update was made by this session to prevent circular fetch
+      if (lastUpdateBy == _sessionId) return;
+
+      final remoteLastUpdate = (data?['last_update'] as Timestamp?)?.toDate();
       if (remoteLastUpdate == null) return;
 
       final localLastSyncRaw = await LocalDatabase.getMetadata(_uid!, 'last_remote_sync');
       final localLastSync = localLastSyncRaw != null ? DateTime.parse(localLastSyncRaw as String) : DateTime(2000);
 
-      if (remoteLastUpdate.isAfter(localLastSync)) {
+      // Add a small buffer to avoid missing updates due to clock skew
+      if (remoteLastUpdate.isAfter(localLastSync.subtract(const Duration(seconds: 1)))) {
         await fetchDeltas(remoteLastUpdate);
       }
     });
@@ -162,22 +171,23 @@ class SyncNotifier extends Notifier<SyncState> {
   bool _isCurrentlyProcessing = false;
 
   Future<void> fetchDeltas(DateTime remoteTimestamp) async {
-    if (_uid == null || !ref.read(isOnlineProvider)) return;
+    if (_uid == null || _isFetchingDeltas || !ref.read(isOnlineProvider)) return;
 
+    _isFetchingDeltas = true;
     final db = FirebaseFirestore.instance;
     final userDoc = db.collection('users').doc(_uid!);
     
     final localLastSyncRaw = await LocalDatabase.getMetadata(_uid!, 'last_remote_sync');
     final localLastSync = localLastSyncRaw != null ? DateTime.parse(localLastSyncRaw as String) : DateTime(2000);
 
-    // List of collections to track for deltas
     final collections = ['products', 'customers', 'debts', 'debt_payments', 'transactions', 'suppliers', 'shipping_services'];
 
-    for (final col in collections) {
-      try {
+    try {
+      // Fetch all deltas in parallel to improve performance
+      final futures = collections.map((col) async {
         final snap = await userDoc.collection(col)
             .where('updated_at', isGreaterThan: localLastSync.toIso8601String())
-            .get();
+            .get(const GetOptions(source: Source.server)); 
 
         if (snap.docs.isNotEmpty) {
           final box = await LocalDatabase.openBox(_uid!, col);
@@ -185,12 +195,15 @@ class SyncNotifier extends Notifier<SyncState> {
             await box.put(doc.id, LocalDatabase.sanitize(doc.data()));
           }
         }
-      } catch (e) {
-        debugPrint('Delta Fetch Error for $col: $e');
-      }
-    }
+      });
 
-    await LocalDatabase.setMetadata(_uid!, 'last_remote_sync', remoteTimestamp.toIso8601String());
+      await Future.wait(futures);
+      await LocalDatabase.setMetadata(_uid!, 'last_remote_sync', remoteTimestamp.toIso8601String());
+    } catch (e) {
+      debugPrint('Parallel Delta Fetch Error: $e');
+    } finally {
+      _isFetchingDeltas = false;
+    }
   }
 
   Future<void> processQueue() async {
@@ -263,10 +276,11 @@ class SyncNotifier extends Notifier<SyncState> {
       }
 
       if (hasChanges) {
-        // Broadcast signal to other devices
+        // Broadcast signal to other devices with current session ID
         await userDoc.collection('metadata').doc('sync').set({
           'last_update': FieldValue.serverTimestamp(),
           'updated_by': _uid,
+          'updated_by_session': _sessionId,
         }, SetOptions(merge: true));
       }
     } catch (e) {
