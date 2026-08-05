@@ -46,6 +46,7 @@ class SyncNotifier extends Notifier<SyncState> {
   Box? _queueBox;
   String? _uid;
   Timer? _syncTimer;
+  StreamSubscription? _signalSub;
 
   @override
   SyncState build() {
@@ -58,13 +59,21 @@ class SyncNotifier extends Notifier<SyncState> {
       _initQueue();
     } else {
       _closeQueue();
+      _stopSignalListener();
     }
 
     if (isOnline && _uid != null) {
       _startSync();
+      _startSignalListener();
     } else {
       _stopSync();
+      _stopSignalListener();
     }
+
+    ref.onDispose(() {
+      _syncTimer?.cancel();
+      _signalSub?.cancel();
+    });
 
     return const SyncState();
   }
@@ -82,14 +91,37 @@ class SyncNotifier extends Notifier<SyncState> {
 
   void _startSync() {
     _syncTimer?.cancel();
-    _syncTimer = Timer.periodic(const Duration(seconds: 10), (_) => processQueue()); // Relax timer
-    // Trigger immediate process
+    _syncTimer = Timer.periodic(const Duration(seconds: 15), (_) => processQueue());
     Future.microtask(() => processQueue());
   }
 
   void _stopSync() {
     _syncTimer?.cancel();
     _syncTimer = null;
+  }
+
+  void _startSignalListener() {
+    if (_signalSub != null || _uid == null) return;
+    
+    final doc = FirebaseFirestore.instance.collection('users').doc(_uid!).collection('metadata').doc('sync');
+    _signalSub = doc.snapshots().listen((snap) async {
+      if (!snap.exists) return;
+      
+      final remoteLastUpdate = (snap.data()?['last_update'] as Timestamp?)?.toDate();
+      if (remoteLastUpdate == null) return;
+
+      final localLastSyncRaw = await LocalDatabase.getMetadata(_uid!, 'last_remote_sync');
+      final localLastSync = localLastSyncRaw != null ? DateTime.parse(localLastSyncRaw as String) : DateTime(2000);
+
+      if (remoteLastUpdate.isAfter(localLastSync)) {
+        await fetchDeltas(remoteLastUpdate);
+      }
+    });
+  }
+
+  void _stopSignalListener() {
+    _signalSub?.cancel();
+    _signalSub = null;
   }
 
   // ── Actions ──────────────────────────────────────────────────────────────
@@ -129,6 +161,38 @@ class SyncNotifier extends Notifier<SyncState> {
 
   bool _isCurrentlyProcessing = false;
 
+  Future<void> fetchDeltas(DateTime remoteTimestamp) async {
+    if (_uid == null || !ref.read(isOnlineProvider)) return;
+
+    final db = FirebaseFirestore.instance;
+    final userDoc = db.collection('users').doc(_uid!);
+    
+    final localLastSyncRaw = await LocalDatabase.getMetadata(_uid!, 'last_remote_sync');
+    final localLastSync = localLastSyncRaw != null ? DateTime.parse(localLastSyncRaw as String) : DateTime(2000);
+
+    // List of collections to track for deltas
+    final collections = ['products', 'customers', 'debts', 'debt_payments', 'transactions', 'suppliers', 'shipping_services'];
+
+    for (final col in collections) {
+      try {
+        final snap = await userDoc.collection(col)
+            .where('updated_at', isGreaterThan: localLastSync.toIso8601String())
+            .get();
+
+        if (snap.docs.isNotEmpty) {
+          final box = await LocalDatabase.openBox(_uid!, col);
+          for (final doc in snap.docs) {
+            await box.put(doc.id, LocalDatabase.sanitize(doc.data()));
+          }
+        }
+      } catch (e) {
+        debugPrint('Delta Fetch Error for $col: $e');
+      }
+    }
+
+    await LocalDatabase.setMetadata(_uid!, 'last_remote_sync', remoteTimestamp.toIso8601String());
+  }
+
   Future<void> processQueue() async {
     if (_isCurrentlyProcessing || _queueBox == null || _queueBox!.isEmpty || !ref.read(isOnlineProvider)) return;
 
@@ -139,14 +203,12 @@ class SyncNotifier extends Notifier<SyncState> {
     final userDoc = db.collection('users').doc(_uid!);
 
     try {
-      // Process in smaller chunks for safety (200 is safer than 400 or 500)
       const int chunkSize = 200;
+      bool hasChanges = false;
 
       while (_queueBox!.isNotEmpty && ref.read(isOnlineProvider)) {
         final batch = db.batch();
         final processedKeys = <dynamic>[];
-        
-        // Mengambil kunci antrean (keys) secara dinamis agar tidak membebani RAM
         final keys = _queueBox!.keys.take(chunkSize).toList();
 
         for (final key in keys) {
@@ -168,28 +230,44 @@ class SyncNotifier extends Notifier<SyncState> {
               case SyncAction.delete:
                 batch.delete(docRef);
                 break;
+              case SyncAction.increment:
+                final incrementData = <String, dynamic>{};
+                task.data.forEach((k, v) {
+                  if (v is num) {
+                    incrementData[k] = FieldValue.increment(v);
+                  } else {
+                    incrementData[k] = v;
+                  }
+                });
+                batch.set(docRef, incrementData, SetOptions(merge: true));
+                break;
             }
             processedKeys.add(key);
           } catch (e) {
             debugPrint('Sync Task Parse Error for key $key: $e');
-            // Remove corrupted task from queue to unblock the rest
             processedKeys.add(key);
           }
         }
 
         if (processedKeys.isNotEmpty) {
           await batch.commit();
-          // Delete from Hive ONLY after successful Firestore commit
           await _queueBox!.deleteAll(processedKeys);
+          hasChanges = true;
           
           state = state.copyWith(
             pendingCount: _queueBox!.length, 
             lastSyncAt: DateTime.now(),
           );
-
-          // Add a small breather to prevent CPU/Network choking on very large lists
           await Future.delayed(const Duration(milliseconds: 100));
         }
+      }
+
+      if (hasChanges) {
+        // Broadcast signal to other devices
+        await userDoc.collection('metadata').doc('sync').set({
+          'last_update': FieldValue.serverTimestamp(),
+          'updated_by': _uid,
+        }, SetOptions(merge: true));
       }
     } catch (e) {
       debugPrint('Sync Batch FATAL Error: $e');

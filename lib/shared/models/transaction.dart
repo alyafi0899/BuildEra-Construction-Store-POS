@@ -91,6 +91,7 @@ class Transaction {
   final double changeAmount;
   final String? notes;
   final DateTime createdAt;
+  final DateTime updatedAt;
   final List<TransactionItem> items;
 
   const Transaction({
@@ -113,6 +114,7 @@ class Transaction {
     required this.changeAmount,
     this.notes,
     required this.createdAt,
+    required this.updatedAt,
     this.items = const [],
   });
 
@@ -137,6 +139,7 @@ class Transaction {
         changeAmount:       (m['change_amount'] as num).toDouble(),
         notes:              m['notes'] as String?,
         createdAt:          DateTime.parse(m['created_at'] as String),
+        updatedAt:          m['updated_at'] != null ? DateTime.parse(m['updated_at'] as String) : DateTime.parse(m['created_at'] as String),
         items:              items,
       );
 
@@ -160,5 +163,6 @@ class Transaction {
         'change_amount':         changeAmount,
         'notes':                 notes,
         'created_at':            createdAt.toIso8601String(),
+        'updated_at':            updatedAt.toIso8601String(),
       };
 }

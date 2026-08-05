@@ -1,4 +1,4 @@
-enum SyncAction { create, update, delete }
+enum SyncAction { create, update, delete, increment }
 
 class SyncTask {
   final String id;

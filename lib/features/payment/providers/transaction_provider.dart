@@ -103,6 +103,7 @@ class TransactionRepository {
     final finalTotal = cart.total + shippingFee;
     final change  = amountPaid - finalTotal;
 
+    final now = DateTime.now();
     final t = Transaction(
       id:                 id,
       invoiceNumber:      invoice,
@@ -122,7 +123,8 @@ class TransactionRepository {
       amountPaid:         amountPaid,
       changeAmount:       change < 0 ? 0 : change,
       notes:              notes,
-      createdAt:          DateTime.now(),
+      createdAt:          now,
+      updatedAt:          now,
     );
 
     final data = t.toMap();

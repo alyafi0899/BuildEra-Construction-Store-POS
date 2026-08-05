@@ -286,6 +286,7 @@ class _CustomerFormDialogState extends ConsumerState<_CustomerFormDialog> {
         name: '',
         phone: '',
         createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
       )).copyWith(
         name: _nameCtrl.text.trim(),
         phone: _phoneCtrl.text.trim(),

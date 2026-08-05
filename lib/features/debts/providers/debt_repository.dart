@@ -152,8 +152,8 @@ class DebtRepository {
       await _ref.read(syncProvider.notifier).addToQueue(
         collection: 'customers',
         documentId: debt.customerId,
-        action:     SyncAction.update,
-        data:       {'total_outstanding': m['total_outstanding']},
+        action:     SyncAction.increment,
+        data:       {'total_outstanding': debt.remainingBalance, 'updated_at': now.toIso8601String()},
       );
     }
   }
@@ -223,8 +223,8 @@ class DebtRepository {
       await custBox.put(customerId, m);
 
       await _ref.read(syncProvider.notifier).addToQueue(
-        collection: 'customers', documentId: customerId, action: SyncAction.update,
-        data: {'total_outstanding': m['total_outstanding']},
+        collection: 'customers', documentId: customerId, action: SyncAction.increment,
+        data: {'total_outstanding': -amount, 'updated_at': now.toIso8601String()},
       );
     }
 
@@ -264,8 +264,8 @@ class DebtRepository {
       await _ref.read(syncProvider.notifier).addToQueue(
         collection: 'customers',
         documentId: debt.customerId,
-        action: SyncAction.update,
-        data: {'total_outstanding': m['total_outstanding']},
+        action: SyncAction.increment,
+        data: {'total_outstanding': -debt.remainingBalance, 'updated_at': DateTime.now().toIso8601String()},
       );
     }
 

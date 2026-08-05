@@ -5,6 +5,7 @@ class Customer {
   final String? address;
   final String? notes;
   final DateTime createdAt;
+  final DateTime updatedAt;
   final bool isActive;
   final double totalOutstanding;
 
@@ -15,6 +16,7 @@ class Customer {
     this.address,
     this.notes,
     required this.createdAt,
+    required this.updatedAt,
     this.isActive = true,
     this.totalOutstanding = 0,
   });
@@ -26,6 +28,7 @@ class Customer {
         address:          m['address'] as String?,
         notes:            m['notes'] as String?,
         createdAt:        DateTime.parse(m['created_at'] as String),
+        updatedAt:        m['updated_at'] != null ? DateTime.parse(m['updated_at'] as String) : DateTime.parse(m['created_at'] as String),
         isActive:         m['is_active'] as bool? ?? true,
         totalOutstanding: (m['total_outstanding'] as num? ?? 0).toDouble(),
       );
@@ -37,6 +40,7 @@ class Customer {
         'address':           address,
         'notes':             notes,
         'created_at':        createdAt.toIso8601String(),
+        'updated_at':        updatedAt.toIso8601String(),
         'is_active':         isActive,
         'total_outstanding': totalOutstanding,
       };
@@ -48,6 +52,7 @@ class Customer {
     String? notes,
     bool? isActive,
     double? totalOutstanding,
+    DateTime? updatedAt,
   }) =>
       Customer(
         id:               id,
@@ -56,6 +61,7 @@ class Customer {
         address:          address ?? this.address,
         notes:            notes ?? this.notes,
         createdAt:        createdAt,
+        updatedAt:        updatedAt ?? this.updatedAt,
         isActive:         isActive ?? this.isActive,
         totalOutstanding: totalOutstanding ?? this.totalOutstanding,
       );

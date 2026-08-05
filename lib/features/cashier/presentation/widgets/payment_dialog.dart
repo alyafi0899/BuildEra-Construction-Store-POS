@@ -950,6 +950,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
                   name: nameCtrl.text.trim(),
                   phone: phoneCtrl.text.trim(),
                   createdAt: DateTime.now(),
+                  updatedAt: DateTime.now(),
                 );
                 
                 await ref.read(debtRepositoryProvider).saveCustomer(newCustomer);

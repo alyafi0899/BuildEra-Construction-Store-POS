@@ -13,7 +13,7 @@ class LocalDatabase {
   }
 
   static Future<void> clearUserCache(String uid) async {
-    final collections = ['products', 'transactions', 'customers', 'debts', 'debt_payments', 'settings', 'sync_queue', 'suppliers', 'shipping_services', 'restock_history'];
+    final collections = ['products', 'transactions', 'customers', 'debts', 'debt_payments', 'settings', 'sync_queue', 'suppliers', 'shipping_services', 'restock_history', 'metadata'];
     for (final col in collections) {
       if (await Hive.boxExists(_boxName(uid, col))) {
         final box = await Hive.openBox(_boxName(uid, col));
@@ -21,6 +21,16 @@ class LocalDatabase {
         await box.close();
       }
     }
+  }
+
+  static Future<void> setMetadata(String uid, String key, dynamic value) async {
+    final box = await openBox(uid, 'metadata');
+    await box.put(key, value);
+  }
+
+  static Future<dynamic> getMetadata(String uid, String key) async {
+    final box = await openBox(uid, 'metadata');
+    return box.get(key);
   }
 
   /// Recursively converts Firestore Timestamps to ISO-8601 strings
