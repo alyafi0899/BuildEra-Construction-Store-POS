@@ -18,6 +18,8 @@ import '../../../payment/providers/transaction_provider.dart';
 import '../../../products/providers/product_provider.dart';
 import '../../../../core/utils/backup_helper.dart';
 
+enum SettingsSection { store, payment, printing, security, display, backup }
+
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
 
@@ -27,6 +29,7 @@ class SettingsPage extends ConsumerStatefulWidget {
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
   final _formKey = GlobalKey<FormState>();
+  SettingsSection _currentSection = SettingsSection.store;
   
   late TextEditingController _businessNameCtrl;
   late TextEditingController _ownerNameCtrl;
@@ -184,109 +187,210 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ],
           ),
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Center(
-                  child: Container(
-                    constraints: const BoxConstraints(maxWidth: 800),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const _SectionTitle(title: 'Informasi Bisnis'),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(child: _buildInput('Nama Toko / Usaha', _businessNameCtrl, Icons.store_rounded)),
-                            const SizedBox(width: 20),
-                            Expanded(child: _buildInput('Nama Pemilik', _ownerNameCtrl, Icons.person_rounded)),
-                          ],
+            child: Row(
+              children: [
+                _buildSidebar(),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Form(
+                      key: _formKey,
+                      child: Center(
+                        child: Container(
+                          constraints: const BoxConstraints(maxWidth: 800),
+                          child: _buildSectionContent(),
                         ),
-                        const SizedBox(height: 20),
-                        Row(
-                          children: [
-                            Expanded(child: _buildInput('Nomor Telepon', _phoneCtrl, Icons.phone_rounded)),
-                            const SizedBox(width: 20),
-                            Expanded(child: _buildInput('Email Bisnis', _emailCtrl, Icons.business_outlined)),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        _buildInput('Alamat Toko', _addressCtrl, Icons.location_on_rounded, maxLines: 2),
-                        const SizedBox(height: 20),
-                        _buildInput('Deskripsi Toko', _descriptionCtrl, Icons.description_rounded, maxLines: 3),
-                        
-                        const SizedBox(height: 40),
-                        const _SectionTitle(title: 'Pengaturan Printer & Struk'),
-                        const SizedBox(height: 16),
-                        _buildPrinterSettings(),
-
-                        const SizedBox(height: 40),
-                        const _SectionTitle(title: 'Metode Pembayaran Digital'),
-                        const SizedBox(height: 16),
-                        _buildQrisSetting(ref),
-
-                        const SizedBox(height: 40),
-                        const _SectionTitle(title: 'Keamanan Data'),
-                        const SizedBox(height: 16),
-                        _buildPinSetting(ref),
-
-                        const SizedBox(height: 40),
-                        const _SectionTitle(title: 'Data & Backup'),
-                        const SizedBox(height: 16),
-                        AppCard(
-                          child: Column(
-                            children: [
-                              ListTile(
-                                leading: const Icon(Icons.download_for_offline_rounded, color: AppTheme.accent),
-                                title: const Text('Backup Keseluruhan (Excel)', style: TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: const Text('Download 3 file Excel: Master Produk, Piutang Pelanggan, dan Analitik Penjualan'),
-                                trailing: const Icon(Icons.chevron_right_rounded),
-                                onTap: () => _handleFullBackup(ref),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        const SizedBox(height: 40),
-                        const _SectionTitle(title: 'Pengaturan Tampilan & Tema'),
-                        const SizedBox(height: 16),
-                        //_buildThemeSelector(ref),
-                        const SizedBox(height: 16),
-                        _buildAppSettings(ref),
-
-                        const SizedBox(height: 40),
-                        Row(
-                          children: [
-                            const _SectionTitle(title: 'Daftar Rekening Bank'),
-                            const Spacer(),
-                            TextButton.icon(
-                              onPressed: _addBankAccount,
-                              icon: const Icon(Icons.add_circle_outline, size: 18),
-                              label: const Text('Tambah Rekening'),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Column(
-                          children: [
-                            if (_bankAccounts.isEmpty)
-                              const Center(child: Text('Belum ada rekening', style: TextStyle(color: AppTheme.textSecondary)))
-                            else
-                              for (int i = 0; i < _bankAccounts.length; i++)
-                                _buildBankCard(i),
-                          ],
-                        ),
-                        const SizedBox(height: 40),
-                      ],
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSidebar() {
+    return Container(
+      width: 240,
+      decoration: const BoxDecoration(
+        color: AppTheme.surface,
+        border: Border(right: BorderSide(color: AppTheme.border)),
+      ),
+      child: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        children: [
+          _SidebarItem(
+            icon: Icons.store_rounded,
+            label: 'Informasi Toko',
+            isSelected: _currentSection == SettingsSection.store,
+            onTap: () => setState(() => _currentSection = SettingsSection.store),
+          ),
+          _SidebarItem(
+            icon: Icons.payments_rounded,
+            label: 'Metode Pembayaran',
+            isSelected: _currentSection == SettingsSection.payment,
+            onTap: () => setState(() => _currentSection = SettingsSection.payment),
+          ),
+          _SidebarItem(
+            icon: Icons.print_rounded,
+            label: 'Format Struk',
+            isSelected: _currentSection == SettingsSection.printing,
+            onTap: () => setState(() => _currentSection = SettingsSection.printing),
+          ),
+          _SidebarItem(
+            icon: Icons.security_rounded,
+            label: 'Keamanan (PIN)',
+            isSelected: _currentSection == SettingsSection.security,
+            onTap: () => setState(() => _currentSection = SettingsSection.security),
+          ),
+          _SidebarItem(
+            icon: Icons.display_settings_rounded,
+            label: 'Tampilan Aplikasi',
+            isSelected: _currentSection == SettingsSection.display,
+            onTap: () => setState(() => _currentSection = SettingsSection.display),
+          ),
+          _SidebarItem(
+            icon: Icons.backup_rounded,
+            label: 'Data & Backup',
+            isSelected: _currentSection == SettingsSection.backup,
+            onTap: () => setState(() => _currentSection = SettingsSection.backup),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionContent() {
+    switch (_currentSection) {
+      case SettingsSection.store:
+        return _buildStoreSection();
+      case SettingsSection.payment:
+        return _buildPaymentSection();
+      case SettingsSection.printing:
+        return _buildPrintingSection();
+      case SettingsSection.security:
+        return _buildSecuritySection();
+      case SettingsSection.display:
+        return _buildDisplaySection();
+      case SettingsSection.backup:
+        return _buildBackupSection();
+    }
+  }
+
+  Widget _buildStoreSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionTitle(title: 'Informasi Bisnis'),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(child: _buildInput('Nama Toko / Usaha', _businessNameCtrl, Icons.store_rounded)),
+            const SizedBox(width: 20),
+            Expanded(child: _buildInput('Nama Pemilik', _ownerNameCtrl, Icons.person_rounded)),
+          ],
+        ),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            Expanded(child: _buildInput('Nomor Telepon', _phoneCtrl, Icons.phone_rounded)),
+            const SizedBox(width: 20),
+            Expanded(child: _buildInput('Email Bisnis', _emailCtrl, Icons.business_outlined)),
+          ],
+        ),
+        const SizedBox(height: 20),
+        _buildInput('Alamat Toko', _addressCtrl, Icons.location_on_rounded, maxLines: 2),
+        const SizedBox(height: 20),
+        _buildInput('Deskripsi Toko', _descriptionCtrl, Icons.description_rounded, maxLines: 3),
+      ],
+    );
+  }
+
+  Widget _buildPaymentSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionTitle(title: 'Metode Pembayaran Digital'),
+        const SizedBox(height: 16),
+        _buildQrisSetting(ref),
+        const SizedBox(height: 40),
+        Row(
+          children: [
+            const _SectionTitle(title: 'Daftar Rekening Bank'),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: _addBankAccount,
+              icon: const Icon(Icons.add_circle_outline, size: 18),
+              label: const Text('Tambah Rekening'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (_bankAccounts.isEmpty)
+          const Center(child: Text('Belum ada rekening', style: TextStyle(color: AppTheme.textSecondary)))
+        else
+          for (int i = 0; i < _bankAccounts.length; i++)
+            _buildBankCard(i),
+      ],
+    );
+  }
+
+  Widget _buildPrintingSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionTitle(title: 'Pengaturan Printer & Struk'),
+        const SizedBox(height: 16),
+        _buildPrinterSettings(),
+      ],
+    );
+  }
+
+  Widget _buildSecuritySection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionTitle(title: 'Keamanan Data'),
+        const SizedBox(height: 16),
+        _buildPinSetting(ref),
+      ],
+    );
+  }
+
+  Widget _buildDisplaySection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionTitle(title: 'Pengaturan Tampilan & Tema'),
+        const SizedBox(height: 16),
+        _buildAppSettings(ref),
+      ],
+    );
+  }
+
+  Widget _buildBackupSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionTitle(title: 'Data & Backup'),
+        const SizedBox(height: 16),
+        AppCard(
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.download_for_offline_rounded, color: AppTheme.accent),
+                title: const Text('Backup Keseluruhan (Excel)', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('Download 3 file Excel: Master Produk, Piutang Pelanggan, dan Analitik Penjualan'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => _handleFullBackup(ref),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -1013,6 +1117,56 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         showError(context, 'Gagal membuka jendela: $e');
       }
     }
+  }
+}
+
+class _SidebarItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _SidebarItem({
+    required this.icon,
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Material(
+        color: isSelected ? AppTheme.accent.withValues(alpha: 0.1) : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 20,
+                  color: isSelected ? AppTheme.accent : AppTheme.textSecondary,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    color: isSelected ? AppTheme.accent : AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
