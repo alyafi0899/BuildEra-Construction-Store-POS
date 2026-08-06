@@ -813,6 +813,33 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               ],
             ),
           ),
+          const Divider(height: 32),
+          _buildSettingRow(
+            icon: Icons.aspect_ratio_rounded,
+            label: 'Skala Tampilan (Display Scale)',
+            child: Row(
+              children: [
+                Text(
+                  '${(appSettings.displayScale * 100).toInt()}%',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, color: AppTheme.accent),
+                ),
+                const SizedBox(width: 16),
+                SizedBox(
+                  width: 200,
+                  child: Slider(
+                    value: appSettings.displayScale,
+                    min: 0.7,
+                    max: 1.2,
+                    divisions: 10,
+                    label: '${(appSettings.displayScale * 100).toInt()}%',
+                    activeColor: AppTheme.accent,
+                    onChanged: (v) => notifier.setDisplayScale(v),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

@@ -184,11 +184,35 @@ class KonstruksiPosApp extends ConsumerWidget {
     ]);
 
     final mode = ref.watch(themeProvider);
+    final appSettings = ref.watch(appSettingsProvider);
+
     return MaterialApp(
       title: 'BuildEra',
       debugShowCheckedModeBanner: false,
       theme: AppThemes.getTheme(mode),
-      home: const AuthGate(), 
+      builder: (context, child) {
+        if (appSettings.displayScale == 1.0) return child!;
+
+        final size = MediaQuery.of(context).size;
+        final scale = appSettings.displayScale;
+
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            size: size / scale,
+            devicePixelRatio: MediaQuery.of(context).devicePixelRatio * scale,
+          ),
+          child: FittedBox(
+            fit: BoxFit.contain,
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: size.width / scale,
+              height: size.height / scale,
+              child: child,
+            ),
+          ),
+        );
+      },
+      home: const AuthGate(),
     );
   }
 }

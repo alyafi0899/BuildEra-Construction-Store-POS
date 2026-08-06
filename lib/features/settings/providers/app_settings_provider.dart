@@ -11,6 +11,7 @@ final appSettingsProvider = NotifierProvider<AppSettingsNotifier, AppSettings>(A
 class AppSettingsNotifier extends Notifier<AppSettings> {
   static const _keyFullScreen = 'is_full_screen';
   static const _keyCustomerDisplay = 'customer_display_enabled';
+  static const _keyDisplayScale = 'display_scale';
 
   @override
   AppSettings build() {
@@ -22,10 +23,12 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     final prefs = await SharedPreferences.getInstance();
     final isFull = prefs.getBool(_keyFullScreen) ?? false;
     final isCust = prefs.getBool(_keyCustomerDisplay) ?? false;
+    final scale = prefs.getDouble(_keyDisplayScale) ?? 1.0;
 
     state = AppSettings(
       isFullScreen: isFull,
       isCustomerDisplayEnabled: isCust,
+      displayScale: scale,
     );
 
     final isDesktop = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
@@ -78,5 +81,11 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
         debugPrint('DEBUG: Failed to launch customer display: $e');
       }
     }
+  }
+
+  Future<void> setDisplayScale(double value) async {
+    state = state.copyWith(displayScale: value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyDisplayScale, value);
   }
 }
