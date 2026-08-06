@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/restock_record.dart';
@@ -14,6 +14,7 @@ import 'bill_payment_provider.dart'; // New
 class RestockRepository {
   final String _uid;
   final Ref _ref;
+  final supabase.SupabaseClient _client = supabase.Supabase.instance.client;
 
   RestockRepository(this._uid, this._ref);
 
@@ -22,27 +23,25 @@ class RestockRepository {
   // ── Sync Logic ────────────────────────────────────────────────────────────
 
   Future<void> bootstrap({bool force = false}) async {
-    final userDoc = FirebaseFirestore.instance.collection('users').doc(_uid);
-
     // 1. Bootstrap Restock History
     final rBox = await _getBox();
     if (rBox.isEmpty || force) {
-      final snap = await userDoc.collection('restock_history').get().timeout(const Duration(seconds: 15));
+      final response = await _client.from('restock_history').select().eq('user_id', _uid).timeout(const Duration(seconds: 15));
       if (force) await rBox.clear();
-      for (final d in snap.docs) {
-        final data = Map<String, dynamic>.from(d.data() as Map);
-        await rBox.put(d.id, LocalDatabase.sanitize(data));
+      for (final d in (response as List)) {
+        final data = Map<String, dynamic>.from(d as Map);
+        await rBox.put(data['id'], LocalDatabase.sanitize(data));
       }
     }
 
     // 2. Bootstrap Bill Payments
     final pBox = await LocalDatabase.openBox(_uid, 'bill_payments');
     if (pBox.isEmpty || force) {
-      final snap = await userDoc.collection('bill_payments').get().timeout(const Duration(seconds: 15));
+      final response = await _client.from('bill_payments').select().eq('user_id', _uid).timeout(const Duration(seconds: 15));
       if (force) await pBox.clear();
-      for (final d in snap.docs) {
-        final data = Map<String, dynamic>.from(d.data() as Map);
-        await pBox.put(d.id, LocalDatabase.sanitize(data));
+      for (final d in (response as List)) {
+        final data = Map<String, dynamic>.from(d as Map);
+        await pBox.put(data['id'], LocalDatabase.sanitize(data));
       }
     }
   }

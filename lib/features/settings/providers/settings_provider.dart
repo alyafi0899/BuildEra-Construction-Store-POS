@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -17,7 +17,7 @@ class SettingsNotifier extends Notifier<StoreSettings> {
     return const StoreSettings();
   }
 
-  FirebaseFirestore get _db => FirebaseFirestore.instance;
+  supabase.SupabaseClient get _client => supabase.Supabase.instance.client;
   Future<Box> _getBox(String uid) => LocalDatabase.openBox(uid, 'settings');
 
   Future<void> _loadSettings(String uid) async {
@@ -32,11 +32,17 @@ class SettingsNotifier extends Notifier<StoreSettings> {
       // Ignore hive errors
     }
 
-    // 2. Load from Firestore in background or if no cache
+    // 2. Load from Supabase in background or if no cache
     try {
-      final doc = await _db.collection('users').doc(uid).get().timeout(const Duration(seconds: 10));
-      if (doc.exists) {
-        final data = LocalDatabase.sanitize(doc.data()!);
+      final response = await _client
+          .from('profiles')
+          .select()
+          .eq('id', uid)
+          .maybeSingle()
+          .timeout(const Duration(seconds: 10));
+      
+      if (response != null) {
+        final data = LocalDatabase.sanitize(Map<String, dynamic>.from(response as Map));
         final settings = StoreSettings.fromMap(data);
         state = settings;
         // Update cache
@@ -55,7 +61,7 @@ class SettingsNotifier extends Notifier<StoreSettings> {
         }
       }
     } catch (e) {
-      // If offline, ensure we have a working state even if doc fetch fails
+      // If offline, ensure we have a working state even if fetch fails
       final user = ref.read(authStateProvider).value;
       if (user != null && state.loginEmail == null) {
         state = state.copyWith(loginEmail: user.email);
@@ -67,12 +73,20 @@ class SettingsNotifier extends Notifier<StoreSettings> {
     final targetUid = uid ?? ref.read(authStateProvider).value?.uid;
     if (targetUid == null) return;
     
-    // Save to Firestore
-    await _db.collection('users').doc(targetUid).set(settings.toMap(), SetOptions(merge: true));
+    // Save to Supabase (upsert)
+    final data = settings.toMap();
+    data['id'] = targetUid; // Set primary key
+    
+    // Explicitly handle null/empty PIN in the database payload
+    if (settings.securityPin == null || settings.securityPin!.isEmpty) {
+      data['securityPin'] = null;
+    }
+
+    await _client.from('profiles').upsert(data);
     
     // Save to Hive
     final box = await _getBox(targetUid);
-    await box.put('store_settings', settings.toMap());
+    await box.put('store_settings', data);
 
     state = settings;
   }

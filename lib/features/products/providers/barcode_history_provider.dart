@@ -1,5 +1,5 @@
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -10,12 +10,9 @@ import '../../../core/sync/providers/sync_provider.dart';
 class BarcodeHistoryRepository {
   final String _uid;
   final Ref _ref;
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final supabase.SupabaseClient _client = supabase.Supabase.instance.client;
 
   BarcodeHistoryRepository(this._uid, this._ref);
-
-  CollectionReference get _historyCol => 
-      _db.collection('users').doc(_uid).collection('barcode_history');
 
   Future<Box> _getBox() => LocalDatabase.openBox(_uid, 'barcode_history');
 
@@ -25,11 +22,16 @@ class BarcodeHistoryRepository {
     final box = await _getBox();
     if (box.isNotEmpty && !force) return;
 
-    final snapshot = await _historyCol.get().timeout(const Duration(seconds: 15));
+    final response = await _client
+        .from('barcode_history')
+        .select()
+        .eq('user_id', _uid)
+        .timeout(const Duration(seconds: 15));
+    
     if (force) await box.clear();
-    for (final doc in snapshot.docs) {
-      final data = Map<String, dynamic>.from(doc.data() as Map);
-      await box.put(doc.id, LocalDatabase.sanitize(data));
+    for (final d in (response as List)) {
+      final data = Map<String, dynamic>.from(d as Map);
+      await box.put(data['barcode'], LocalDatabase.sanitize(data));
     }
   }
 
@@ -42,12 +44,19 @@ class BarcodeHistoryRepository {
     final box = await _getBox();
     if (box.containsKey(normalized)) return true;
 
-    // 2. Check in Firestore only if online
+    // 2. Check in Supabase only if online
     try {
-      final historyDoc = await _historyCol.doc(normalized).get().timeout(const Duration(seconds: 2));
-      if (historyDoc.exists) {
+      final response = await _client
+          .from('barcode_history')
+          .select()
+          .eq('user_id', _uid)
+          .eq('barcode', normalized)
+          .maybeSingle()
+          .timeout(const Duration(seconds: 2));
+          
+      if (response != null) {
         // Cache it locally if we found it on server
-        final data = LocalDatabase.sanitize(historyDoc.data() as Map<String, dynamic>);
+        final data = LocalDatabase.sanitize(Map<String, dynamic>.from(response as Map));
         await box.put(normalized, data);
         return true;
       }

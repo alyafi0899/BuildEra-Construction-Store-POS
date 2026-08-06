@@ -1,3 +1,4 @@
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -13,10 +14,25 @@ import '../../products/models/product_financials.dart';
 class BillPaymentRepository {
   final String _uid;
   final Ref _ref;
+  final supabase.SupabaseClient _client = supabase.Supabase.instance.client;
 
   BillPaymentRepository(this._uid, this._ref);
 
   Future<Box> _getBox() => LocalDatabase.openBox(_uid, 'bill_payments');
+
+  // ── Sync Logic ────────────────────────────────────────────────────────────
+
+  Future<void> bootstrap({bool force = false}) async {
+    final pBox = await _getBox();
+    if (pBox.isEmpty || force) {
+      final response = await _client.from('bill_payments').select().eq('user_id', _uid).timeout(const Duration(seconds: 15));
+      if (force) await pBox.clear();
+      for (final d in (response as List)) {
+        final data = Map<String, dynamic>.from(d as Map);
+        await pBox.put(data['id'], LocalDatabase.sanitize(data));
+      }
+    }
+  }
 
   Stream<List<BillPayment>> getPaymentsStream() async* {
     final box = await _getBox();

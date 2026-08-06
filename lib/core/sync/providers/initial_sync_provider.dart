@@ -8,6 +8,8 @@ import '../../../features/products/providers/barcode_history_provider.dart';
 import '../../../features/payment/providers/transaction_provider.dart';
 import '../../../features/debts/providers/debt_repository.dart';
 import '../../../features/inventory/providers/restock_provider.dart';
+import '../../../features/inventory/providers/bill_payment_provider.dart';
+import '../../../features/products/providers/entity_provider.dart';
 
 class InitialSyncState {
   final bool isInitialSyncDone;
@@ -50,6 +52,12 @@ class InitialSyncNotifier extends Notifier<InitialSyncState> {
     state = state.copyWith(isInitialSyncDone: isDone);
   }
 
+  Future<void> markAsDone(String uid) async {
+    final box = await LocalDatabase.openBox(uid, 'sync_meta');
+    await box.put('initial_sync_done', true);
+    state = state.copyWith(isInitialSyncDone: true, error: null);
+  }
+
   Future<void> performInitialSync({bool force = false}) async {
     debugPrint('SYNC: Triggered performInitialSync(force: $force)');
     final auth = ref.read(authStateProvider).value;
@@ -81,9 +89,13 @@ class InitialSyncNotifier extends Notifier<InitialSyncState> {
       
       // 4. Restocks & Bill Payments
       await ref.read(restockRepositoryProvider).bootstrap(force: force);
+      await ref.read(billPaymentRepositoryProvider).bootstrap(force: force);
 
       // 5. Barcode History
       await ref.read(barcodeHistoryRepositoryProvider).bootstrap(force: force);
+
+      // 6. Entities (Suppliers & Shipping)
+      await ref.read(entityRepositoryProvider).bootstrap(force: force);
 
       final box = await LocalDatabase.openBox(auth.uid, 'sync_meta');
       await box.put('initial_sync_done', true);

@@ -3,9 +3,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
-import 'package:cloud_firestore/cloud_firestore.dart' as firestore
-    hide Transaction;
-import 'package:firebase_storage/firebase_storage.dart' as storage;
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../../core/sync/models/sync_task.dart';
 import '../../../core/sync/providers/sync_provider.dart';
@@ -22,15 +20,11 @@ final _uuid = Uuid();
 
 class ProductRepository {
   final String _uid;
-  final firestore.FirebaseFirestore _db = firestore.FirebaseFirestore.instance;
-  final storage.FirebaseStorage _storage = storage.FirebaseStorage.instance;
+  final supabase.SupabaseClient _client = supabase.Supabase.instance.client;
   final BarcodeHistoryRepository _historyRepo;
   final Ref _ref;
 
   ProductRepository(this._uid, this._historyRepo, this._ref);
-
-  firestore.CollectionReference get _productsCol => 
-      _db.collection('users').doc(_uid).collection('products');
 
   Future<Box> _getBox() => LocalDatabase.openBox(_uid, 'products');
 
@@ -40,12 +34,24 @@ class ProductRepository {
     final box = await _getBox();
     if (box.isNotEmpty && !force) return; // Already cached
 
-    final snapshot = await _productsCol.get().timeout(const Duration(seconds: 15));
+    // Fetch products with their units using Supabase joins
+    final response = await _client
+        .from('products')
+        .select('*, product_units(*)')
+        .eq('user_id', _uid)
+        .timeout(const Duration(seconds: 15));
+    
+    final List<dynamic> data = response as List<dynamic>;
+
     if (force) await box.clear();
 
-    for (final doc in snapshot.docs) {
-      final data = Map<String, dynamic>.from(doc.data() as Map);
-      await box.put(doc.id, LocalDatabase.sanitize(data));
+    for (final item in data) {
+      final productData = Map<String, dynamic>.from(item as Map);
+      // Map units back to the format expected by the Product model
+      final units = (productData['product_units'] as List?)?.map((u) => Map<String, dynamic>.from(u as Map)).toList() ?? [];
+      productData['units'] = units;
+      
+      await box.put(productData['id'], LocalDatabase.sanitize(productData));
     }
   }
 
@@ -226,10 +232,16 @@ class ProductRepository {
 
   Future<String?> uploadProductImage(String productId, Uint8List bytes) async {
     try {
-      final ref = _storage.ref().child('users/$_uid/products/$productId.jpg');
-      final metadata = storage.SettableMetadata(contentType: 'image/jpeg');
-      await ref.putData(bytes, metadata);
-      return await ref.getDownloadURL();
+      final fileName = '$productId.jpg';
+      final path = 'products/$fileName';
+      
+      await _client.storage.from('users').uploadBinary(
+        '$_uid/$path',
+        bytes,
+        fileOptions: const supabase.FileOptions(contentType: 'image/jpeg', upsert: true),
+      );
+      
+      return _client.storage.from('users').getPublicUrl('$_uid/$path');
     } catch (e) {
       debugPrint('Error uploading image: $e');
       return null;

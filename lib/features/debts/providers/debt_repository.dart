@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -15,6 +15,7 @@ final _uuid = const Uuid();
 class DebtRepository {
   final String _uid;
   final Ref _ref;
+  final supabase.SupabaseClient _client = supabase.Supabase.instance.client;
 
   DebtRepository(this._uid, this._ref);
 
@@ -23,38 +24,36 @@ class DebtRepository {
   // ── Sync Logic ────────────────────────────────────────────────────────────
 
   Future<void> bootstrap({bool force = false}) async {
-    final userDoc = FirebaseFirestore.instance.collection('users').doc(_uid);
-
     // 1. Bootstrap Customers
     final cBox = await _getBox('customers');
     if (cBox.isEmpty || force) {
-      final snap = await userDoc.collection('customers').get().timeout(const Duration(seconds: 15));
+      final response = await _client.from('customers').select().eq('user_id', _uid).timeout(const Duration(seconds: 15));
       if (force) await cBox.clear();
-      for (final d in snap.docs) {
-        final data = Map<String, dynamic>.from(d.data() as Map);
-        await cBox.put(d.id, LocalDatabase.sanitize(data));
+      for (final d in (response as List)) {
+        final data = Map<String, dynamic>.from(d as Map);
+        await cBox.put(data['id'], LocalDatabase.sanitize(data));
       }
     }
 
     // 2. Bootstrap Debts
     final dBox = await _getBox('debts');
     if (dBox.isEmpty || force) {
-      final snap = await userDoc.collection('debts').get().timeout(const Duration(seconds: 15));
+      final response = await _client.from('debts').select().eq('user_id', _uid).timeout(const Duration(seconds: 15));
       if (force) await dBox.clear();
-      for (final d in snap.docs) {
-        final data = Map<String, dynamic>.from(d.data() as Map);
-        await dBox.put(d.id, LocalDatabase.sanitize(data));
+      for (final d in (response as List)) {
+        final data = Map<String, dynamic>.from(d as Map);
+        await dBox.put(data['id'], LocalDatabase.sanitize(data));
       }
     }
 
     // 3. Bootstrap Payments
     final pBox = await _getBox('debt_payments');
     if (pBox.isEmpty || force) {
-      final snap = await userDoc.collection('debt_payments').get().timeout(const Duration(seconds: 15));
+      final response = await _client.from('debt_payments').select().eq('user_id', _uid).timeout(const Duration(seconds: 15));
       if (force) await pBox.clear();
-      for (final d in snap.docs) {
-        final data = Map<String, dynamic>.from(d.data() as Map);
-        await pBox.put(d.id, LocalDatabase.sanitize(data));
+      for (final d in (response as List)) {
+        final data = Map<String, dynamic>.from(d as Map);
+        await pBox.put(data['id'], LocalDatabase.sanitize(data));
       }
     }
   }

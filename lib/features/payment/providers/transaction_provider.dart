@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,6 +41,7 @@ final analyticsPeriodProvider = NotifierProvider<AnalyticsPeriodNotifier, Analyt
 class TransactionRepository {
   final String _uid;
   final Ref _ref;
+  final supabase.SupabaseClient _client = supabase.Supabase.instance.client;
 
   TransactionRepository(this._uid, this._ref);
 
@@ -64,17 +65,20 @@ class TransactionRepository {
     final box = await _getBox();
     if (box.isNotEmpty && !force) return;
 
-    final snapshot = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(_uid)
-        .collection('transactions')
-        .get()
+    final response = await _client
+        .from('transactions')
+        .select('*, transaction_items(*)')
+        .eq('user_id', _uid)
         .timeout(const Duration(seconds: 15));
 
     if (force) await box.clear();
-    for (final doc in snapshot.docs) {
-      final data = Map<String, dynamic>.from(doc.data() as Map);
-      await box.put(doc.id, LocalDatabase.sanitize(data));
+    for (final item in (response as List)) {
+      final data = Map<String, dynamic>.from(item as Map);
+      // Map items back to the format expected by the Transaction model
+      final items = (data['transaction_items'] as List?)?.map((i) => Map<String, dynamic>.from(i as Map)).toList() ?? [];
+      data['items'] = items;
+      
+      await box.put(data['id'], LocalDatabase.sanitize(data));
     }
   }
 

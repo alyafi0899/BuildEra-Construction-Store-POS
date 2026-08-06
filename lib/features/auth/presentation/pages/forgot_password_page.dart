@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../providers/auth_provider.dart';
@@ -33,15 +33,16 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
       final email = _emailCtrl.text.trim();
       final phone = _phoneCtrl.text.trim();
 
-      // SECURITY CHECK: Verify if email and phone match in Firestore
-      final userQuery = await FirebaseFirestore.instance
-          .collection('users')
-          .where('loginEmail', isEqualTo: email)
-          .where('phone', isEqualTo: phone)
-          .limit(1)
-          .get();
+      // SECURITY CHECK: Verify if email and phone match in Supabase profiles
+      final client = Supabase.instance.client;
+      final response = await client
+          .from('profiles')
+          .select('id')
+          .eq('loginEmail', email)
+          .eq('phone', phone)
+          .maybeSingle();
 
-      if (userQuery.docs.isEmpty) {
+      if (response == null) {
         // Generic error message for security
         throw 'Data tidak ditemukan atau tidak cocok dengan sistem kami.';
       }
@@ -52,6 +53,8 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
         showSuccess(context, 'Link reset password telah dikirim ke email Anda.');
         Navigator.pop(context);
       }
+    } on AuthException catch (e) {
+      if (mounted) showError(context, 'Gagal mengirim reset link: ${e.message}');
     } catch (e) {
       if (mounted) showError(context, e.toString());
     } finally {

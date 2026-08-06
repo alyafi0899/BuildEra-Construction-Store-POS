@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'firebase_options.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
 import 'shared/widgets/sidebar.dart';
@@ -25,7 +23,7 @@ import 'features/payment/providers/transaction_provider.dart';
 import 'features/debts/providers/debt_repository.dart';
 import 'features/auth/presentation/widgets/auth_gate.dart';
 import 'features/auth/providers/auth_provider.dart';
-import 'shared/widgets/security_gate.dart';
+import 'features/auth/providers/pin_unlock_provider.dart';
 import 'core/sync/services/local_database.dart';
 import 'core/providers/navigation_provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -35,6 +33,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 
 import 'shared/widgets/splash_screen.dart';
+import 'shared/widgets/security_gate.dart';
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -57,9 +56,13 @@ Future<void> main(List<String> args) async {
     }
 
     await LocalDatabase.init();
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
+
+    // Milestone 1: Initialize Supabase
+    await Supabase.initialize(
+      url: 'https://xlkncjimgriwrxxpweue.supabase.co',
+      anonKey: 'sb_publishable_RfxfRsQv2zm-Gt0rdTQP0w_23dkq2Zh', // Use publishableKey if version supports it
     );
+
     await initializeDateFormatting('id_ID', null);
 
     // Force show the window
@@ -132,21 +135,11 @@ Future<void> main(List<String> args) async {
   await Future.delayed(const Duration(milliseconds: 100));
 
   try {
-    // Perform all heavy lifting while splash is showing
-    // Add timeout to prevent hanging if internet is extremely poor
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    ).timeout(const Duration(seconds: 10), onTimeout: () {
-      debugPrint('BOOT: Firebase Init Timeout (Continuing Offline)');
-      return Firebase.app(); // Attempt to use already initialized app or continue
-    });
-    
-    if (!kIsWeb && Platform.isWindows) {
-      FirebaseFirestore.instance.settings = const Settings(
-        persistenceEnabled: true, // Enable offline cache for instant loading
-        cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-      );
-    }
+    // Milestone 1: Initialize Supabase
+    await Supabase.initialize(
+      url: 'https://xlkncjimgriwrxxpweue.supabase.co',
+      anonKey: 'sb_publishable_RfxfRsQv2zm-Gt0rdTQP0w_23dkq2Zh', // Use publishableKey if version supports it
+    );
 
     await initializeDateFormatting('id_ID', null);
 
@@ -202,14 +195,14 @@ class MainShell extends ConsumerStatefulWidget {
 class _MainShellState extends ConsumerState<MainShell> {
   final _pages = [
     const CashierPage(),
-    const ProductsPage(),
-    const TransactionsPage(),
-    const PiutangDashboard(),
-    const CustomerListPage(),
-    const AnalyticsPage(),
-    const BarcodeManagementPage(),
+    const PinGate(pageKey: 'products', child: ProductsPage()),
+    const PinGate(pageKey: 'transactions', child: TransactionsPage()),
+    const PinGate(pageKey: 'debts', child: PiutangDashboard()),
+    const PinGate(pageKey: 'debts', child: CustomerListPage()),
+    const PinGate(pageKey: 'analytics', child: AnalyticsPage()),
+    const PinGate(pageKey: 'products', child: BarcodeManagementPage()),
     const SettingsPage(),
-    const BillsPage(),
+    const PinGate(pageKey: 'inventory', child: BillsPage()),
     const CustomerDisplayPage(),
   ];
 
@@ -247,7 +240,10 @@ class _MainShellState extends ConsumerState<MainShell> {
       Expanded(
         child: Listener(
           behavior: HitTestBehavior.translucent,
-          onPointerDown: (_) => ref.read(sidebarCollapsedProvider.notifier).collapse(),
+          onPointerDown: (_) {
+            ref.read(sidebarCollapsedProvider.notifier).collapse();
+            ref.read(pinUnlockProvider.notifier).recordActivity();
+          },
           child: IndexedStack(index: idx, children: _pages),
         ),
       ),

@@ -42,6 +42,7 @@ class StoreSettings {
   final String? securityPin; // New: PIN for sensitive data
   final double receiptWidth; // New: Receipt paper width in mm
   final double receiptMargin; // New: Receipt left/right margin in points
+  final Map<String, bool> pageSecurity; // New: Toggle security per page
 
   const StoreSettings({
     this.businessName = '',
@@ -57,6 +58,7 @@ class StoreSettings {
     this.securityPin,
     this.receiptWidth = 80.0,
     this.receiptMargin = 4.0,
+    this.pageSecurity = const {},
   });
 
   Map<String, dynamic> toMap() {
@@ -74,6 +76,7 @@ class StoreSettings {
       'securityPin': securityPin,
       'receiptWidth': receiptWidth,
       'receiptMargin': receiptMargin,
+      'pageSecurity': pageSecurity,
     };
   }
 
@@ -95,6 +98,7 @@ class StoreSettings {
       securityPin: map['securityPin']?.toString(),
       receiptWidth: (map['receiptWidth'] as num?)?.toDouble() ?? 80.0,
       receiptMargin: (map['receiptMargin'] as num?)?.toDouble() ?? 4.0,
+      pageSecurity: Map<String, bool>.from(map['pageSecurity'] ?? {}),
     );
   }
 
@@ -116,6 +120,7 @@ class StoreSettings {
     String? securityPin,
     double? receiptWidth,
     double? receiptMargin,
+    Map<String, bool>? pageSecurity,
   }) {
     return StoreSettings(
       businessName: businessName ?? this.businessName,
@@ -131,6 +136,7 @@ class StoreSettings {
       securityPin: securityPin ?? this.securityPin,
       receiptWidth: receiptWidth ?? this.receiptWidth,
       receiptMargin: receiptMargin ?? this.receiptMargin,
+      pageSecurity: pageSecurity ?? this.pageSecurity,
     );
   }
 }

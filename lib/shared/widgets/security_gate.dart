@@ -3,24 +3,19 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
 import '../../features/settings/providers/settings_provider.dart';
-
-/// A provider that tracks the global PIN unlock state.
-/// This allows once-per-session (or until manual lock) unlocking.
-final pinUnlockProvider = NotifierProvider<PinUnlockNotifier, bool>(PinUnlockNotifier.new);
-
-class PinUnlockNotifier extends Notifier<bool> {
-  @override
-  bool build() => false;
-  void unlock() => state = true;
-  void lock() => state = false;
-}
+import '../../features/auth/providers/pin_unlock_provider.dart';
 
 /// Helper to require PIN for a specific action.
-void requirePin(BuildContext context, WidgetRef ref, VoidCallback onSuccess) {
+void requirePin(BuildContext context, WidgetRef ref, VoidCallback onSuccess, {String? pageKey}) {
   final isUnlocked = ref.read(pinUnlockProvider);
   final settings = ref.read(settingsProvider);
+  final hasPin = settings.securityPin != null && settings.securityPin!.isNotEmpty;
 
-  if (isUnlocked || settings.securityPin == null) {
+  // If pageKey is null, it's a "Force" security action (like delete) which always requires PIN.
+  // If pageKey is provided, check if that specific page security is enabled.
+  final bool isSecurityEnabled = pageKey == null || (settings.pageSecurity[pageKey] ?? false);
+
+  if (isUnlocked || !hasPin || !isSecurityEnabled) {
     onSuccess();
     return;
   }
@@ -53,14 +48,18 @@ class _ActionPinDialog extends ConsumerWidget {
 
 class PinGate extends ConsumerWidget {
   final Widget child;
-  const PinGate({super.key, required this.child});
+  final String? pageKey;
+  const PinGate({super.key, required this.child, this.pageKey});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isUnlocked = ref.watch(pinUnlockProvider);
     final settings = ref.watch(settingsProvider);
+    final hasPin = settings.securityPin != null && settings.securityPin!.isNotEmpty;
+    
+    final bool isSecurityEnabled = pageKey == null || (settings.pageSecurity[pageKey] ?? false);
 
-    if (isUnlocked || settings.securityPin == null) {
+    if (isUnlocked || !hasPin || !isSecurityEnabled) {
       return child;
     }
 
@@ -72,14 +71,18 @@ class PinGate extends ConsumerWidget {
 
 class BlurGate extends ConsumerWidget {
   final Widget child;
-  const BlurGate({super.key, required this.child});
+  final String? pageKey;
+  const BlurGate({super.key, required this.child, this.pageKey});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isUnlocked = ref.watch(pinUnlockProvider);
     final settings = ref.watch(settingsProvider);
+    final hasPin = settings.securityPin != null && settings.securityPin!.isNotEmpty;
 
-    if (isUnlocked || settings.securityPin == null) {
+    final bool isSecurityEnabled = pageKey == null || (settings.pageSecurity[pageKey] ?? false);
+
+    if (isUnlocked || !hasPin || !isSecurityEnabled) {
       return child;
     }
 

@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 class LocalDatabase {
@@ -44,9 +43,7 @@ class LocalDatabase {
   }
 
   static dynamic _sanitizeValue(dynamic value) {
-    if (value is Timestamp) {
-      return value.toDate().toIso8601String();
-    } else if (value is Map) {
+    if (value is Map) {
       return sanitize(Map<String, dynamic>.from(value));
     } else if (value is List) {
       return value.map(_sanitizeValue).toList();

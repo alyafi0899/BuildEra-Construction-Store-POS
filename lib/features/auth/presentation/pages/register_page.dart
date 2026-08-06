@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../providers/auth_provider.dart';
-import '../../../settings/providers/settings_provider.dart';
 import '../../../settings/models/store_settings.dart';
-import '../../../../core/sync/services/local_database.dart';
+import '../../../../core/sync/providers/initial_sync_provider.dart';
 import '../../../../core/sync/providers/connectivity_provider.dart';
 
 class RegisterPage extends ConsumerStatefulWidget {
@@ -52,35 +52,48 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     setState(() => _loading = true);
     try {
       final authRepo = ref.read(authRepositoryProvider);
+      final email = _emailCtrl.text.trim();
+      final password = _passCtrl.text;
+
+      // 0. Store password temporarily for auto-login after verification
+      ref.read(temporaryPasswordProvider.notifier).set(password);
       
-      // 1. Create Account
-      final user = await authRepo.register(_emailCtrl.text.trim(), _passCtrl.text);
-      if (user == null) throw 'Gagal membuat akun';
-      
-      // 2. Prepare business data
+      // 1. Prepare business data to be sent as metadata
       final settings = StoreSettings(
         businessName: _storeNameCtrl.text.trim(),
         ownerName:    _ownerNameCtrl.text.trim(),
         phone:        _phoneCtrl.text.trim(),
         email:        _bizEmailCtrl.text.trim(),
-        loginEmail:   _emailCtrl.text.trim(), // Save login email for security check
+        loginEmail:   email,
         address:      _addressCtrl.text.trim(),
         description:  _descCtrl.text.trim(),
       );
 
-      // 3. Save profile using the explicit UID
-      await ref.read(settingsProvider.notifier).updateSettings(settings, uid: user.uid);
+      // 2. Create Account with metadata (DB trigger will create the profile automatically)
+      final user = await authRepo.register(
+        email, 
+        password, 
+        metadata: {'store_settings': settings.toMap()},
+      );
+      
+      if (user != null) {
+        // Mark initial sync as done for new users locally
+        await ref.read(initialSyncProvider.notifier).markAsDone(user.uid);
+      }
+      
+      // --- IMPORTANT: NO NAVIGATION HERE ---
+      // authStateProvider will emit the new (unverified) user, 
+      // and AuthGate will automatically switch to VerifyEmailPage.
 
-      // 4. Mark initial sync as done for new users (nothing to download)
-      final box = await LocalDatabase.openBox(user.uid, 'sync_meta');
-      await box.put('initial_sync_done', true);
+    } on AuthException catch (e) {
+      // Ignore errors related to 'session is null' since registration still succeeded
+      if (e.message.contains('session') || e.message.contains('null')) return;
 
       if (mounted) {
-        // Pop back to the root (LoginPage), AuthGate will detect the state change
-        // and show VerifyEmailPage automatically.
-        Navigator.of(context).popUntil((route) => route.isFirst);
+        String msg = e.message;
+        if (msg.contains('User already registered')) msg = 'Email sudah terdaftar.';
+        showError(context, 'Gagal mendaftar: $msg');
       }
-
     } catch (e) {
       if (mounted) showError(context, 'Gagal mendaftar: $e');
     } finally {

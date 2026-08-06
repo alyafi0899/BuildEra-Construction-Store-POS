@@ -1,3 +1,4 @@
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/supplier.dart';
@@ -15,10 +16,37 @@ import '../../../core/sync/services/local_database.dart';
 class EntityRepository {
   final String _uid;
   final Ref _ref;
+  final supabase.SupabaseClient _client = supabase.Supabase.instance.client;
 
   EntityRepository(this._uid, this._ref);
 
   Future<Box> _getBox(String col) => LocalDatabase.openBox(_uid, col);
+
+  // ── Bootstrap ────────────────────────────────────────────────────────────
+
+  Future<void> bootstrap({bool force = false}) async {
+    // 1. Suppliers
+    final sBox = await _getBox('suppliers');
+    if (sBox.isEmpty || force) {
+      final response = await _client.from('suppliers').select().eq('user_id', _uid).timeout(const Duration(seconds: 15));
+      if (force) await sBox.clear();
+      for (final d in (response as List)) {
+        final data = Map<String, dynamic>.from(d as Map);
+        await sBox.put(data['id'], LocalDatabase.sanitize(data));
+      }
+    }
+
+    // 2. Shipping Services
+    final shBox = await _getBox('shipping_services');
+    if (shBox.isEmpty || force) {
+      final response = await _client.from('shipping_services').select().eq('user_id', _uid).timeout(const Duration(seconds: 15));
+      if (force) await shBox.clear();
+      for (final d in (response as List)) {
+        final data = Map<String, dynamic>.from(d as Map);
+        await shBox.put(data['id'], LocalDatabase.sanitize(data));
+      }
+    }
+  }
 
   // ── Suppliers ────────────────────────────────────────────────────────────
 

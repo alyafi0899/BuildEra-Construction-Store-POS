@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../providers/auth_provider.dart';
@@ -21,9 +22,9 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
   @override
   void initState() {
     super.initState();
-    // Auto check verification status every 3 seconds
-    _timer = Timer.periodic(const Duration(seconds: 3), (_) {
-      ref.read(authRepositoryProvider).reloadUser();
+    // Auto check verification status every 5 seconds
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
+      _checkVerification(silent: true);
     });
   }
 
@@ -33,26 +34,45 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
     super.dispose();
   }
 
-  Future<void> _checkVerification() async {
-    setState(() => _isChecking = true);
+  Future<void> _checkVerification({bool silent = false}) async {
+    if (_isChecking) return;
+    if (!silent) setState(() => _isChecking = true);
+
     try {
-      await ref.read(authRepositoryProvider).reloadUser();
-      
-      // The reloadUser() updates Firebase Auth state, 
-      // which will eventually update authStateProvider.
-      // But we can check current state immediately for feedback.
       final user = ref.read(authStateProvider).value;
-      if (mounted) {
-        if (user?.isEmailVerified ?? false) {
-          showSuccess(context, 'Email berhasil diverifikasi! Mengalihkan...');
-        } else {
-          showError(context, 'Email belum terverifikasi. Silakan cek inbox Anda.');
+      final tempPassword = ref.read(temporaryPasswordProvider);
+
+      if (user != null && tempPassword != null) {
+        // Attempt to sign in to check if verified and get a session
+        final authRepo = ref.read(authRepositoryProvider);
+        try {
+          await authRepo.login(user.email, tempPassword);
+          
+          // If login succeeds, the session is created, and authStateProvider will update.
+          // We can then clear the temporary password.
+          ref.read(temporaryPasswordProvider.notifier).set(null);
+
+          if (mounted && !silent) {
+            showSuccess(context, 'Email berhasil diverifikasi! Mengalihkan...');
+          }
+        } on AuthException catch (e) {
+          // If it's still 'Email not confirmed', we just ignore and wait
+          if (e.message.toLowerCase().contains('email not confirmed')) {
+             // Still not verified, do nothing
+          } else {
+             rethrow;
+          }
         }
+      } else {
+        // Fallback for manual check or if sessions are handled differently
+        await ref.read(authRepositoryProvider).reloadUser();
       }
     } catch (e) {
-      if (mounted) showError(context, 'Gagal mengecek status: $e');
+      if (mounted && !silent) {
+        showError(context, 'Gagal mengecek status: $e');
+      }
     } finally {
-      if (mounted) setState(() => _isChecking = false);
+      if (mounted && !silent) setState(() => _isChecking = false);
     }
   }
 
@@ -65,6 +85,8 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
       Future.delayed(const Duration(seconds: 60), () {
         if (mounted) setState(() => _canResend = true);
       });
+    } on AuthException catch (e) {
+      if (mounted) showError(context, 'Gagal mengirim email: ${e.message}');
     } catch (e) {
       if (mounted) showError(context, 'Gagal mengirim email: $e');
     }

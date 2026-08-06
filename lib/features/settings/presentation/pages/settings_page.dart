@@ -18,6 +18,19 @@ import '../../../payment/providers/transaction_provider.dart';
 import '../../../products/providers/product_provider.dart';
 import '../../../../core/utils/backup_helper.dart';
 
+enum SettingCategory {
+  storeInfo(label: 'Profil & Toko', icon: Icons.store_rounded),
+  payment(label: 'Pembayaran Digital', icon: Icons.qr_code_2_rounded),
+  printer(label: 'Printer & Struk', icon: Icons.print_rounded),
+  security(label: 'Keamanan PIN', icon: Icons.lock_rounded),
+  backup(label: 'Data & Backup', icon: Icons.cloud_download_rounded),
+  display(label: 'Tampilan & Fitur', icon: Icons.display_settings_rounded);
+
+  final String label;
+  final IconData icon;
+  const SettingCategory({required this.label, required this.icon});
+}
+
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
 
@@ -27,6 +40,7 @@ class SettingsPage extends ConsumerStatefulWidget {
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
   final _formKey = GlobalKey<FormState>();
+  SettingCategory _selectedCategory = SettingCategory.storeInfo;
   
   late TextEditingController _businessNameCtrl;
   late TextEditingController _ownerNameCtrl;
@@ -163,7 +177,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       body: Column(
         children: [
           PageHeader(
-            title: 'Pengaturan Akun & Toko',
+            title: 'Pengaturan Sistem',
+            subtitle: 'Kelola informasi toko, printer, keamanan, dan data aplikasi',
             icon: Icons.settings_rounded,
             actions: [
               OutlinedButton.icon(
@@ -173,8 +188,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   }
                 },
                 icon: const Icon(Icons.logout, size: 18),
-                label: const Text('Keluar (Logout)'),
-                style: OutlinedButton.styleFrom(foregroundColor: AppTheme.danger, side: const BorderSide(color: AppTheme.danger)),
+                label: const Text('Logout'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.danger,
+                  side: const BorderSide(color: AppTheme.danger),
+                ),
               ),
               ElevatedButton.icon(
                 onPressed: _save,
@@ -184,110 +202,183 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ],
           ),
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Center(
-                  child: Container(
-                    constraints: const BoxConstraints(maxWidth: 800),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const _SectionTitle(title: 'Informasi Bisnis'),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(child: _buildInput('Nama Toko / Usaha', _businessNameCtrl, Icons.store_rounded)),
-                            const SizedBox(width: 20),
-                            Expanded(child: _buildInput('Nama Pemilik', _ownerNameCtrl, Icons.person_rounded)),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        Row(
-                          children: [
-                            Expanded(child: _buildInput('Nomor Telepon', _phoneCtrl, Icons.phone_rounded)),
-                            const SizedBox(width: 20),
-                            Expanded(child: _buildInput('Email Bisnis', _emailCtrl, Icons.business_outlined)),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        _buildInput('Alamat Toko', _addressCtrl, Icons.location_on_rounded, maxLines: 2),
-                        const SizedBox(height: 20),
-                        _buildInput('Deskripsi Toko', _descriptionCtrl, Icons.description_rounded, maxLines: 3),
-                        
-                        const SizedBox(height: 40),
-                        const _SectionTitle(title: 'Pengaturan Printer & Struk'),
-                        const SizedBox(height: 16),
-                        _buildPrinterSettings(),
-
-                        const SizedBox(height: 40),
-                        const _SectionTitle(title: 'Metode Pembayaran Digital'),
-                        const SizedBox(height: 16),
-                        _buildQrisSetting(ref),
-
-                        const SizedBox(height: 40),
-                        const _SectionTitle(title: 'Keamanan Data'),
-                        const SizedBox(height: 16),
-                        _buildPinSetting(ref),
-
-                        const SizedBox(height: 40),
-                        const _SectionTitle(title: 'Data & Backup'),
-                        const SizedBox(height: 16),
-                        AppCard(
-                          child: Column(
-                            children: [
-                              ListTile(
-                                leading: const Icon(Icons.download_for_offline_rounded, color: AppTheme.accent),
-                                title: const Text('Backup Keseluruhan (Excel)', style: TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: const Text('Download 3 file Excel: Master Produk, Piutang Pelanggan, dan Analitik Penjualan'),
-                                trailing: const Icon(Icons.chevron_right_rounded),
-                                onTap: () => _handleFullBackup(ref),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Sidebar Menu ──────────────────────────────────────────
+                Container(
+                  width: 260,
+                  decoration: const BoxDecoration(
+                    color: AppTheme.surface,
+                    border: Border(right: BorderSide(color: AppTheme.border)),
+                  ),
+                  child: ListView(
+                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                    children: SettingCategory.values.map((cat) {
+                      final isSelected = _selectedCategory == cat;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Material(
+                          color: isSelected ? AppTheme.accent.withValues(alpha: 0.1) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                          child: InkWell(
+                            onTap: () => setState(() => _selectedCategory = cat),
+                            borderRadius: BorderRadius.circular(10),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    cat.icon,
+                                    size: 20,
+                                    color: isSelected ? AppTheme.accent : AppTheme.textSecondary,
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Text(
+                                      cat.label,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                        color: isSelected ? AppTheme.textPrimary : AppTheme.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                  if (isSelected)
+                                    const Icon(Icons.chevron_right_rounded, size: 16, color: AppTheme.accent),
+                                ],
                               ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+                // ── Content Area ───────────────────────────────────────────
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(32),
+                    child: Form(
+                      key: _formKey,
+                      child: Center(
+                        child: Container(
+                          constraints: const BoxConstraints(maxWidth: 800),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _selectedCategory.label,
+                                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              const Divider(),
+                              const SizedBox(height: 24),
+                              _buildCategoryContent(),
                             ],
                           ),
                         ),
-
-                        const SizedBox(height: 40),
-                        const _SectionTitle(title: 'Pengaturan Tampilan & Tema'),
-                        const SizedBox(height: 16),
-                        //_buildThemeSelector(ref),
-                        const SizedBox(height: 16),
-                        _buildAppSettings(ref),
-
-                        const SizedBox(height: 40),
-                        Row(
-                          children: [
-                            const _SectionTitle(title: 'Daftar Rekening Bank'),
-                            const Spacer(),
-                            TextButton.icon(
-                              onPressed: _addBankAccount,
-                              icon: const Icon(Icons.add_circle_outline, size: 18),
-                              label: const Text('Tambah Rekening'),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Column(
-                          children: [
-                            if (_bankAccounts.isEmpty)
-                              const Center(child: Text('Belum ada rekening', style: TextStyle(color: AppTheme.textSecondary)))
-                            else
-                              for (int i = 0; i < _bankAccounts.length; i++)
-                                _buildBankCard(i),
-                          ],
-                        ),
-                        const SizedBox(height: 40),
-                      ],
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildCategoryContent() {
+    switch (_selectedCategory) {
+      case SettingCategory.storeInfo:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _SectionTitle(title: 'Informasi Bisnis'),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(child: _buildInput('Nama Toko / Usaha', _businessNameCtrl, Icons.store_rounded)),
+                const SizedBox(width: 20),
+                Expanded(child: _buildInput('Nama Pemilik', _ownerNameCtrl, Icons.person_rounded)),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(child: _buildInput('Nomor Telepon', _phoneCtrl, Icons.phone_rounded)),
+                const SizedBox(width: 20),
+                Expanded(child: _buildInput('Email Bisnis', _emailCtrl, Icons.business_outlined)),
+              ],
+            ),
+            const SizedBox(height: 20),
+            _buildInput('Alamat Toko', _addressCtrl, Icons.location_on_rounded, maxLines: 2),
+            const SizedBox(height: 20),
+            _buildInput('Deskripsi Toko', _descriptionCtrl, Icons.description_rounded, maxLines: 3),
+            
+            const SizedBox(height: 40),
+            Row(
+              children: [
+                const _SectionTitle(title: 'Daftar Rekening Bank'),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: _addBankAccount,
+                  icon: const Icon(Icons.add_circle_outline, size: 18),
+                  label: const Text('Tambah Rekening'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Column(
+              children: [
+                if (_bankAccounts.isEmpty)
+                  const Center(child: Text('Belum ada rekening', style: TextStyle(color: AppTheme.textSecondary)))
+                else
+                  for (int i = 0; i < _bankAccounts.length; i++)
+                    _buildBankCard(i),
+              ],
+            ),
+          ],
+        );
+      case SettingCategory.payment:
+        return _buildQrisSetting(ref);
+      case SettingCategory.printer:
+        return _buildPrinterSettings();
+      case SettingCategory.security:
+        return _buildPinSetting(ref);
+      case SettingCategory.backup:
+        return AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Backup & Ekspor Data', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 8),
+              const Text('Amankan data toko Anda dengan melakukan backup berkala ke format Excel.', 
+                  style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
+              const SizedBox(height: 24),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: AppTheme.accent.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                  child: const Icon(Icons.download_for_offline_rounded, color: AppTheme.accent),
+                ),
+                title: const Text('Backup Keseluruhan (Excel)', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('Download: Produk, Stok, Piutang, & Transaksi'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => _handleFullBackup(ref),
+              ),
+            ],
+          ),
+        );
+      case SettingCategory.display:
+        return _buildAppSettings(ref);
+    }
   }
 
   Widget _buildInput(String label, TextEditingController ctrl, IconData icon, {int maxLines = 1}) {
@@ -599,8 +690,51 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ),
             ],
           ),
+          const SizedBox(height: 24),
+          const Text('Proteksi Halaman (Opsional)', 
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          const SizedBox(height: 4),
+          const Text('Pilih halaman yang ingin Anda kunci dengan PIN. Tindakan penghapusan data akan selalu meminta PIN.', 
+              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+          const SizedBox(height: 16),
+          _buildPageSecurityToggles(ref, settings),
         ],
       ),
+    );
+  }
+
+  Widget _buildPageSecurityToggles(WidgetRef ref, StoreSettings settings) {
+    final securePages = {
+      'inventory': 'Manajemen Stok & Tagihan',
+      'products': 'Daftar Produk & Barcode',
+      'transactions': 'Riwayat Transaksi',
+      'analytics': 'Laporan Laba & Analitik',
+      'debts': 'Daftar Pelanggan & Piutang',
+    };
+
+    return Column(
+      children: securePages.entries.map((entry) {
+        final isEnabled = settings.pageSecurity[entry.key] ?? false;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(
+            children: [
+              Text(entry.value, style: const TextStyle(fontSize: 13)),
+              const Spacer(),
+              Switch.adaptive(
+                value: isEnabled,
+                activeTrackColor: AppTheme.accent,
+                onChanged: (v) {
+                  final newMap = Map<String, bool>.from(settings.pageSecurity);
+                  newMap[entry.key] = v;
+                  final updated = settings.copyWith(pageSecurity: newMap);
+                  ref.read(settingsProvider.notifier).updateSettings(updated);
+                },
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 

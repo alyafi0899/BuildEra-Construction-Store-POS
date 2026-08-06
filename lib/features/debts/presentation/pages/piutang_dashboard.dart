@@ -8,6 +8,7 @@ import '../../providers/debt_repository.dart';
 import '../../utils/debt_report_helper.dart';
 import '../../models/customer.dart';
 import '../../models/debt.dart';
+import '../../../../shared/widgets/security_gate.dart';
 import '../../../../core/providers/navigation_provider.dart';
 
 class PiutangDashboard extends ConsumerWidget {
@@ -20,8 +21,9 @@ class PiutangDashboard extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      body: Column(
-        children: [
+      body: PinGate(
+        child: Column(
+          children: [
           // Header
           PageHeader(
             title: 'Dashboard Piutang',
@@ -66,6 +68,7 @@ class PiutangDashboard extends ConsumerWidget {
           ),
         ],
       ),
+    ),
     );
   }
 
