@@ -13,6 +13,7 @@ import '../../../../core/utils/barcode_helper.dart';
 import '../../../../shared/widgets/product_detail_dialog.dart';
 import '../../providers/barcode_history_provider.dart';
 import '../../providers/product_provider.dart';
+import '../../providers/entity_provider.dart';
 import '../widgets/product_form_dialog.dart';
 import '../widgets/excel_import_dialog.dart';
 import '../../models/product_financials.dart';
@@ -144,21 +145,39 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
       final excel = Excel.createExcel();
       final sheet = excel['Sheet1'];
 
+      // Fetch entities for lookup
+      final suppliers = await ref.read(suppliersProvider.future);
+      final shipping = await ref.read(shippingServicesProvider.future);
+
+      final supplierMap = {for (var s in suppliers) s.name: s};
+      final shippingMap = {for (var s in shipping) s.name: s};
+
       // Header row matching the import format + metadata
       sheet.appendRow([
-        TextCellValue('Nama Produk'),
-        TextCellValue('Barcode'),
-        TextCellValue('Kategori'),
-        TextCellValue('Satuan Dasar'),
-        TextCellValue('Stok Awal'),
-        TextCellValue('Harga Modal (Rp)'),
-        TextCellValue('Harga Jual Dasar (Rp)'),
-        TextCellValue('Tanggal Dibuat'),
-        TextCellValue('Terakhir Diubah'),
+        TextCellValue('Nama Produk'), // A
+        TextCellValue('Barcode'), // B
+        TextCellValue('Kategori'), // C
+        TextCellValue('Satuan Dasar'), // D
+        TextCellValue('Stok Awal'), // E
+        TextCellValue('Harga Modal (Rp)'), // F
+        TextCellValue('Harga Jual Dasar (Rp)'), // G
+        TextCellValue('Nama Supplier'), // H
+        TextCellValue('No HP Supplier'), // I
+        TextCellValue('Alamat Supplier'), // J
+        TextCellValue('Nama Expedisi'), // K
+        TextCellValue('No HP Expedisi'), // L
+        TextCellValue('Alamat Expedisi'), // M
+        TextCellValue('Tanggal Dibuat'), // N
+        TextCellValue('Terakhir Diubah'), // O
       ]);
 
       // Data rows
       for (final p in products) {
+        final sName = p.financials.supplierName;
+        final s = sName != null ? supplierMap[sName] : null;
+        final shName = p.financials.shippingServiceName;
+        final sh = shName != null ? shippingMap[shName] : null;
+
         sheet.appendRow([
           TextCellValue(p.name),
           TextCellValue(p.barcode ?? ''),
@@ -167,6 +186,12 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
           DoubleCellValue(p.stock),
           DoubleCellValue(p.costPrice),
           DoubleCellValue(p.basePrice),
+          TextCellValue(sName ?? ''),
+          TextCellValue(s?.phone ?? ''),
+          TextCellValue(s?.address ?? ''),
+          TextCellValue(shName ?? ''),
+          TextCellValue(sh?.phone ?? ''),
+          TextCellValue(''), // Expedition Address (not currently in model)
           TextCellValue(Formatters.dateTime(p.createdAt)),
           TextCellValue(Formatters.dateTime(p.updatedAt)),
         ]);

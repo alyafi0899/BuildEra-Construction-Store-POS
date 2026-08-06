@@ -19,8 +19,9 @@ class PinUnlockNotifier extends Notifier<bool> {
 void requirePin(BuildContext context, WidgetRef ref, VoidCallback onSuccess) {
   final isUnlocked = ref.read(pinUnlockProvider);
   final settings = ref.read(settingsProvider);
+  final hasPin = settings.securityPin != null && settings.securityPin!.isNotEmpty;
 
-  if (isUnlocked || settings.securityPin == null) {
+  if (isUnlocked || !hasPin) {
     onSuccess();
     return;
   }
@@ -59,8 +60,9 @@ class PinGate extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isUnlocked = ref.watch(pinUnlockProvider);
     final settings = ref.watch(settingsProvider);
+    final hasPin = settings.securityPin != null && settings.securityPin!.isNotEmpty;
 
-    if (isUnlocked || settings.securityPin == null) {
+    if (isUnlocked || !hasPin) {
       return child;
     }
 
@@ -78,8 +80,9 @@ class BlurGate extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isUnlocked = ref.watch(pinUnlockProvider);
     final settings = ref.watch(settingsProvider);
+    final hasPin = settings.securityPin != null && settings.securityPin!.isNotEmpty;
 
-    if (isUnlocked || settings.securityPin == null) {
+    if (isUnlocked || !hasPin) {
       return child;
     }
 
