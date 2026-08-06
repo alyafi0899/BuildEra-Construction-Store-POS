@@ -224,7 +224,8 @@ class _DebtTileState extends ConsumerState<_DebtTile> {
                   final payments = ref.read(debtPaymentsProvider((customerId: d.customerId, debtId: d.id))).asData?.value ?? [];
                   final customers = ref.read(customersProvider).asData?.value ?? [];
                   final customer = customers.firstWhere((c) => c.id == d.customerId);
-                  await DebtInvoiceHelper.printDebtInvoice(customer, d, payments, settings);
+                  final transaction = await ref.read(transactionByIdProvider(d.transactionId).future);
+                  await DebtInvoiceHelper.printDebtInvoice(customer, d, payments, settings, transaction: transaction);
                 },
                 icon: const Icon(Icons.print_rounded, size: 20, color: AppTheme.accent),
                 tooltip: 'Print Nota Piutang',
@@ -235,7 +236,8 @@ class _DebtTileState extends ConsumerState<_DebtTile> {
                   final payments = ref.read(debtPaymentsProvider((customerId: d.customerId, debtId: d.id))).asData?.value ?? [];
                   final customers = ref.read(customersProvider).asData?.value ?? [];
                   final customer = customers.firstWhere((c) => c.id == d.customerId);
-                  await DebtInvoiceHelper.downloadDebtInvoice(customer, d, payments, settings);
+                  final transaction = await ref.read(transactionByIdProvider(d.transactionId).future);
+                  await DebtInvoiceHelper.downloadDebtInvoice(customer, d, payments, settings, transaction: transaction);
                 },
                 icon: const Icon(Icons.download_rounded, size: 20, color: AppTheme.accent),
                 tooltip: 'Simpan Nota Piutang',

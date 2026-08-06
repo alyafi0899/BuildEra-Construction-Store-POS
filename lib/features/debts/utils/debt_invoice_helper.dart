@@ -4,6 +4,7 @@ import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:open_filex/open_filex.dart';
 import '../../../printing/printing.dart';
+import '../../../shared/models/transaction.dart';
 import '../models/customer.dart';
 import '../models/debt.dart';
 import '../models/debt_payment.dart';
@@ -25,6 +26,7 @@ class DebtInvoiceHelper {
     required Debt debt,
     required List<DebtPayment> payments,
     required StoreSettings settings,
+    Transaction? transaction,
   }) async {
     final receipt = ReceiptDocument(
       title: 'NOTA PIUTANG',
@@ -33,7 +35,8 @@ class DebtInvoiceHelper {
         'customer': customer,
         'debt': debt,
         'payments': payments,
-        'settings': settings
+        'settings': settings,
+        'transaction': transaction,
       },
     );
 
@@ -50,9 +53,9 @@ class DebtInvoiceHelper {
   }
 
   static Future<void> printDebtInvoice(Customer customer, Debt debt,
-      List<DebtPayment> payments, StoreSettings settings) async {
+      List<DebtPayment> payments, StoreSettings settings, {Transaction? transaction}) async {
     final pdfBytes = await generateDebtPdf(
-        customer: customer, debt: debt, payments: payments, settings: settings);
+        customer: customer, debt: debt, payments: payments, settings: settings, transaction: transaction);
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdfBytes,
       name: 'Piutang-${customer.name}-${debt.invoiceNumber}',
@@ -60,9 +63,9 @@ class DebtInvoiceHelper {
   }
 
   static Future<void> downloadDebtInvoice(Customer customer, Debt debt,
-      List<DebtPayment> payments, StoreSettings settings) async {
+      List<DebtPayment> payments, StoreSettings settings, {Transaction? transaction}) async {
     final pdfBytes = await generateDebtPdf(
-        customer: customer, debt: debt, payments: payments, settings: settings);
+        customer: customer, debt: debt, payments: payments, settings: settings, transaction: transaction);
     final filename =
         'Piutang_${customer.name.replaceAll(' ', '_')}_${debt.invoiceNumber}.pdf';
 

@@ -451,8 +451,8 @@ class _TxDetailState extends ConsumerState<_TxDetail> {
                         tx,
                         settings,
                         (Customer c, Debt d, List<DebtPayment> p,
-                                StoreSettings s) =>
-                            DebtInvoiceHelper.printDebtInvoice(c, d, p, s),
+                                StoreSettings s, Transaction t) =>
+                            DebtInvoiceHelper.printDebtInvoice(c, d, p, s, transaction: t),
                         InvoiceHelper.printInvoice),
                     icon: const Icon(Icons.print_rounded,
                         size: 20, color: AppTheme.accent),
@@ -463,8 +463,8 @@ class _TxDetailState extends ConsumerState<_TxDetail> {
                         tx,
                         settings,
                         (Customer c, Debt d, List<DebtPayment> p,
-                                StoreSettings s) =>
-                            DebtInvoiceHelper.downloadDebtInvoice(c, d, p, s),
+                                StoreSettings s, Transaction t) =>
+                            DebtInvoiceHelper.downloadDebtInvoice(c, d, p, s, transaction: t),
                         InvoiceHelper.saveInvoice),
                     icon: const Icon(Icons.download,
                         size: 20, color: AppTheme.accent),
@@ -473,9 +473,9 @@ class _TxDetailState extends ConsumerState<_TxDetail> {
                   IconButton(
                     onPressed: () => _handlePiutangAction(tx, settings,
                         (Customer c, Debt d, List<DebtPayment> p,
-                            StoreSettings s) async {
+                            StoreSettings s, Transaction t) async {
                       final pdfBytes = await DebtInvoiceHelper.generateDebtPdf(
-                          customer: c, debt: d, payments: p, settings: s);
+                          customer: c, debt: d, payments: p, settings: s, transaction: t);
                       await Printing.sharePdf(
                           bytes: pdfBytes,
                           filename:
@@ -609,7 +609,7 @@ class _TxDetailState extends ConsumerState<_TxDetail> {
   Future<void> _handlePiutangAction(
     Transaction tx,
     StoreSettings settings,
-    FutureOr<void> Function(Customer, Debt, List<DebtPayment>, StoreSettings)
+    FutureOr<void> Function(Customer, Debt, List<DebtPayment>, StoreSettings, Transaction)
         piutangAction,
     FutureOr<void> Function(Transaction, StoreSettings) defaultAction,
   ) async {
@@ -642,7 +642,7 @@ class _TxDetailState extends ConsumerState<_TxDetail> {
 
       if (mounted) {
         Navigator.pop(context); // Close loading
-        await piutangAction(customer, debt, payments, settings);
+        await piutangAction(customer, debt, payments, settings, tx);
       }
     } catch (e) {
       if (mounted) {

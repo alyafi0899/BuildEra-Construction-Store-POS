@@ -262,13 +262,13 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
 
         // 2. Shift to Print
         if (key == LogicalKeyboardKey.shiftLeft || key == LogicalKeyboardKey.shiftRight) {
-          _handlePiutangAction(tx, settings, (c, d, p, s) => DebtInvoiceHelper.printDebtInvoice(c, d, p, s), InvoiceHelper.printInvoice);
+          _handlePiutangAction(tx, settings, (c, d, p, s, t) => DebtInvoiceHelper.printDebtInvoice(c, d, p, s, transaction: t), InvoiceHelper.printInvoice);
           return KeyEventResult.handled;
         }
 
         // 3. Right Alt to Download
         if (key == LogicalKeyboardKey.altRight) {
-          _handlePiutangAction(tx, settings, (c, d, p, s) => DebtInvoiceHelper.downloadDebtInvoice(c, d, p, s), InvoiceHelper.saveInvoice);
+          _handlePiutangAction(tx, settings, (c, d, p, s, t) => DebtInvoiceHelper.downloadDebtInvoice(c, d, p, s, transaction: t), InvoiceHelper.saveInvoice);
           return KeyEventResult.handled;
         }
 
@@ -295,14 +295,14 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
               _ActionBtn(
                 icon: Icons.print_rounded, 
                 label: 'Print', 
-                onTap: () => _handlePiutangAction(tx, settings, (c, d, p, s) => DebtInvoiceHelper.printDebtInvoice(c, d, p, s), InvoiceHelper.printInvoice)
+                onTap: () => _handlePiutangAction(tx, settings, (c, d, p, s, t) => DebtInvoiceHelper.printDebtInvoice(c, d, p, s, transaction: t), InvoiceHelper.printInvoice)
               ),
               const SizedBox(width: 12),
               _ActionBtn(
                 icon: Icons.share_rounded, 
                 label: 'Share', 
-                onTap: () => _handlePiutangAction(tx, settings, (c, d, p, s) async {
-                  final pdfBytes = await DebtInvoiceHelper.generateDebtPdf(customer: c, debt: d, payments: p, settings: s);
+                onTap: () => _handlePiutangAction(tx, settings, (c, d, p, s, t) async {
+                  final pdfBytes = await DebtInvoiceHelper.generateDebtPdf(customer: c, debt: d, payments: p, settings: s, transaction: t);
                   await Printing.sharePdf(bytes: pdfBytes, filename: 'Piutang-${c.name}-${tx.invoiceNumber}.pdf');
                 }, InvoiceHelper.shareInvoice)
               ),
@@ -310,7 +310,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
               _ActionBtn(
                 icon: Icons.download_rounded, 
                 label: 'Simpan', 
-                onTap: () => _handlePiutangAction(tx, settings, (c, d, p, s) => DebtInvoiceHelper.downloadDebtInvoice(c, d, p, s), InvoiceHelper.saveInvoice)
+                onTap: () => _handlePiutangAction(tx, settings, (c, d, p, s, t) => DebtInvoiceHelper.downloadDebtInvoice(c, d, p, s, transaction: t), InvoiceHelper.saveInvoice)
               ),
             ],
           ),
@@ -986,7 +986,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   Future<void> _handlePiutangAction(
     Transaction tx, 
     StoreSettings settings, 
-    FutureOr<void> Function(Customer, Debt, List<DebtPayment>, StoreSettings) piutangAction,
+    FutureOr<void> Function(Customer, Debt, List<DebtPayment>, StoreSettings, Transaction) piutangAction,
     FutureOr<void> Function(Transaction, StoreSettings) defaultAction,
   ) async {
     if (tx.paymentMethod != AppConstants.paymentPiutang) {
@@ -1014,7 +1014,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
       
       if (mounted) {
         Navigator.pop(context); // Close loading
-        await piutangAction(customer, debt, payments, settings);
+        await piutangAction(customer, debt, payments, settings, tx);
       }
     } catch (e) {
       if (mounted) {
