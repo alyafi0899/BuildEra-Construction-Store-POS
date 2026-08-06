@@ -675,7 +675,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 )
               else ...[
                 ElevatedButton.icon(
-                  onPressed: () => _requireAuth(context, ref, onSuccess: () {
+                  onPressed: () => _requirePinVerification(context, ref, onSuccess: () {
                     _showPinEntryDialog(context, ref, isSetup: true);
                   }),
                   icon: const Icon(Icons.edit_note_rounded, size: 18),
@@ -683,7 +683,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ),
                 const SizedBox(width: 12),
                 OutlinedButton.icon(
-                  onPressed: () => _requireAuth(context, ref, onSuccess: () {
+                  onPressed: () => _requirePinVerification(context, ref, onSuccess: () {
                     final updated = settings.copyWith(securityPin: null);
                     ref.read(settingsProvider.notifier).updateSettings(updated);
                     showSuccess(context, 'PIN Keamanan dinonaktifkan');
@@ -708,57 +708,146 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-  void _requireAuth(BuildContext context, WidgetRef ref, {required VoidCallback onSuccess}) {
-    final emailCtrl = TextEditingController();
-    final passCtrl = TextEditingController();
-    bool loading = false;
+  void _requirePinVerification(BuildContext context, WidgetRef ref, {required VoidCallback onSuccess}) {
+    final correctPin = ref.read(settingsProvider).securityPin;
+    final pinCtrl = TextEditingController();
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Verifikasi Pemilik'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Masukkan email dan password akun Anda untuk melanjutkan tindakan ini.', 
-                  style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-              const SizedBox(height: 20),
-              TextField(
-                controller: emailCtrl,
-                decoration: const InputDecoration(labelText: 'Email', isDense: true),
+      builder: (context) => AlertDialog(
+        title: const Text('Verifikasi PIN'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Masukkan PIN lama Anda untuk melanjutkan.', 
+                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+            const SizedBox(height: 20),
+            TextField(
+              controller: pinCtrl,
+              obscureText: true,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(
+                labelText: 'PIN Saat Ini', 
+                counterText: '',
+                isDense: true
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: passCtrl,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: 'Password', isDense: true),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
-            ElevatedButton(
-              onPressed: loading ? null : () async {
-                setState(() => loading = true);
-                try {
-                  await ref.read(authRepositoryProvider).reauthenticate(emailCtrl.text.trim(), passCtrl.text);
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                    onSuccess();
-                  }
-                } catch (e) {
-                  if (context.mounted) showError(context, 'Autentikasi Gagal: $e');
-                } finally {
-                  if (context.mounted) setState(() => loading = false);
+              onSubmitted: (_) {
+                if (pinCtrl.text == correctPin) {
+                  Navigator.pop(context);
+                  onSuccess();
+                } else {
+                  showError(context, 'PIN Salah');
                 }
               },
-              child: loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Verifikasi'),
             ),
           ],
         ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () {
+              if (pinCtrl.text == correctPin) {
+                Navigator.pop(context);
+                onSuccess();
+              } else {
+                showError(context, 'PIN Salah');
+              }
+            },
+            child: const Text('Verifikasi'),
+          ),
+        ],
       ),
     );
+  }
+
+  void _requireAuth(BuildContext context, WidgetRef ref, {required VoidCallback onSuccess}) {
+    final currentUser = ref.read(authStateProvider).value;
+    final authRepo = ref.read(authRepositoryProvider);
+    
+    final emailCtrl = TextEditingController(text: currentUser?.email);
+    final passCtrl = TextEditingController();
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setState) {
+          bool loading = false; // Moved inside to be scoped to the dialog state
+
+          return AlertDialog(
+            title: const Text('Reset PIN (Lupa PIN)'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Untuk mereset PIN, silakan masukkan password akun Anda untuk verifikasi identitas.', 
+                    style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: emailCtrl,
+                  enabled: false,
+                  decoration: const InputDecoration(
+                    labelText: 'Email Akun', 
+                    isDense: true,
+                    filled: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: passCtrl,
+                  obscureText: true,
+                  autofocus: true,
+                  decoration: const InputDecoration(labelText: 'Password Akun', isDense: true),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: loading ? null : () {
+                  if (Navigator.canPop(dialogContext)) {
+                    Navigator.pop(dialogContext);
+                  }
+                }, 
+                child: const Text('Batal')
+              ),
+              ElevatedButton(
+                onPressed: loading ? null : () async {
+                  if (passCtrl.text.isEmpty) {
+                    showError(dialogContext, 'Masukkan password Anda');
+                    return;
+                  }
+
+                  if (!context.mounted) return;
+                  setState(() => loading = true);
+                  
+                  try {
+                    await authRepo.verifyCredentials(emailCtrl.text.trim(), passCtrl.text);
+                    
+                    if (dialogContext.mounted) {
+                      Navigator.pop(dialogContext);
+                      onSuccess();
+                    }
+                  } catch (e) {
+                    if (dialogContext.mounted) {
+                      showError(dialogContext, e.toString());
+                      setState(() => loading = false);
+                    }
+                  }
+                },
+                child: loading 
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
+                  : const Text('Verifikasi & Reset'),
+              ),
+            ],
+          );
+        },
+      ),
+    ).then((_) {
+      emailCtrl.dispose();
+      passCtrl.dispose();
+    });
   }
 
   void _showPinEntryDialog(BuildContext context, WidgetRef ref, {required bool isSetup}) {

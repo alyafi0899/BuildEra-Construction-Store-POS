@@ -55,11 +55,48 @@ class AuthRepository {
     await _auth.currentUser?.verifyBeforeUpdateEmail(newEmail);
   }
 
+  /// Standard sign-in check for "Forgot PIN" scenario to bypass strict reauthentication timeouts
+  Future<void> verifyCredentials(String email, String password) async {
+    try {
+      // Use a temporary firebase auth instance or just try to sign in with credentials
+      // to verify they are correct without binding to the main session if possible
+      final tempAuth = FirebaseAuth.instance;
+      await tempAuth.signInWithEmailAndPassword(email: email, password: password).timeout(const Duration(seconds: 10));
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential' || e.code == 'user-not-found') {
+        throw 'Password yang Anda masukkan salah atau email tidak terdaftar.';
+      }
+      rethrow;
+    } catch (e) {
+      throw 'Gagal verifikasi: $e';
+    }
+  }
+
   Future<void> reauthenticate(String email, String password) async {
     final user = _auth.currentUser;
-    if (user != null) {
-      final cred = EmailAuthProvider.credential(email: email, password: password);
-      await user.reauthenticateWithCredential(cred);
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'user-not-found',
+        message: 'Sesi login tidak ditemukan. Silakan login kembali.',
+      );
+    }
+    
+    // Safety check to ensure we are re-authenticating the right user
+    if (user.email != null && user.email!.toLowerCase() != email.toLowerCase()) {
+      throw FirebaseAuthException(
+        code: 'email-mismatch',
+        message: 'Email konfirmasi tidak sesuai dengan akun yang login.',
+      );
+    }
+
+    final cred = EmailAuthProvider.credential(email: email, password: password);
+    try {
+      await user.reauthenticateWithCredential(cred).timeout(const Duration(seconds: 15));
+    } on TimeoutException {
+      throw FirebaseAuthException(
+        code: 'network-timeout',
+        message: 'Waktu verifikasi habis. Periksa koneksi internet Anda.',
+      );
     }
   }
 }
