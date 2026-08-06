@@ -202,7 +202,7 @@ class _CashierPageState extends ConsumerState<CashierPage> {
             child: Row(children: [
               // ── Left: Product Search & Grid ──────────────────────────────────
               Expanded(
-                flex: 6,
+                flex: 1,
                 child: Column(
                     children: [
                       // Header
@@ -255,13 +255,15 @@ class _CashierPageState extends ConsumerState<CashierPage> {
               ),
 
               // ── Right: Cart Panel ────────────────────────────────────────────
-              Container(
-                width: 480,
-                decoration: const BoxDecoration(
-                  color: AppTheme.surface,
-                  border: Border(left: BorderSide(color: AppTheme.border)),
+              Expanded(
+                flex: 1,
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: AppTheme.surface,
+                    border: Border(left: BorderSide(color: AppTheme.border)),
+                  ),
+                  child: const CartPanel(),
                 ),
-                child: const CartPanel(),
               ),
             ]),
           ),
@@ -451,8 +453,6 @@ class _ProductListTile extends ConsumerWidget {
                     Text(
                       product.name,
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                     if (product.barcode != null)
                       Text(product.barcode!, style: const TextStyle(fontSize: 12, color: Colors.white70)),
