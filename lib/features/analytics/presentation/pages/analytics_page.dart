@@ -82,6 +82,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     return Scaffold(
       backgroundColor: AppTheme.bg,
       body: PinGate(
+        manualTrigger: ref.watch(settingsProvider).lockAnalyticsPage,
         child: Column(
           children: [
             // Header

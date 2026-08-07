@@ -17,6 +17,7 @@ import '../../../products/providers/entity_provider.dart';
 import '../../models/bill_payment.dart';
 import '../../providers/bill_payment_provider.dart';
 import '../../../../shared/widgets/security_gate.dart';
+import '../../../../features/settings/providers/settings_provider.dart';
 
 class BillsPage extends ConsumerStatefulWidget {
   const BillsPage({super.key});
@@ -48,6 +49,7 @@ class _BillsPageState extends ConsumerState<BillsPage> with SingleTickerProvider
     return Scaffold(
       backgroundColor: AppTheme.bg,
       body: PinGate(
+        manualTrigger: ref.watch(settingsProvider).lockInventoryPage,
         child: Column(
           children: [
             const PageHeader(

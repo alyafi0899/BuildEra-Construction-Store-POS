@@ -58,6 +58,12 @@ class ReceiptLayoutService {
                 _buildTransactionSummary(tx),
               pw.Divider(thickness: 0.5),
 
+              // 4.1 Notes
+              if ((tx?.notes?.isNotEmpty ?? false) || (debt?.notes?.isNotEmpty ?? false)) ...[
+                _buildNotes(tx?.notes ?? debt?.notes ?? ''),
+                pw.Divider(thickness: 0.5),
+              ],
+
               // 5. Payment History (Debt only)
               if (payments != null) ...[
                 _buildPaymentHistory(payments),
@@ -221,6 +227,17 @@ class ReceiptLayoutService {
           pw.Text('Printed: ${Formatters.dateTime(DateTime.now())}', style: const pw.TextStyle(fontSize: 7)),
         ],
       ),
+    );
+  }
+
+  pw.Widget _buildNotes(String notes) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text('Keterangan:', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+        pw.SizedBox(height: 1),
+        pw.Text(notes, style: const pw.TextStyle(fontSize: 8)),
+      ],
     );
   }
 

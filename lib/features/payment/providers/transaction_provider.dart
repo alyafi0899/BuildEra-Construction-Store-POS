@@ -497,7 +497,7 @@ class TransactionsNotifier extends Notifier<void> {
     ref.invalidate(transactionsProvider);
   }
 
-  Future<String> checkout({
+  Future<Transaction> checkout({
     required String paymentMethod,
     required double amountPaid,
     double shippingFee = 0,
@@ -557,7 +557,7 @@ class TransactionsNotifier extends Notifier<void> {
     ref.invalidate(customersProvider);
     ref.invalidate(salesSummaryProvider);
     
-    return tx.id;
+    return tx;
   }
 
   Future<void> deleteTransaction(String id) async {

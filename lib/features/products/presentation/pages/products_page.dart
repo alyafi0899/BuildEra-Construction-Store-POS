@@ -22,6 +22,7 @@ import '../../../inventory/models/restock_record.dart';
 import '../../../inventory/presentation/widgets/restock_dialog.dart';
 import '../../../../shared/widgets/security_gate.dart';
 import '../../../../core/providers/navigation_provider.dart';
+import '../../../../features/settings/providers/settings_provider.dart';
 
 class ProductsPage extends ConsumerStatefulWidget {
   const ProductsPage({super.key});
@@ -233,6 +234,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     return Scaffold(
       backgroundColor: AppTheme.bg,
       body: PinGate(
+        manualTrigger: ref.watch(settingsProvider).lockProductsPage,
         child: Column(
           children: [
             // Top bar
@@ -661,9 +663,9 @@ class _ProductRowState extends ConsumerState<_ProductRow> {
                 ),
               ),
             ])),
-            Expanded(flex: 1, child: BlurGate(child: Text(Formatters.currency(widget.product.costPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)))),
+            Expanded(flex: 1, child: Text(Formatters.currency(widget.product.costPrice), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary))),
             Expanded(flex: 1, child: Text(Formatters.currency(widget.product.basePrice), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-            Expanded(flex: 1, child: BlurGate(child: Text(Formatters.currency(profit), textAlign: TextAlign.right, style: TextStyle(color: profit >= 0 ? AppTheme.success : AppTheme.danger, fontWeight: FontWeight.bold, fontSize: 12)))),
+            Expanded(flex: 1, child: Text(Formatters.currency(profit), textAlign: TextAlign.right, style: TextStyle(color: profit >= 0 ? AppTheme.success : AppTheme.danger, fontWeight: FontWeight.bold, fontSize: 12))),
 
             // Update Stok Cepat (Dedicated Column)
             Expanded(flex: 1, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [

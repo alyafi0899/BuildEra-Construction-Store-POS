@@ -50,6 +50,16 @@ class InitialSyncNotifier extends Notifier<InitialSyncState> {
     state = state.copyWith(isInitialSyncDone: isDone);
   }
 
+  Future<void> markAsDone() async {
+    final auth = ref.read(authStateProvider).value;
+    if (auth == null) return;
+    
+    final box = await LocalDatabase.openBox(auth.uid, 'sync_meta');
+    await box.put('initial_sync_done', true);
+    state = state.copyWith(isInitialSyncDone: true);
+    debugPrint('SYNC: Initial sync marked as DONE (New Account Flow)');
+  }
+
   Future<void> performInitialSync({bool force = false}) async {
     debugPrint('SYNC: Triggered performInitialSync(force: $force)');
     final auth = ref.read(authStateProvider).value;

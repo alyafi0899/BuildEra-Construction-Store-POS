@@ -40,6 +40,9 @@ class StoreSettings {
   final String? logoUrl;
   final String? qrisImagePath; // New: Local path for QRIS barcode
   final String? securityPin; // New: PIN for sensitive data
+  final bool lockAnalyticsPage; // New: Toggle for Analytics page
+  final bool lockProductsPage; // New: Toggle for Products page
+  final bool lockInventoryPage; // New: Toggle for Inventory page
   final double receiptWidth; // New: Receipt paper width in mm
   final double receiptMargin; // New: Receipt left/right margin in points
 
@@ -55,6 +58,9 @@ class StoreSettings {
     this.logoUrl,
     this.qrisImagePath,
     this.securityPin,
+    this.lockAnalyticsPage = true,
+    this.lockProductsPage = true,
+    this.lockInventoryPage = true,
     this.receiptWidth = 80.0,
     this.receiptMargin = 4.0,
   });
@@ -72,6 +78,9 @@ class StoreSettings {
       'logoUrl': logoUrl,
       'qrisImagePath': qrisImagePath,
       'securityPin': securityPin,
+      'lockAnalyticsPage': lockAnalyticsPage,
+      'lockProductsPage': lockProductsPage,
+      'lockInventoryPage': lockInventoryPage,
       'receiptWidth': receiptWidth,
       'receiptMargin': receiptMargin,
     };
@@ -93,6 +102,9 @@ class StoreSettings {
       logoUrl: map['logoUrl']?.toString(),
       qrisImagePath: map['qrisImagePath']?.toString(),
       securityPin: map['securityPin']?.toString(),
+      lockAnalyticsPage: map['lockAnalyticsPage'] as bool? ?? true,
+      lockProductsPage: map['lockProductsPage'] as bool? ?? true,
+      lockInventoryPage: map['lockInventoryPage'] as bool? ?? true,
       receiptWidth: (map['receiptWidth'] as num?)?.toDouble() ?? 80.0,
       receiptMargin: (map['receiptMargin'] as num?)?.toDouble() ?? 4.0,
     );
@@ -114,6 +126,9 @@ class StoreSettings {
     String? logoUrl,
     String? qrisImagePath,
     String? securityPin,
+    bool? lockAnalyticsPage,
+    bool? lockProductsPage,
+    bool? lockInventoryPage,
     double? receiptWidth,
     double? receiptMargin,
   }) {
@@ -129,6 +144,9 @@ class StoreSettings {
       logoUrl: logoUrl ?? this.logoUrl,
       qrisImagePath: qrisImagePath ?? this.qrisImagePath,
       securityPin: securityPin ?? this.securityPin,
+      lockAnalyticsPage: lockAnalyticsPage ?? this.lockAnalyticsPage,
+      lockProductsPage: lockProductsPage ?? this.lockProductsPage,
+      lockInventoryPage: lockInventoryPage ?? this.lockInventoryPage,
       receiptWidth: receiptWidth ?? this.receiptWidth,
       receiptMargin: receiptMargin ?? this.receiptMargin,
     );

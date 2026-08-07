@@ -21,6 +21,7 @@ void requirePin(BuildContext context, WidgetRef ref, VoidCallback onSuccess) {
   final settings = ref.read(settingsProvider);
   final hasPin = settings.securityPin != null && settings.securityPin!.isNotEmpty;
 
+  // Always require PIN for specific actions if PIN is set, regardless of enforcePageLock
   if (isUnlocked || !hasPin) {
     onSuccess();
     return;
@@ -54,7 +55,8 @@ class _ActionPinDialog extends ConsumerWidget {
 
 class PinGate extends ConsumerWidget {
   final Widget child;
-  const PinGate({super.key, required this.child});
+  final bool? manualTrigger; // If null, checks settings. If true, always locks.
+  const PinGate({super.key, required this.child, this.manualTrigger});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -62,13 +64,26 @@ class PinGate extends ConsumerWidget {
     final settings = ref.watch(settingsProvider);
     final hasPin = settings.securityPin != null && settings.securityPin!.isNotEmpty;
 
-    if (isUnlocked || !hasPin) {
+    // Logic: 
+    // 1. If no PIN set, never lock
+    // 2. If already unlocked in this session, don't lock
+    if (!hasPin || isUnlocked) {
       return child;
     }
 
-    return _PinPromptOverlay(
-      onSuccess: () => ref.read(pinUnlockProvider.notifier).unlock(),
-    );
+    // 3. Child-specific logic
+    bool shouldLock = false;
+    if (manualTrigger == true) {
+      shouldLock = true;
+    }
+
+    if (shouldLock) {
+      return _PinPromptOverlay(
+        onSuccess: () => ref.read(pinUnlockProvider.notifier).unlock(),
+      );
+    }
+
+    return child;
   }
 }
 
@@ -208,6 +223,7 @@ class _PinPromptOverlayState extends ConsumerState<_PinPromptOverlay> {
     final pinLength = settings.securityPin?.length ?? 4;
 
     return Container(
+      constraints: const BoxConstraints(minHeight: 400), // Ensure it has a height
       width: widget.isDialog ? 360 : double.infinity,
       height: widget.isDialog ? null : double.infinity,
       color: widget.isDialog ? AppTheme.surface : AppTheme.bg,

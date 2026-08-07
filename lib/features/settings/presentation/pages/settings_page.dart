@@ -17,6 +17,7 @@ import '../../../debts/providers/debt_repository.dart';
 import '../../../payment/providers/transaction_provider.dart';
 import '../../../products/providers/product_provider.dart';
 import '../../../../core/utils/backup_helper.dart';
+import '../../../../shared/widgets/security_gate.dart';
 
 enum SettingsSection { store, payment, printing, security, display, backup }
 
@@ -350,6 +351,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Widget _buildSecuritySection() {
+    final settings = ref.watch(settingsProvider);
+    final isUnlocked = ref.watch(pinUnlockProvider);
+    final hasPin = settings.securityPin != null && settings.securityPin!.isNotEmpty;
+
+    if (hasPin && !isUnlocked) {
+      return Container(
+        height: 400,
+        alignment: Alignment.center,
+        child: PinGate(
+          manualTrigger: true,
+          child: const SizedBox.shrink(),
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -392,6 +408,50 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ),
       ],
     );
+  }
+
+  Widget _buildPageLockToggle({
+    required String label,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.lock_person_rounded, size: 20, color: AppTheme.accent),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                Text(subtitle, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: value,
+            onChanged: onChanged,
+            activeTrackColor: AppTheme.accent,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _updatePageLock(StoreSettings Function() updateFn) {
+    requirePin(context, ref, () {
+      final updated = updateFn();
+      ref.read(settingsProvider.notifier).updateSettings(updated);
+      showSuccess(context, 'Pengaturan proteksi diperbarui');
+    });
   }
 
   Widget _buildInput(String label, TextEditingController ctrl, IconData icon, {int maxLines = 1}) {
@@ -664,6 +724,31 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               : 'Sangat disarankan untuk membuat PIN guna melindungi informasi finansial toko Anda.',
             style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
           ),
+          if (hasPin) ...[
+            const SizedBox(height: 24),
+            const Text('Proteksi Halaman (PIN)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            const SizedBox(height: 12),
+            _buildPageLockToggle(
+              label: 'Halaman Analitik',
+              subtitle: 'Kunci laporan laba dan statistik penjualan.',
+              value: settings.lockAnalyticsPage,
+              onChanged: (v) => _updatePageLock(() => settings.copyWith(lockAnalyticsPage: v)),
+            ),
+            const SizedBox(height: 8),
+            _buildPageLockToggle(
+              label: 'Halaman Produk',
+              subtitle: 'Kunci daftar harga modal dan inventaris.',
+              value: settings.lockProductsPage,
+              onChanged: (v) => _updatePageLock(() => settings.copyWith(lockProductsPage: v)),
+            ),
+            const SizedBox(height: 8),
+            _buildPageLockToggle(
+              label: 'Halaman Stok & Tagihan',
+              subtitle: 'Kunci riwayat restock dan hutang supplier.',
+              value: settings.lockInventoryPage,
+              onChanged: (v) => _updatePageLock(() => settings.copyWith(lockInventoryPage: v)),
+            ),
+          ],
           const SizedBox(height: 24),
           Row(
             children: [
@@ -773,77 +858,77 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) {
-          bool loading = false; // Moved inside to be scoped to the dialog state
-
-          return AlertDialog(
-            title: const Text('Reset PIN (Lupa PIN)'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Untuk mereset PIN, silakan masukkan password akun Anda untuk verifikasi identitas.', 
-                    style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-                const SizedBox(height: 20),
-                TextField(
-                  controller: emailCtrl,
-                  enabled: false,
-                  decoration: const InputDecoration(
-                    labelText: 'Email Akun', 
-                    isDense: true,
-                    filled: true,
+      builder: (dialogContext) {
+        bool loading = false;
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Reset PIN (Lupa PIN)'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Untuk mereset PIN, silakan masukkan password akun Anda untuk verifikasi identitas.', 
+                      style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: emailCtrl,
+                    enabled: false,
+                    decoration: const InputDecoration(
+                      labelText: 'Email Akun', 
+                      isDense: true,
+                      filled: true,
+                    ),
                   ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: passCtrl,
+                    obscureText: true,
+                    autofocus: true,
+                    decoration: const InputDecoration(labelText: 'Password Akun', isDense: true),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: loading ? null : () {
+                    if (Navigator.canPop(dialogContext)) {
+                      Navigator.pop(dialogContext);
+                    }
+                  }, 
+                  child: const Text('Batal')
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: passCtrl,
-                  obscureText: true,
-                  autofocus: true,
-                  decoration: const InputDecoration(labelText: 'Password Akun', isDense: true),
+                ElevatedButton(
+                  onPressed: loading ? null : () async {
+                    if (passCtrl.text.isEmpty) {
+                      showError(dialogContext, 'Masukkan password Anda');
+                      return;
+                    }
+
+                    setState(() => loading = true);
+                    
+                    try {
+                      await authRepo.verifyCredentials(emailCtrl.text.trim(), passCtrl.text);
+                      
+                      if (dialogContext.mounted) {
+                        Navigator.pop(dialogContext);
+                        onSuccess();
+                      }
+                    } catch (e) {
+                      if (dialogContext.mounted) {
+                        showError(dialogContext, e.toString());
+                        setState(() => loading = false);
+                      }
+                    }
+                  },
+                  child: loading 
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
+                    : const Text('Verifikasi & Reset'),
                 ),
               ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: loading ? null : () {
-                  if (Navigator.canPop(dialogContext)) {
-                    Navigator.pop(dialogContext);
-                  }
-                }, 
-                child: const Text('Batal')
-              ),
-              ElevatedButton(
-                onPressed: loading ? null : () async {
-                  if (passCtrl.text.isEmpty) {
-                    showError(dialogContext, 'Masukkan password Anda');
-                    return;
-                  }
-
-                  if (!context.mounted) return;
-                  setState(() => loading = true);
-                  
-                  try {
-                    await authRepo.verifyCredentials(emailCtrl.text.trim(), passCtrl.text);
-                    
-                    if (dialogContext.mounted) {
-                      Navigator.pop(dialogContext);
-                      onSuccess();
-                    }
-                  } catch (e) {
-                    if (dialogContext.mounted) {
-                      showError(dialogContext, e.toString());
-                      setState(() => loading = false);
-                    }
-                  }
-                },
-                child: loading 
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
-                  : const Text('Verifikasi & Reset'),
-              ),
-            ],
-          );
-        },
-      ),
+            );
+          },
+        );
+      },
     ).then((_) {
       emailCtrl.dispose();
       passCtrl.dispose();

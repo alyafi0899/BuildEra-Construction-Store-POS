@@ -102,7 +102,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
 
     setState(() => _processing = true);
     try {
-      final txId = await ref.read(transactionsActionProvider.notifier).checkout(
+      final tx = await ref.read(transactionsActionProvider.notifier).checkout(
         paymentMethod: _method,
         amountPaid:    (_method == AppConstants.paymentCash || _method == AppConstants.paymentPiutang) ? _paid : finalTotal,
         shippingFee:   _shippingFee, // New
@@ -110,12 +110,6 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
         notes:         _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
       );
       
-      // The transaction is now in the list
-      final txList = ref.read(transactionsProvider).asData?.value ?? [];
-      final tx     = txList.firstWhereOrNull((t) => t.id == txId);
-      
-      if (tx == null) throw StateError('Transaction not found');
-
       setState(() { _success = true; _tx = tx; });
     } catch (e) {
       if (mounted) showError(context, 'Gagal memproses: $e');

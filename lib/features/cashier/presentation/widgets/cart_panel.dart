@@ -778,23 +778,25 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                   style: Theme.of(context)
                       .textTheme
                       .titleMedium
-                      ?.copyWith(fontSize: 13, fontWeight: FontWeight.bold),
+                      ?.copyWith(fontSize: 12, fontWeight: FontWeight.bold), // Reduced font
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 6), // Reduced from 12
 
               // 5. Divider between Name and Input
               const SizedBox(
                 height: 32,
                 child: VerticalDivider(width: 1, color: AppTheme.border),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 6), // Reduced from 12
 
               // 2. Unit Section
               _CartInputGroup(
-                label: 'Unit', // 1. Separate Unit Label
+                label: 'Unit',
                 child: _StandardBox(
-                  width: 65,
+                  width: 48, // Reduced from 55
                   child: item.product.allUnits.length > 1
                       ? DropdownButton<String>(
                           value: item.selectedUnit.unitName,
@@ -802,10 +804,10 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                           isExpanded: true,
                           underline: const SizedBox(),
                           dropdownColor: AppTheme.surfaceAlt,
-                          icon: const Icon(Icons.arrow_drop_down, size: 16),
+                          icon: const Icon(Icons.arrow_drop_down, size: 14), // Smaller icon
                           style: const TextStyle(
                               color: AppTheme.accent,
-                              fontSize: 11,
+                              fontSize: 10, // Reduced font
                               fontWeight: FontWeight.w600),
                           items: item.product.allUnits
                               .map((u) => DropdownMenuItem(
@@ -823,35 +825,34 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                           child: Text(item.selectedUnit.unitName,
                               style: const TextStyle(
                                   color: AppTheme.accent,
-                                  fontSize: 11,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.w600)),
                         ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 4), // Reduced from 8
 
               // 2. QTY Section with +/- Buttons
               _CartInputGroup(
-                label: 'Qty', // 1. Separate Qty Label
+                label: 'Qty',
                 child: Row(
                   children: [
-                    // 2. Minus Button
                     QtyButton(
                         icon: Icons.remove,
                         onTap: () {
                           final q = item.quantity - 1;
-                          if (q >= 1) { // Changed from 0 to 1
+                          if (q >= 1) {
                             notifier.updateQuantity(item.id, q);
                             _qtyCtrl.text = q % 1 == 0 ? q.toInt().toString() : q.toString();
                           }
                         }),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 2), // Reduced from 4
                     _StandardBox(
-                      width: 45,
+                      width: 38, // Reduced from 45
                       child: ScrollableQtyField(
                         controller: _qtyCtrl,
                         onChanged: (v) {
-                          if (v >= 1) { // Changed from 0 to 1
+                          if (v >= 1) {
                             notifier.updateQuantity(item.id, v);
                           }
                         },
@@ -863,7 +864,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                               decimal: true),
                           style: const TextStyle(
                               color: AppTheme.textPrimary,
-                              fontSize: 12,
+                              fontSize: 11, // Reduced font
                               fontWeight: FontWeight.w600),
                           decoration: const InputDecoration(
                             isDense: true,
@@ -874,20 +875,19 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                           ),
                           onChanged: (v) {
                             final qty = Formatters.parseQuantity(v);
-                            if (qty >= 1) { // Changed from 0 to 1
+                            if (qty >= 1) {
                               notifier.updateQuantity(item.id, qty);
                             }
                           },
                           onSubmitted: (v) => notifier.updateQuantity(
                               item.id,
-                              Formatters.parseQuantity(v) >= 1 // Changed from 0 to 1
+                              Formatters.parseQuantity(v) >= 1
                                   ? Formatters.parseQuantity(v)
                                   : 1),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 4),
-                    // 2. Plus Button
+                    const SizedBox(width: 2), // Reduced from 4
                     QtyButton(
                         icon: Icons.add,
                         onTap: () {
@@ -898,13 +898,13 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 4), // Reduced from 8
 
               // 3. Harga Jual
               _CartInputGroup(
                 label: 'Harga Jual',
                 child: _StandardBox(
-                  width: 110,
+                  width: 85, // Reduced from 100
                   child: ScrollableQtyField(
                     controller: _priceCtrl,
                     step: 1000,
@@ -926,7 +926,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 4), // Reduced from 8
 
               // 4. Diskon
               _CartInputGroup(
@@ -934,7 +934,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                 child: Row(
                   children: [
                     _StandardBox(
-                      width: 70,
+                      width: 50, // Reduced from 60
                       child: ScrollableQtyField(
                         controller: _discountCtrl,
                         step: 1000,
@@ -955,7 +955,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                     ),
                     const SizedBox(width: 4),
                     _StandardBox(
-                      width: 45,
+                      width: 35, // Reduced from 40
                       child: DropdownButton<DiscountType>(
                         value: item.discountType,
                         underline: const SizedBox(),
@@ -964,7 +964,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                         alignment: Alignment.center,
                         icon: const SizedBox(),
                         style: const TextStyle(
-                            fontSize: 11,
+                            fontSize: 10, // Reduced font
                             color: AppTheme.accent,
                             fontWeight: FontWeight.bold),
                         items: const [
@@ -982,43 +982,48 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 4), // Reduced from 8
 
               // 3. Divider between Input and Total
               const SizedBox(
                 height: 32,
                 child: VerticalDivider(width: 1, color: AppTheme.border),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 4), // Reduced from 8
 
               // 5. Total Price & Profit Icon
               Expanded(
-                flex: 3,
+                flex: 4, // Increased flex to give price more room
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center, // Align items in the middle vertically
+                  mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    // 4. Small Label above Total Price
                     const Text('Total Harga', style: TextStyle(fontSize: 9, color: AppTheme.textMuted)),
                     const SizedBox(height: 4),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            if (item.totalDiscount > 0)
-                              Text('-${Formatters.currency(item.totalDiscount)}',
-                                  style: const TextStyle(
-                                      color: AppTheme.success,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600)),
-                            Text(Formatters.currency(item.subtotal),
-                                style: const TextStyle(
-                                    color: AppTheme.accent,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 15)),
-                          ],
+                        Expanded(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerRight,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                if (item.totalDiscount > 0)
+                                  Text('-${Formatters.currency(item.totalDiscount)}',
+                                      style: const TextStyle(
+                                          color: AppTheme.success,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600)),
+                                Text(Formatters.currency(item.subtotal),
+                                    style: const TextStyle(
+                                        color: AppTheme.accent,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 15)),
+                              ],
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 8),
                         _ProfitToggleIcon(
@@ -1031,7 +1036,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 8), // Reduced spacing
 
               // Divider before Remove Button
               const SizedBox(
@@ -1494,59 +1499,6 @@ class _StandardBox extends StatelessWidget {
       ),
       alignment: Alignment.center,
       child: child,
-    );
-  }
-}
-
-class _ProfitIndicator extends StatelessWidget {
-  final CartItem item;
-  final bool isActive;
-  const _ProfitIndicator({required this.item, required this.isActive});
-
-  @override
-  Widget build(BuildContext context) {
-    final margin = item.subtotal > 0 ? (item.profit / item.subtotal) : 0;
-    final isLowMargin = margin < 0.1;
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: isActive
-            ? AppTheme.accent
-            : (isLowMargin
-                ? AppTheme.danger.withValues(alpha: 0.1)
-                : AppTheme.success.withValues(alpha: 0.1)),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-            color: isActive
-                ? AppTheme.accent
-                : (isLowMargin ? AppTheme.danger : AppTheme.success),
-            width: 0.8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isActive ? Icons.lock_open_rounded : Icons.show_chart_rounded,
-            size: 12,
-            color: isActive
-                ? Colors.white
-                : (isLowMargin ? AppTheme.danger : AppTheme.success),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            isActive ? 'TUTUP DETAIL' : 'CEK UNTUNG',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w900,
-              color: isActive
-                  ? Colors.white
-                  : (isLowMargin ? AppTheme.danger : AppTheme.success),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

@@ -73,7 +73,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
            }
         }
 
-        if (settings.securityPin == null) {
+        if (settings.securityPin == null && settings.businessName.isEmpty) {
           return const SetupPinPage();
         }
 
