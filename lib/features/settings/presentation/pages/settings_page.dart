@@ -351,21 +351,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Widget _buildSecuritySection() {
-    final settings = ref.watch(settingsProvider);
-    final isUnlocked = ref.watch(pinUnlockProvider);
-    final hasPin = settings.securityPin != null && settings.securityPin!.isNotEmpty;
-
-    if (hasPin && !isUnlocked) {
-      return Container(
-        height: 400,
-        alignment: Alignment.center,
-        child: PinGate(
-          manualTrigger: true,
-          child: const SizedBox.shrink(),
-        ),
-      );
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
