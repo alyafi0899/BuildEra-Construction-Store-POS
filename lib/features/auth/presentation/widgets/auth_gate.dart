@@ -125,9 +125,18 @@ class _SyncPromptDialog extends ConsumerWidget {
             ),
           if (syncState.isSyncing) ...[
             const SizedBox(height: 24),
-            const CircularProgressIndicator(color: AppTheme.accent),
-            const SizedBox(height: 16),
-            const Text('Mengunduh data...', style: TextStyle(color: AppTheme.accent, fontSize: 12)),
+            LinearProgressIndicator(
+              value: syncState.progress,
+              backgroundColor: AppTheme.surfaceAlt,
+              color: AppTheme.accent,
+              minHeight: 8,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              syncState.currentTask ?? 'Mengunduh data...', 
+              style: const TextStyle(color: AppTheme.accent, fontSize: 12, fontWeight: FontWeight.w600),
+            ),
           ],
           if (syncState.error != null) ...[
             const SizedBox(height: 16),

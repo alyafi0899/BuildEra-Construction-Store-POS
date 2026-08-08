@@ -45,8 +45,8 @@ class ReceiptLayoutService {
                 _buildTransactionInfo(tx),
               pw.Divider(thickness: 0.5),
 
-              // 3. Items (Sales only)
-              if (tx != null) ...[
+              // 3. Items (Show if Transaction is present, even for Debt)
+              if (tx != null && tx.items.isNotEmpty) ...[
                 _buildItems(tx.items),
                 pw.Divider(thickness: 0.5),
               ],

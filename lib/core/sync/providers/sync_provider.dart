@@ -191,8 +191,23 @@ class SyncNotifier extends Notifier<SyncState> {
 
         if (snap.docs.isNotEmpty) {
           final box = await LocalDatabase.openBox(_uid!, col);
-          for (final doc in snap.docs) {
-            await box.put(doc.id, LocalDatabase.sanitize(doc.data()));
+          
+          const int chunkSize = 50;
+          final docs = snap.docs;
+          for (var i = 0; i < docs.length; i += chunkSize) {
+            final end = (i + chunkSize < docs.length) ? i + chunkSize : docs.length;
+            final chunk = docs.sublist(i, end);
+            
+            final Map<String, dynamic> entries = {};
+            for (final doc in chunk) {
+              entries[doc.id] = LocalDatabase.sanitize(doc.data());
+            }
+            
+            if (entries.isNotEmpty) {
+              await box.putAll(entries);
+            }
+            // Allow UI to breathe during delta sync
+            await Future.delayed(const Duration(milliseconds: 1));
           }
         }
       });

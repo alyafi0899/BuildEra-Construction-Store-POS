@@ -69,12 +69,36 @@ class TransactionRepository {
         .doc(_uid)
         .collection('transactions')
         .get()
-        .timeout(const Duration(seconds: 15));
+        .timeout(const Duration(seconds: 20));
 
-    if (force) await box.clear();
+    // 1. Prepare data in memory
+    final Map<String, dynamic> allEntries = {};
     for (final doc in snapshot.docs) {
       final data = Map<String, dynamic>.from(doc.data() as Map);
-      await box.put(doc.id, LocalDatabase.sanitize(data));
+      allEntries[doc.id] = LocalDatabase.sanitize(data);
+    }
+
+    if (force) await box.clear();
+    
+    // 2. Chunked write
+    const int chunkSize = 50;
+    final keys = allEntries.keys.toList();
+    
+    for (var i = 0; i < keys.length; i += chunkSize) {
+      final end = (i + chunkSize < keys.length) ? i + chunkSize : keys.length;
+      final Map<String, dynamic> batch = {};
+      
+      for (var j = i; j < end; j++) {
+        final key = keys[j];
+        batch[key] = allEntries[key];
+      }
+      
+      if (batch.isNotEmpty) {
+        await box.putAll(batch);
+      }
+      
+      // Allow UI to breathe
+      await Future.delayed(const Duration(milliseconds: 1));
     }
   }
 
@@ -103,6 +127,24 @@ class TransactionRepository {
     final finalTotal = cart.total + shippingFee;
     final change  = amountPaid - finalTotal;
 
+    final items = cart.items.map((item) {
+      return TransactionItem(
+        id:             _uuid.v4(),
+        transactionId:  id,
+        productId:      item.product.id,
+        productName:    item.product.name,
+        unitName:       item.selectedUnit.unitName,
+        conversionRate: item.selectedUnit.conversionRate,
+        quantity:       item.quantity,
+        costPrice:      item.costPrice,
+        originalPrice:  item.originalPrice,
+        soldPrice:      item.soldPrice,
+        discountValue:  item.discountValue,
+        discountType:   item.discountType,
+        subtotal:       item.subtotal,
+      );
+    }).toList();
+
     final now = DateTime.now();
     final t = Transaction(
       id:                 id,
@@ -125,26 +167,11 @@ class TransactionRepository {
       notes:              notes,
       createdAt:          now,
       updatedAt:          now,
+      items:              items, // CRITICAL FIX: Include items here
     );
 
     final data = t.toMap();
-    data['items'] = cart.items.map((item) {
-      return TransactionItem(
-        id:             _uuid.v4(),
-        transactionId:  id,
-        productId:      item.product.id,
-        productName:    item.product.name,
-        unitName:       item.selectedUnit.unitName,
-        conversionRate: item.selectedUnit.conversionRate,
-        quantity:       item.quantity,
-        costPrice:      item.costPrice,
-        originalPrice:  item.originalPrice,
-        soldPrice:      item.soldPrice,
-        discountValue:  item.discountValue,
-        discountType:   item.discountType,
-        subtotal:       item.subtotal,
-      ).toMap();
-    }).toList();
+    data['items'] = items.map((i) => i.toMap()).toList();
 
     final box = await _getBox();
     await box.put(id, data);

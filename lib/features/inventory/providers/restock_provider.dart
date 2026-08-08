@@ -23,28 +23,39 @@ class RestockRepository {
 
   Future<void> bootstrap({bool force = false}) async {
     final userDoc = FirebaseFirestore.instance.collection('users').doc(_uid);
+    const int chunkSize = 50;
+
+    Future<void> syncCollection(String boxName, String firestorePath) async {
+      final box = await LocalDatabase.openBox(_uid, boxName);
+      if (box.isNotEmpty && !force) return;
+
+      final snap = await userDoc.collection(firestorePath).get().timeout(const Duration(seconds: 20));
+      
+      final Map<String, dynamic> allEntries = {};
+      for (final d in snap.docs) {
+        final data = Map<String, dynamic>.from(d.data() as Map);
+        allEntries[d.id] = LocalDatabase.sanitize(data);
+      }
+
+      if (force) await box.clear();
+
+      final keys = allEntries.keys.toList();
+      for (var i = 0; i < keys.length; i += chunkSize) {
+        final end = (i + chunkSize < keys.length) ? i + chunkSize : keys.length;
+        final Map<String, dynamic> batch = {};
+        for (var j = i; j < end; j++) {
+          batch[keys[j]] = allEntries[keys[j]];
+        }
+        await box.putAll(batch);
+        await Future.delayed(const Duration(milliseconds: 1));
+      }
+    }
 
     // 1. Bootstrap Restock History
-    final rBox = await _getBox();
-    if (rBox.isEmpty || force) {
-      final snap = await userDoc.collection('restock_history').get().timeout(const Duration(seconds: 15));
-      if (force) await rBox.clear();
-      for (final d in snap.docs) {
-        final data = Map<String, dynamic>.from(d.data() as Map);
-        await rBox.put(d.id, LocalDatabase.sanitize(data));
-      }
-    }
+    await syncCollection('restock_history', 'restock_history');
 
     // 2. Bootstrap Bill Payments
-    final pBox = await LocalDatabase.openBox(_uid, 'bill_payments');
-    if (pBox.isEmpty || force) {
-      final snap = await userDoc.collection('bill_payments').get().timeout(const Duration(seconds: 15));
-      if (force) await pBox.clear();
-      for (final d in snap.docs) {
-        final data = Map<String, dynamic>.from(d.data() as Map);
-        await pBox.put(d.id, LocalDatabase.sanitize(data));
-      }
-    }
+    await syncCollection('bill_payments', 'bill_payments');
   }
 
   Stream<List<RestockRecord>> getRestockStream() async* {

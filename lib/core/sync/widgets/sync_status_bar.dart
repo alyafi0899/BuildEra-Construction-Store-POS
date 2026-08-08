@@ -97,7 +97,7 @@ class _ManualSyncButton extends ConsumerWidget {
     return InkWell(
       onTap: (!isOnline || syncState.isSyncing) 
           ? null 
-          : () => ref.read(initialSyncProvider.notifier).performInitialSync(force: true),
+          : () => ref.read(initialSyncProvider.notifier).triggerManualSync(),
       borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),

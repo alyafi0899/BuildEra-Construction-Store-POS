@@ -40,12 +40,37 @@ class ProductRepository {
     final box = await _getBox();
     if (box.isNotEmpty && !force) return; // Already cached
 
-    final snapshot = await _productsCol.get().timeout(const Duration(seconds: 15));
-    if (force) await box.clear();
-
+    final snapshot = await _productsCol.get().timeout(const Duration(seconds: 20));
+    
+    // 1. Prepare all data in memory FIRST to minimize UI "empty" time
+    final Map<String, dynamic> allEntries = {};
     for (final doc in snapshot.docs) {
       final data = Map<String, dynamic>.from(doc.data() as Map);
-      await box.put(doc.id, LocalDatabase.sanitize(data));
+      allEntries[doc.id] = LocalDatabase.sanitize(data);
+    }
+
+    // 2. Clear ONLY if forcing a full reload
+    if (force) await box.clear();
+
+    // 3. Chunked write to keep UI responsive
+    const int chunkSize = 50;
+    final keys = allEntries.keys.toList();
+    
+    for (var i = 0; i < keys.length; i += chunkSize) {
+      final end = (i + chunkSize < keys.length) ? i + chunkSize : keys.length;
+      final Map<String, dynamic> batch = {};
+      
+      for (var j = i; j < end; j++) {
+        final key = keys[j];
+        batch[key] = allEntries[key];
+      }
+      
+      if (batch.isNotEmpty) {
+        await box.putAll(batch);
+      }
+      
+      // Allow UI to breathe
+      await Future.delayed(const Duration(milliseconds: 1));
     }
   }
 
