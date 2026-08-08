@@ -841,7 +841,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                         icon: Icons.remove,
                         onTap: () {
                           final q = item.quantity - 1;
-                          if (q >= 1) {
+                          if (q >= 0) {
                             notifier.updateQuantity(item.id, q);
                             _qtyCtrl.text = q % 1 == 0 ? q.toInt().toString() : q.toString();
                           }
@@ -852,7 +852,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                       child: ScrollableQtyField(
                         controller: _qtyCtrl,
                         onChanged: (v) {
-                          if (v >= 1) {
+                          if (v >= 0) {
                             notifier.updateQuantity(item.id, v);
                           }
                         },
@@ -875,15 +875,15 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                           ),
                           onChanged: (v) {
                             final qty = Formatters.parseQuantity(v);
-                            if (qty >= 1) {
+                            if (qty >= 0) {
                               notifier.updateQuantity(item.id, qty);
                             }
                           },
                           onSubmitted: (v) => notifier.updateQuantity(
                               item.id,
-                              Formatters.parseQuantity(v) >= 1
+                              Formatters.parseQuantity(v) >= 0
                                   ? Formatters.parseQuantity(v)
-                                  : 1),
+                                  : 0),
                         ),
                       ),
                     ),

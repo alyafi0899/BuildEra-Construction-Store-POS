@@ -156,10 +156,7 @@ class CartNotifier extends Notifier<CartState> {
   }
 
   void updateQuantity(String cartItemId, double qty) {
-    if (qty <= 0) {
-      removeItem(cartItemId);
-      return;
-    }
+    if (qty < 0) return;
     state = state.copyWith(
       items: state.items.map((i) {
         if (i.id == cartItemId) return i.copyWith(quantity: qty);
