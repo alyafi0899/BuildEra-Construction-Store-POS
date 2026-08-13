@@ -13,6 +13,7 @@ import '../../../features/inventory/providers/restock_provider.dart';
 class InitialSyncState {
   final bool isInitialSyncDone;
   final bool isSyncing;
+  final bool isStatusLoaded;
   final String? error;
   final double progress;
   final String? currentTask;
@@ -20,6 +21,7 @@ class InitialSyncState {
   InitialSyncState({
     this.isInitialSyncDone = false,
     this.isSyncing = false,
+    this.isStatusLoaded = false,
     this.error,
     this.progress = 0,
     this.currentTask,
@@ -28,6 +30,7 @@ class InitialSyncState {
   InitialSyncState copyWith({
     bool? isInitialSyncDone,
     bool? isSyncing,
+    bool? isStatusLoaded,
     String? error,
     double? progress,
     String? currentTask,
@@ -35,6 +38,7 @@ class InitialSyncState {
     return InitialSyncState(
       isInitialSyncDone: isInitialSyncDone ?? this.isInitialSyncDone,
       isSyncing: isSyncing ?? this.isSyncing,
+      isStatusLoaded: isStatusLoaded ?? this.isStatusLoaded,
       error: error ?? this.error,
       progress: progress ?? this.progress,
       currentTask: currentTask ?? this.currentTask,
@@ -45,18 +49,17 @@ class InitialSyncState {
 class InitialSyncNotifier extends Notifier<InitialSyncState> {
   @override
   InitialSyncState build() {
-    // We use a future here to avoid blocking build, but we want it to update state ASAP
     final user = ref.watch(authStateProvider).value;
     if (user != null) {
       _loadSyncStatus(user.uid);
     }
-    return InitialSyncState(isInitialSyncDone: true); // Start as TRUE to avoid flashing dialog
+    return InitialSyncState(isStatusLoaded: false, isInitialSyncDone: true);
   }
 
   Future<void> _loadSyncStatus(String uid) async {
     final box = await LocalDatabase.openBox(uid, 'sync_meta');
     final isDone = box.get('initial_sync_done', defaultValue: false) as bool;
-    state = state.copyWith(isInitialSyncDone: isDone);
+    state = state.copyWith(isInitialSyncDone: isDone, isStatusLoaded: true);
   }
 
   Future<void> markAsDone() async {

@@ -6,6 +6,8 @@ import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
 
 class LocalDatabase {
+  static final Set<String> _migratedBoxes = {};
+
   static Future<void> init() async {
     if (kIsWeb) {
       await Hive.initFlutter();
@@ -36,7 +38,10 @@ class LocalDatabase {
     final boxName = _boxName(uid, collection);
 
     // Migration logic
-    await _migrateIfNecessary(uid, collection, dbPath);
+    if (!_migratedBoxes.contains(boxName)) {
+      await _migrateIfNecessary(uid, collection, dbPath);
+      _migratedBoxes.add(boxName);
+    }
 
     return await Hive.openBox<T>(boxName, path: dbPath);
   }
@@ -104,21 +109,26 @@ class LocalDatabase {
   /// Recursively converts Firestore Timestamps to ISO-8601 strings
   /// so they can be saved in Hive without custom adapters.
   static Map<String, dynamic> sanitize(Map<String, dynamic> data) {
-    final sanitized = <String, dynamic>{};
-    data.forEach((key, value) {
-      sanitized[key] = _sanitizeValue(value);
-    });
-    return sanitized;
+    return sanitizeMap(data);
   }
+}
 
-  static dynamic _sanitizeValue(dynamic value) {
-    if (value is Timestamp) {
-      return value.toDate().toIso8601String();
-    } else if (value is Map) {
-      return sanitize(Map<String, dynamic>.from(value));
-    } else if (value is List) {
-      return value.map(_sanitizeValue).toList();
-    }
-    return value;
+/// Top-level functions for Isolate compatibility
+Map<String, dynamic> sanitizeMap(Map<String, dynamic> data) {
+  final sanitized = <String, dynamic>{};
+  data.forEach((key, value) {
+    sanitized[key] = sanitizeValue(value);
+  });
+  return sanitized;
+}
+
+dynamic sanitizeValue(dynamic value) {
+  if (value is Timestamp) {
+    return value.toDate().toIso8601String();
+  } else if (value is Map) {
+    return sanitizeMap(Map<String, dynamic>.from(value));
+  } else if (value is List) {
+    return value.map(sanitizeValue).toList();
   }
+  return value;
 }

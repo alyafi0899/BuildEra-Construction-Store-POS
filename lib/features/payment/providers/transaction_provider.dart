@@ -71,12 +71,14 @@ class TransactionRepository {
         .get()
         .timeout(const Duration(seconds: 20));
 
-    // 1. Prepare data in memory
-    final Map<String, dynamic> allEntries = {};
-    for (final doc in snapshot.docs) {
-      final data = Map<String, dynamic>.from(doc.data() as Map);
-      allEntries[doc.id] = LocalDatabase.sanitize(data);
-    }
+    // 1. Offload processing to Isolate
+    final Map<String, dynamic> allEntries = await compute((List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+      final Map<String, dynamic> result = {};
+      for (final doc in docs) {
+        result[doc.id] = sanitizeMap(doc.data());
+      }
+      return result;
+    }, snapshot.docs.cast<QueryDocumentSnapshot<Map<String, dynamic>>>());
 
     if (force) await box.clear();
     

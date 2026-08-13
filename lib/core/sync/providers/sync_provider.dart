@@ -182,6 +182,11 @@ class SyncNotifier extends Notifier<SyncState> {
 
     final collections = ['products', 'customers', 'debts', 'debt_payments', 'transactions', 'suppliers', 'shipping_services'];
 
+    // Get IDs of documents currently in the sync queue to avoid overwriting local changes
+    final pendingIds = _queueBox?.values
+        .map((e) => Map<String, dynamic>.from(e as Map)['document_id'] as String)
+        .toSet() ?? {};
+
     try {
       // Fetch all deltas in parallel to improve performance
       final futures = collections.map((col) async {
@@ -198,15 +203,23 @@ class SyncNotifier extends Notifier<SyncState> {
             final end = (i + chunkSize < docs.length) ? i + chunkSize : docs.length;
             final chunk = docs.sublist(i, end);
             
-            final Map<String, dynamic> entries = {};
-            for (final doc in chunk) {
-              entries[doc.id] = LocalDatabase.sanitize(doc.data());
-            }
+            // Offload sanitization to background thread if the chunk is substantial
+            final Map<String, dynamic> entries = await compute((List<QueryDocumentSnapshot<Map<String, dynamic>>> docList) {
+              final Map<String, dynamic> result = {};
+              for (final doc in docList) {
+                // We pass pendingIds in a real scenario, but for compute we need to pass it as argument
+                result[doc.id] = sanitizeMap(doc.data());
+              }
+              return result;
+            }, chunk);
+
+            // Filter out pending local changes on the main thread (to avoid passing large sets to Isolate)
+            entries.removeWhere((id, _) => pendingIds.contains(id));
             
             if (entries.isNotEmpty) {
               await box.putAll(entries);
             }
-            // Allow UI to breathe during delta sync
+            // Allow UI to breathe
             await Future.delayed(const Duration(milliseconds: 1));
           }
         }

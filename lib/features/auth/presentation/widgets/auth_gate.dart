@@ -43,6 +43,12 @@ class _AuthGateState extends ConsumerState<AuthGate> {
           return const VerifyEmailPage();
         }
 
+        // Wait for sync status to be loaded to avoid flickering
+        final syncState = ref.watch(initialSyncProvider);
+        if (!syncState.isStatusLoaded) {
+           return const SplashScreen();
+        }
+
         // Check for PIN enforcement
         final settings = ref.watch(settingsProvider);
         

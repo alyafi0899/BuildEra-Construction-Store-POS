@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -32,11 +33,17 @@ class DebtRepository {
 
       final snap = await userDoc.collection(firestorePath).get().timeout(const Duration(seconds: 20));
       
-      final Map<String, dynamic> allEntries = {};
-      for (final d in snap.docs) {
-        final data = Map<String, dynamic>.from(d.data() as Map);
-        allEntries[d.id] = LocalDatabase.sanitize(data);
-      }
+      // Offload processing to Isolate to prevent UI freeze
+      final Map<String, dynamic> allEntries = await compute<List<QueryDocumentSnapshot<Map<String, dynamic>>>, Map<String, dynamic>>(
+        (docs) {
+          final Map<String, dynamic> result = {};
+          for (final d in docs) {
+            result[d.id] = sanitizeMap(d.data());
+          }
+          return result;
+        }, 
+        snap.docs.cast<QueryDocumentSnapshot<Map<String, dynamic>>>(),
+      );
 
       if (force) await box.clear();
 

@@ -42,12 +42,14 @@ class ProductRepository {
 
     final snapshot = await _productsCol.get().timeout(const Duration(seconds: 20));
     
-    // 1. Prepare all data in memory FIRST to minimize UI "empty" time
-    final Map<String, dynamic> allEntries = {};
-    for (final doc in snapshot.docs) {
-      final data = Map<String, dynamic>.from(doc.data() as Map);
-      allEntries[doc.id] = LocalDatabase.sanitize(data);
-    }
+    // 1. Offload sanitization to background thread
+    final Map<String, dynamic> allEntries = await compute((List<firestore.QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+      final Map<String, dynamic> result = {};
+      for (final doc in docs) {
+        result[doc.id] = sanitizeMap(doc.data());
+      }
+      return result;
+    }, snapshot.docs.cast<firestore.QueryDocumentSnapshot<Map<String, dynamic>>>());
 
     // 2. Clear ONLY if forcing a full reload
     if (force) await box.clear();
