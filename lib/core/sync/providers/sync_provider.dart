@@ -213,12 +213,37 @@ class SyncNotifier extends Notifier<SyncState> {
               return result;
             }, chunk);
 
-            // Filter out pending local changes on the main thread (to avoid passing large sets to Isolate)
-            entries.removeWhere((id, _) => pendingIds.contains(id));
-            
-            if (entries.isNotEmpty) {
-              await box.putAll(entries);
+            // Conflict Resolution: Only update if remote is strictly newer than local
+            for (final entry in entries.entries) {
+              final id = entry.key;
+              final remoteData = entry.value as Map<String, dynamic>;
+              
+              if (pendingIds.contains(id)) {
+                // Skip if local has a pending change in the queue
+                continue;
+              }
+
+              final localDataRaw = box.get(id);
+              if (localDataRaw != null) {
+                final localData = Map<String, dynamic>.from(localDataRaw as Map);
+                final localUpdatedStr = localData['updated_at'] as String?;
+                final remoteUpdatedStr = remoteData['updated_at'] as String?;
+
+                if (localUpdatedStr != null && remoteUpdatedStr != null) {
+                  final localUpdated = DateTime.tryParse(localUpdatedStr) ?? DateTime(2000);
+                  final remoteUpdated = DateTime.tryParse(remoteUpdatedStr) ?? DateTime(2000);
+
+                  // If local is newer or same as remote, skip overwrite
+                  if (localUpdated.isAfter(remoteUpdated) || localUpdated.isAtSameMomentAs(remoteUpdated)) {
+                    continue;
+                  }
+                }
+              }
+
+              // Apply update
+              await box.put(id, remoteData);
             }
+
             // Allow UI to breathe
             await Future.delayed(const Duration(milliseconds: 1));
           }
