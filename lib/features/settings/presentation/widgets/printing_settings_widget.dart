@@ -126,7 +126,7 @@ class PrintingSettingsWidget extends StatelessWidget {
                         SizedBox(
                           width: 180,
                           child: DropdownButtonFormField<String>(
-                            value: printerTransport,
+                            initialValue: printerTransport,
                             isDense: true,
                             decoration: const InputDecoration(
                               contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
