@@ -31,6 +31,7 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
   bool _sortAsc = true;
   String? _selectedProfileId;
   bool _isRollMode = true;
+  String? _labelPrinterUrl;
 
   final Map<String, int> _selectedQuantities = {};
 
@@ -68,6 +69,9 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
   @override
   void initState() {
     super.initState();
+    final settings = ref.read(settingsProvider);
+    _labelPrinterUrl = settings.labelPrinterUrl;
+
     _ctrlPaperW = TextEditingController(text: _paperWidthMm.toString());
     _ctrlPaperH = TextEditingController(text: _paperHeightMm.toString());
     _ctrlLabelW = TextEditingController(text: _labelWidthMm.toString());
@@ -308,8 +312,13 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
         marginAll: 0,
       );
 
+      final printer = _labelPrinterUrl != null
+          ? Printer(url: _labelPrinterUrl!)
+          : const Printer(url: 'default');
+
       // We use layoutPdf but with a forced format constraint to hint the printer driver
-      await Printing.layoutPdf(
+      await Printing.directPrintPdf(
+        printer: printer,
         onLayout: (f) async => Uint8List.fromList(result.bytes!),
         format: _isRollMode ? format : PdfPageFormat.a4,
         name: 'BuildEra_Labels_${DateTime.now().millisecondsSinceEpoch}',
@@ -556,6 +565,39 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
                                 _field('Harga Produk', _ctrlFntPrice,
                                     (v) => _fontSizePrice = v),
                               ]),
+                              const Divider(height: 40),
+                              _section('Printer Label', [
+                                ListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Target Printer',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: AppTheme.textSecondary)),
+                                  subtitle: Text(_labelPrinterUrl ??
+                                      'Belum dipilih (Gunakan Default)'),
+                                  trailing: TextButton(
+                                    onPressed: () async {
+                                      final printer =
+                                          await Printing.pickPrinter(
+                                              context: context);
+                                      if (printer != null) {
+                                        setState(() =>
+                                            _labelPrinterUrl = printer.url);
+                                        // Save to global settings as well
+                                        final current =
+                                            ref.read(settingsProvider);
+                                        ref
+                                            .read(settingsProvider.notifier)
+                                            .updateSettings(current.copyWith(
+                                                labelPrinterUrl: printer.url));
+                                      }
+                                    },
+                                    child: const Text('UBAH'),
+                                  ),
+                                ),
+                              ]),
+                              const Divider(height: 40),
                             ],
                           ),
                         ),

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:open_filex/open_filex.dart';
@@ -30,7 +31,7 @@ class DebtInvoiceHelper {
   }) async {
     final receipt = ReceiptDocument(
       title: 'NOTA PIUTANG',
-      lines: [], // Lines no longer used, logic moved to metadata-driven PDF builder
+      lines: [],
       metadata: {
         'customer': customer,
         'debt': debt,
@@ -54,6 +55,25 @@ class DebtInvoiceHelper {
 
   static Future<void> printDebtInvoice(Customer customer, Debt debt,
       List<DebtPayment> payments, StoreSettings settings, {Transaction? transaction}) async {
+    
+    // Direct PDF Optimization for Debt Invoices
+    if (settings.useFastPrint) {
+      final pdfBytes = await generateDebtPdf(
+          customer: customer, debt: debt, payments: payments, settings: settings, transaction: transaction);
+      
+      final printer = settings.invoicePrinterUrl != null 
+          ? Printer(url: settings.invoicePrinterUrl!) 
+          : const Printer(url: 'default');
+
+      debugPrint('DIRECT-PDF-DEBT-PRINT: Sending ${pdfBytes.length} bytes to ${printer.url}');
+
+      await Printing.directPrintPdf(
+        printer: printer,
+        onLayout: (format) async => pdfBytes,
+      );
+      return;
+    }
+
     final pdfBytes = await generateDebtPdf(
         customer: customer, debt: debt, payments: payments, settings: settings, transaction: transaction);
     await Printing.layoutPdf(

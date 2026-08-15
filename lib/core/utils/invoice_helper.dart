@@ -5,7 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
 import 'dart:io';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import '../../../shared/models/transaction.dart';
 import '../../../features/settings/models/store_settings.dart';
 import '../../printing/printing.dart';
@@ -25,7 +25,7 @@ class InvoiceHelper {
       Transaction tx, StoreSettings settings) async {
     final receipt = ReceiptDocument(
       title: settings.businessName.toUpperCase(),
-      lines: [], // Lines no longer used, logic moved to metadata-driven PDF builder
+      lines: [],
       metadata: {'transaction': tx, 'settings': settings},
     );
 
@@ -43,37 +43,24 @@ class InvoiceHelper {
 
   static Future<void> printInvoice(
       Transaction tx, StoreSettings settings) async {
+    // Optimization: If useFastPrint is ON, we use Direct PDF (no dialog)
+    // We send a valid PDF because Windows Spooler doesn't accept raw bytes via standard API
     if (settings.useFastPrint) {
-      final receipt = ReceiptDocument(
-        title: settings.businessName.toUpperCase(),
-        lines: [],
-        metadata: {'transaction': tx, 'settings': settings},
+      final pdfBytes = await generatePdf(tx, settings);
+      final printer = settings.invoicePrinterUrl != null 
+          ? Printer(url: settings.invoicePrinterUrl!) 
+          : const Printer(url: 'default');
+
+      debugPrint('DIRECT-PDF-PRINT: Sending ${pdfBytes.length} bytes to ${printer.url}');
+
+      await Printing.directPrintPdf(
+        printer: printer,
+        onLayout: (format) async => pdfBytes,
       );
-
-      final transport = settings.printerTransport == 'bluetooth'
-          ? PrinterTransport.escposBluetooth
-          : settings.printerTransport == 'usb'
-              ? PrinterTransport.escposUsb
-              : PrinterTransport.escposTcpIp;
-
-      final profile = PrinterProfile(
-        id: 'receipt-fast',
-        name: 'Receipt Fast',
-        transport: transport,
-        paperWidthMm: settings.receiptWidth,
-        marginMm: settings.receiptMargin,
-      );
-
-      final result = await PrintOrchestrator().printReceipt(receipt, profile);
-      if (result.success && result.bytes != null) {
-        await Printing.directPrint(
-          printer: const Printer(url: 'default'), // User will be prompted to pick if not handled
-          onLayout: (format) async => Uint8List.fromList(result.bytes!),
-        );
-        return;
-      }
+      return;
     }
 
+    // Normal mode: Show Dialog
     final pdfBytes = await generatePdf(tx, settings);
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdfBytes,

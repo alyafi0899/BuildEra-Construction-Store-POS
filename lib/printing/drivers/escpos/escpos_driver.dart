@@ -100,6 +100,7 @@ class EscPosBuilder {
 
   void _init() {
     _bytes.addAll([0x1B, 0x40]); // Initialize
+    _bytes.addAll([0x1B, 0x74, 0x00]); // Select character code table (PC437)
   }
 
   void resetStyle() {

@@ -114,10 +114,10 @@ class LabelLayoutService {
         paperHeightMm * mmToPt,
         marginAll: paperMarginMm * mmToPt,
       );
-      final labelsPerPage = columns *
+      final int labelsPerPage = columns *
           ((pageFormat.availableHeight / (labelHeightMm * mmToPt)).floor());
 
-      for (var i = 0; i < items.length; i += labelsPerPage as int) {
+      for (var i = 0; i < items.length; i += labelsPerPage) {
         final pageItems = items.skip(i).take(labelsPerPage).toList();
         pdf.addPage(
           pw.Page(

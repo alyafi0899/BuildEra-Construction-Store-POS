@@ -43,10 +43,12 @@ class StoreSettings {
   final bool lockAnalyticsPage; // New: Toggle for Analytics page
   final bool lockProductsPage; // New: Toggle for Products page
   final bool lockInventoryPage; // New: Toggle for Inventory page
-  final double receiptWidth; // New: Receipt paper width in mm
-  final double receiptMargin; // New: Receipt left/right margin in points
-  final bool useFastPrint; // New: Use native ESC/POS for speed
-  final String printerTransport; // New: 'pdf', 'usb', 'bluetooth'
+  final double receiptWidth;
+  final double receiptMargin;
+  final bool useFastPrint; // Direct Print for Invoices
+  final String printerTransport;
+  final String? invoicePrinterUrl; // Dedicated for invoices
+  final String? labelPrinterUrl;   // Dedicated for labels
 
   const StoreSettings({
     this.businessName = '',
@@ -67,6 +69,8 @@ class StoreSettings {
     this.receiptMargin = 4.0,
     this.useFastPrint = false,
     this.printerTransport = 'pdf',
+    this.invoicePrinterUrl,
+    this.labelPrinterUrl,
   });
 
   Map<String, dynamic> toMap() {
@@ -89,6 +93,8 @@ class StoreSettings {
       'receiptMargin': receiptMargin,
       'useFastPrint': useFastPrint,
       'printerTransport': printerTransport,
+      'invoicePrinterUrl': invoicePrinterUrl,
+      'labelPrinterUrl': labelPrinterUrl,
     };
   }
 
@@ -115,6 +121,8 @@ class StoreSettings {
       receiptMargin: (map['receiptMargin'] as num?)?.toDouble() ?? 4.0,
       useFastPrint: map['useFastPrint'] as bool? ?? false,
       printerTransport: map['printerTransport']?.toString() ?? 'pdf',
+      invoicePrinterUrl: map['invoicePrinterUrl']?.toString(),
+      labelPrinterUrl: map['labelPrinterUrl']?.toString(),
     );
   }
 
@@ -141,6 +149,8 @@ class StoreSettings {
     double? receiptMargin,
     bool? useFastPrint,
     String? printerTransport,
+    String? invoicePrinterUrl,
+    String? labelPrinterUrl,
   }) {
     return StoreSettings(
       businessName: businessName ?? this.businessName,
@@ -161,6 +171,8 @@ class StoreSettings {
       receiptMargin: receiptMargin ?? this.receiptMargin,
       useFastPrint: useFastPrint ?? this.useFastPrint,
       printerTransport: printerTransport ?? this.printerTransport,
+      invoicePrinterUrl: invoicePrinterUrl ?? this.invoicePrinterUrl,
+      labelPrinterUrl: labelPrinterUrl ?? this.labelPrinterUrl,
     );
   }
 }
