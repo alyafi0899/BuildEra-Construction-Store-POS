@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
@@ -296,8 +297,21 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
     );
 
     if (result.bytes != null && result.bytes!.isNotEmpty) {
+      final mmToPt = 2.83465;
+      final rollWidth =
+          (_labelWidthMm * _columnCount) + (_labelMarginMm * (_columnCount - 1));
+
+      // Define the exact format to prevent OS scaling
+      final format = PdfPageFormat(
+        rollWidth * mmToPt,
+        _labelHeightMm * mmToPt,
+        marginAll: 0,
+      );
+
+      // We use layoutPdf but with a forced format constraint to hint the printer driver
       await Printing.layoutPdf(
         onLayout: (f) async => Uint8List.fromList(result.bytes!),
+        format: _isRollMode ? format : PdfPageFormat.a4,
         name: 'BuildEra_Labels_${DateTime.now().millisecondsSinceEpoch}',
       );
     }

@@ -43,6 +43,37 @@ class InvoiceHelper {
 
   static Future<void> printInvoice(
       Transaction tx, StoreSettings settings) async {
+    if (settings.useFastPrint) {
+      final receipt = ReceiptDocument(
+        title: settings.businessName.toUpperCase(),
+        lines: [],
+        metadata: {'transaction': tx, 'settings': settings},
+      );
+
+      final transport = settings.printerTransport == 'bluetooth'
+          ? PrinterTransport.escposBluetooth
+          : settings.printerTransport == 'usb'
+              ? PrinterTransport.escposUsb
+              : PrinterTransport.escposTcpIp;
+
+      final profile = PrinterProfile(
+        id: 'receipt-fast',
+        name: 'Receipt Fast',
+        transport: transport,
+        paperWidthMm: settings.receiptWidth,
+        marginMm: settings.receiptMargin,
+      );
+
+      final result = await PrintOrchestrator().printReceipt(receipt, profile);
+      if (result.success && result.bytes != null) {
+        await Printing.directPrint(
+          printer: const Printer(url: 'default'), // User will be prompted to pick if not handled
+          onLayout: (format) async => Uint8List.fromList(result.bytes!),
+        );
+        return;
+      }
+    }
+
     final pdfBytes = await generatePdf(tx, settings);
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdfBytes,

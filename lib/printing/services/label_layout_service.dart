@@ -40,7 +40,7 @@ class LabelLayoutService {
     final labelPaddingMm =
         (document.metadata['labelPaddingMm'] ?? settings.labelPaddingMm)
             .toDouble();
-    final columns = (document.metadata['columns'] ?? settings.columns).toInt();
+    final int columns = (document.metadata['columns'] ?? settings.columns).toInt();
     final paperWidthMm =
         (document.metadata['paperWidthMm'] ?? settings.paperWidthMm).toDouble();
     final paperHeightMm =
@@ -73,13 +73,15 @@ class LabelLayoutService {
     if (isRollMode) {
       final rollWidth =
           (labelWidthMm * columns) + (horizontalGapMm * (columns - 1));
+      // Thermal printers expect the page height to be the exact label height (pitch).
+      // The printer hardware sensor handles the physical gap.
       final rollFormat = PdfPageFormat(
         rollWidth * mmToPt,
-        (labelHeightMm + verticalGapMm) * mmToPt,
+        labelHeightMm * mmToPt,
         marginAll: 0,
       );
 
-      for (var i = 0; i < items.length; i += columns as int) {
+      for (var i = 0; i < items.length; i += columns) {
         final pageItems = items.skip(i).take(columns).toList();
         pdf.addPage(
           pw.Page(

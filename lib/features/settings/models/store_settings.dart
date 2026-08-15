@@ -45,6 +45,8 @@ class StoreSettings {
   final bool lockInventoryPage; // New: Toggle for Inventory page
   final double receiptWidth; // New: Receipt paper width in mm
   final double receiptMargin; // New: Receipt left/right margin in points
+  final bool useFastPrint; // New: Use native ESC/POS for speed
+  final String printerTransport; // New: 'pdf', 'usb', 'bluetooth'
 
   const StoreSettings({
     this.businessName = '',
@@ -63,6 +65,8 @@ class StoreSettings {
     this.lockInventoryPage = true,
     this.receiptWidth = 80.0,
     this.receiptMargin = 4.0,
+    this.useFastPrint = false,
+    this.printerTransport = 'pdf',
   });
 
   Map<String, dynamic> toMap() {
@@ -83,6 +87,8 @@ class StoreSettings {
       'lockInventoryPage': lockInventoryPage,
       'receiptWidth': receiptWidth,
       'receiptMargin': receiptMargin,
+      'useFastPrint': useFastPrint,
+      'printerTransport': printerTransport,
     };
   }
 
@@ -107,6 +113,8 @@ class StoreSettings {
       lockInventoryPage: map['lockInventoryPage'] as bool? ?? true,
       receiptWidth: (map['receiptWidth'] as num?)?.toDouble() ?? 80.0,
       receiptMargin: (map['receiptMargin'] as num?)?.toDouble() ?? 4.0,
+      useFastPrint: map['useFastPrint'] as bool? ?? false,
+      printerTransport: map['printerTransport']?.toString() ?? 'pdf',
     );
   }
 
@@ -131,6 +139,8 @@ class StoreSettings {
     bool? lockInventoryPage,
     double? receiptWidth,
     double? receiptMargin,
+    bool? useFastPrint,
+    String? printerTransport,
   }) {
     return StoreSettings(
       businessName: businessName ?? this.businessName,
@@ -149,6 +159,8 @@ class StoreSettings {
       lockInventoryPage: lockInventoryPage ?? this.lockInventoryPage,
       receiptWidth: receiptWidth ?? this.receiptWidth,
       receiptMargin: receiptMargin ?? this.receiptMargin,
+      useFastPrint: useFastPrint ?? this.useFastPrint,
+      printerTransport: printerTransport ?? this.printerTransport,
     );
   }
 }
