@@ -182,6 +182,9 @@ class SyncNotifier extends Notifier<SyncState> {
 
     final collections = ['products', 'customers', 'debts', 'debt_payments', 'transactions', 'suppliers', 'shipping_services'];
 
+    // Add 1 second overlap to avoid missing updates due to clock skew
+    final queryTimestamp = localLastSync.subtract(const Duration(seconds: 1));
+
     // Get IDs of documents currently in the sync queue to avoid overwriting local changes
     final pendingIds = _queueBox?.values
         .map((e) => Map<String, dynamic>.from(e as Map)['document_id'] as String)
@@ -191,7 +194,7 @@ class SyncNotifier extends Notifier<SyncState> {
       // Fetch all deltas in parallel to improve performance
       final futures = collections.map((col) async {
         final snap = await userDoc.collection(col)
-            .where('updated_at', isGreaterThan: localLastSync.toIso8601String())
+            .where('updated_at', isGreaterThan: queryTimestamp.toIso8601String())
             .get(const GetOptions(source: Source.server)); 
 
         if (snap.docs.isNotEmpty) {
@@ -207,7 +210,6 @@ class SyncNotifier extends Notifier<SyncState> {
             final Map<String, dynamic> entries = await compute((List<QueryDocumentSnapshot<Map<String, dynamic>>> docList) {
               final Map<String, dynamic> result = {};
               for (final doc in docList) {
-                // We pass pendingIds in a real scenario, but for compute we need to pass it as argument
                 result[doc.id] = sanitizeMap(doc.data());
               }
               return result;
@@ -219,7 +221,7 @@ class SyncNotifier extends Notifier<SyncState> {
               final remoteData = entry.value as Map<String, dynamic>;
               
               if (pendingIds.contains(id)) {
-                // Skip if local has a pending change in the queue
+                // Skip if local has a pending change in the queue to avoid loss of local-first edits
                 continue;
               }
 
@@ -243,9 +245,6 @@ class SyncNotifier extends Notifier<SyncState> {
               // Apply update
               await box.put(id, remoteData);
             }
-
-            // Allow UI to breathe
-            await Future.delayed(const Duration(milliseconds: 1));
           }
         }
       });

@@ -27,57 +27,62 @@ class ReceiptLayoutService {
 
     if (settings == null) return Uint8List(0);
 
+    final design = settings.invoiceDesign;
+    final font = design == 'fast' ? pw.Font.courier() : null;
+    final baseFontSize = design == 'fast' ? 7.0 : 8.0;
+
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat(width, double.infinity, marginAll: profile.marginMm * PdfPageFormat.mm),
+        theme: font != null ? pw.ThemeData.withFont(base: font, bold: pw.Font.courierBold()) : null,
         build: (context) {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               // 1. Header
-              _buildHeader(settings),
-              pw.Divider(thickness: 0.5),
+              _buildHeader(settings, design),
+              if (design != 'fast') pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
 
               // 2. Info
               if (debt != null && customer != null)
-                _buildDebtInfo(customer, debt)
+                _buildDebtInfo(customer, debt, baseFontSize)
               else if (tx != null)
-                _buildTransactionInfo(tx),
-              pw.Divider(thickness: 0.5),
+                _buildTransactionInfo(tx, baseFontSize),
+              if (design != 'fast') pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
 
-              // 3. Items (Show if Transaction is present, even for Debt)
+              // 3. Items
               if (tx != null && tx.items.isNotEmpty) ...[
-                _buildItems(tx.items),
-                pw.Divider(thickness: 0.5),
+                _buildItems(tx.items, baseFontSize, design),
+                if (design != 'fast') pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
               ],
 
               // 4. Summary
               if (debt != null)
-                _buildDebtSummary(debt)
+                _buildDebtSummary(debt, baseFontSize, design)
               else if (tx != null)
-                _buildTransactionSummary(tx),
-              pw.Divider(thickness: 0.5),
+                _buildTransactionSummary(tx, baseFontSize, design),
+              if (design != 'fast') pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
 
               // 4.1 Notes
               if ((tx?.notes?.isNotEmpty ?? false) || (debt?.notes?.isNotEmpty ?? false)) ...[
-                _buildNotes(tx?.notes ?? debt?.notes ?? ''),
-                pw.Divider(thickness: 0.5),
+                _buildNotes(tx?.notes ?? debt?.notes ?? '', baseFontSize),
+                if (design != 'fast') pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
               ],
 
               // 5. Payment History (Debt only)
-              if (payments != null) ...[
-                _buildPaymentHistory(payments),
-                pw.Divider(thickness: 0.5),
+              if (payments != null && payments.isNotEmpty) ...[
+                _buildPaymentHistory(payments, baseFontSize),
+                if (design != 'fast') pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
               ],
 
-              // 6. Conditional Payment Info
-              if (debt != null || tx?.paymentMethod == AppConstants.paymentTransfer) ...[
-                _buildPaymentInfo(settings),
-                pw.Divider(thickness: 0.5),
+              // 6. Conditional Payment Info (Banks)
+              if (debt != null || tx?.paymentMethod == AppConstants.paymentTransfer || tx?.paymentMethod == AppConstants.paymentPiutang) ...[
+                _buildPaymentInfo(settings, baseFontSize),
+                if (design != 'fast') pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
               ],
 
               // 7. Final Footer
-              _buildFinalFooter(debt != null),
+              _buildFinalFooter(debt != null, baseFontSize),
             ],
           );
         },
@@ -87,60 +92,80 @@ class ReceiptLayoutService {
     return pdf.save();
   }
 
-  pw.Widget _buildHeader(StoreSettings s) {
+  pw.Widget _rawDivider(double widthMm) {
+    final count = widthMm < 60 ? 32 : 48;
+    return pw.Text('-' * count, style: const pw.TextStyle(fontSize: 7));
+  }
+
+  pw.Widget _buildHeader(StoreSettings s, String design) {
+    final isModern = design == 'modern';
     return pw.Center(
       child: pw.Column(
         children: [
           pw.Text(s.businessName.toUpperCase(),
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+              style: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold, 
+                  fontSize: isModern ? 16 : 14)),
           pw.SizedBox(height: 2),
-          if (s.address.isNotEmpty) pw.Text(s.address, style: const pw.TextStyle(fontSize: 8)),
-          if (s.phone.isNotEmpty) pw.Text('Telp: ${s.phone}', style: const pw.TextStyle(fontSize: 8)),
-          if (s.email.isNotEmpty) pw.Text(s.email, style: const pw.TextStyle(fontSize: 8)),
+          if (s.address.isNotEmpty) pw.Text(s.address, 
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(fontSize: isModern ? 9 : 8)),
+          if (s.phone.isNotEmpty) pw.Text('Telp: ${s.phone}', 
+              style: pw.TextStyle(fontSize: isModern ? 9 : 8)),
+          if (s.email.isNotEmpty) pw.Text(s.email, 
+              style: pw.TextStyle(fontSize: isModern ? 9 : 8)),
+          if (isModern) pw.SizedBox(height: 4),
         ],
       ),
     );
   }
 
-  pw.Widget _buildTransactionInfo(Transaction tx) {
+  pw.Widget _buildTransactionInfo(Transaction tx, double fontSize) {
     final dateStr = Formatters.date(tx.createdAt);
     final timeStr = DateFormat('HH:mm').format(tx.createdAt);
 
     return pw.Column(
       children: [
-        _row('Kasir : ${tx.cashierName ?? 'Admin'}', dateStr, fontSize: 8),
-        _row('No    : ${tx.invoiceNumber}', timeStr, fontSize: 8),
+        _row('Kasir : ${tx.cashierName ?? 'Admin'}', dateStr, fontSize: fontSize),
+        _row('No    : ${tx.invoiceNumber}', timeStr, fontSize: fontSize),
       ],
     );
   }
 
-  pw.Widget _buildDebtInfo(Customer c, Debt d) {
+  pw.Widget _buildDebtInfo(Customer c, Debt d, double fontSize) {
     final now = DateTime.now();
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        _row('Plg : ${c.name}', Formatters.date(now), fontSize: 8),
-        if (c.phone.isNotEmpty) pw.Text('Telp: ${c.phone}', style: const pw.TextStyle(fontSize: 8)),
-        _row('No  : ${d.invoiceNumber}', DateFormat('HH:mm').format(now), fontSize: 8),
-        pw.Text('Jatuh Tempo: ${Formatters.date(d.dueDate)}', style: const pw.TextStyle(fontSize: 8)),
+        _row('Plg : ${c.name}', Formatters.date(now), fontSize: fontSize),
+        if (c.phone.isNotEmpty) pw.Text('Telp: ${c.phone}', style: pw.TextStyle(fontSize: fontSize)),
+        _row('No  : ${d.invoiceNumber}', DateFormat('HH:mm').format(now), fontSize: fontSize),
+        pw.Text('Jatuh Tempo: ${Formatters.date(d.dueDate)}', style: pw.TextStyle(fontSize: fontSize)),
       ],
     );
   }
 
-  pw.Widget _buildItems(List<TransactionItem> items) {
+  pw.Widget _buildItems(List<TransactionItem> items, double fontSize, String design) {
+    final isModern = design == 'modern';
     return pw.Column(
       children: items.map((item) {
         return pw.Padding(
-          padding: const pw.EdgeInsets.only(bottom: 4),
+          padding: pw.EdgeInsets.only(bottom: isModern ? 6 : 4),
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text(item.productName, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+              pw.Text(item.productName, style: pw.TextStyle(fontSize: fontSize, fontWeight: pw.FontWeight.bold)),
               _row(
                 '${Formatters.decimal(item.quantity)} ${item.unitName} x ${Formatters.currency(item.soldPrice)}',
                 Formatters.currency(item.subtotal),
-                fontSize: 8,
+                fontSize: fontSize,
               ),
+              if (item.totalDiscount > 0)
+                pw.Align(
+                  alignment: pw.Alignment.centerRight,
+                  child: pw.Text('(Disc: -${Formatters.currency(item.totalDiscount)})', 
+                    style: pw.TextStyle(fontSize: fontSize - 1, fontStyle: pw.FontStyle.italic)),
+                ),
             ],
           ),
         );
@@ -148,95 +173,96 @@ class ReceiptLayoutService {
     );
   }
 
-  pw.Widget _buildTransactionSummary(Transaction tx) {
+  pw.Widget _buildTransactionSummary(Transaction tx, double fontSize, String design) {
     final disc = tx.itemDiscountTotal + tx.transDiscountAmount;
+    final isModern = design == 'modern';
+    
     return pw.Column(
       children: [
-        _row('Subtotal', Formatters.currency(tx.subtotal), fontSize: 8),
-        if (disc > 0) _row('Potongan', '-${Formatters.currency(disc)}', fontSize: 8),
-        if (tx.taxAmount > 0) _row('Pajak', Formatters.currency(tx.taxAmount), fontSize: 8),
-        if (tx.shippingFee > 0) _row('Ongkir', Formatters.currency(tx.shippingFee), fontSize: 8),
+        _row('Subtotal', Formatters.currency(tx.subtotal), fontSize: fontSize),
+        if (disc > 0) _row('Potongan', '-${Formatters.currency(disc)}', fontSize: fontSize),
+        if (tx.taxAmount > 0) _row('Pajak (PPN)', Formatters.currency(tx.taxAmount), fontSize: fontSize),
+        if (tx.shippingFee > 0) _row('Ongkir', Formatters.currency(tx.shippingFee), fontSize: fontSize),
         pw.SizedBox(height: 4),
         pw.Align(
           alignment: pw.Alignment.centerRight,
           child: pw.Text('TOTAL  ${Formatters.currency(tx.total)}',
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: isModern ? 14 : 12)),
         ),
         pw.SizedBox(height: 4),
-        _row('Bayar (${tx.paymentMethod})', Formatters.currency(tx.amountPaid), fontSize: 8),
-        _row('Kembalian', Formatters.currency(tx.changeAmount), fontSize: 8),
+        _row('Bayar (${tx.paymentMethod})', Formatters.currency(tx.amountPaid), fontSize: fontSize),
+        _row('Kembalian', Formatters.currency(tx.changeAmount), fontSize: fontSize),
       ],
     );
   }
 
-  pw.Widget _buildDebtSummary(Debt d) {
+  pw.Widget _buildDebtSummary(Debt d, double fontSize, String design) {
+    final isModern = design == 'modern';
     return pw.Column(
       children: [
-        _row('Total Piutang Awal', Formatters.currency(d.totalAmount), fontSize: 8),
-        _row('Total Sudah Bayar', Formatters.currency(d.paidAmount), fontSize: 8),
+        _row('Total Piutang Awal', Formatters.currency(d.totalAmount), fontSize: fontSize),
+        _row('Total Sudah Bayar', Formatters.currency(d.paidAmount), fontSize: fontSize),
         pw.SizedBox(height: 4),
         pw.Align(
           alignment: pw.Alignment.centerRight,
           child: pw.Text('SISA PIUTANG  ${Formatters.currency(d.remainingBalance)}',
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: isModern ? 14 : 12)),
         ),
       ],
     );
   }
 
-  pw.Widget _buildPaymentHistory(List<DebtPayment> payments) {
+  pw.Widget _buildPaymentHistory(List<DebtPayment> payments, double fontSize) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Center(child: pw.Text('RIWAYAT CICILAN / PEMBAYARAN', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+        pw.Center(child: pw.Text('RIWAYAT CICILAN', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fontSize))),
         pw.SizedBox(height: 4),
-        if (payments.isEmpty)
-          pw.Center(child: pw.Text('Belum ada riwayat pembayaran', style: const pw.TextStyle(fontSize: 8)))
-        else
-          ...payments.map((p) => _row(Formatters.date(p.createdAt), Formatters.currency(p.amount), fontSize: 8)),
+        ...payments.map((p) => _row(Formatters.date(p.createdAt), Formatters.currency(p.amount), fontSize: fontSize)),
       ],
     );
   }
 
-  pw.Widget _buildPaymentInfo(StoreSettings s) {
+  pw.Widget _buildPaymentInfo(StoreSettings s, double fontSize) {
     if (s.bankAccounts.isEmpty) return pw.SizedBox();
     return pw.Column(
       children: [
         pw.Center(
-          child: pw.Text('INFORMASI PEMBAYARAN TRANSFER',
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+          child: pw.Text('PEMBAYARAN TRANSFER',
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fontSize)),
         ),
         pw.SizedBox(height: 2),
         ...s.bankAccounts.map((acc) => pw.Center(
               child: pw.Text(
                   '${acc.bankName}: ${acc.accountNumber} a/n ${acc.accountHolder}',
-                  style: const pw.TextStyle(fontSize: 8)),
+                  style: pw.TextStyle(fontSize: fontSize - 1)),
             )),
         pw.SizedBox(height: 4),
       ],
     );
   }
 
-  pw.Widget _buildFinalFooter(bool isDebt) {
+  pw.Widget _buildFinalFooter(bool isDebt, double fontSize) {
     return pw.Center(
       child: pw.Column(
         children: [
           pw.Text(isDebt ? 'Dokumen ini adalah bukti sah piutang' : 'Terima Kasih atas Kunjungan Anda',
-              style: const pw.TextStyle(fontSize: 8)),
+              style: pw.TextStyle(fontSize: fontSize)),
           pw.SizedBox(height: 2),
-          pw.Text('Printed: ${Formatters.dateTime(DateTime.now())}', style: const pw.TextStyle(fontSize: 7)),
+          pw.Text('Waktu Cetak: ${Formatters.dateTime(DateTime.now())}', 
+              style: pw.TextStyle(fontSize: fontSize - 1, fontStyle: pw.FontStyle.italic)),
         ],
       ),
     );
   }
 
-  pw.Widget _buildNotes(String notes) {
+  pw.Widget _buildNotes(String notes, double fontSize) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text('Keterangan:', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+        pw.Text('Keterangan:', style: pw.TextStyle(fontSize: fontSize, fontWeight: pw.FontWeight.bold)),
         pw.SizedBox(height: 1),
-        pw.Text(notes, style: const pw.TextStyle(fontSize: 8)),
+        pw.Text(notes, style: pw.TextStyle(fontSize: fontSize)),
       ],
     );
   }

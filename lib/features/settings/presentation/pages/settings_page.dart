@@ -43,6 +43,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   bool _useFastPrint = false;
   String _printerTransport = 'pdf';
+  String _invoiceDesign = 'classic';
   String? _invoicePrinterUrl;
 
   List<BankAccount> _bankAccounts = [];
@@ -63,6 +64,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         TextEditingController(text: settings.receiptMargin.toString());
     _useFastPrint = settings.useFastPrint;
     _printerTransport = settings.printerTransport;
+    _invoiceDesign = settings.invoiceDesign;
     _invoicePrinterUrl = settings.invoicePrinterUrl;
     _bankAccounts = List.from(settings.bankAccounts);
   }
@@ -106,6 +108,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             receiptMargin: double.tryParse(_receiptMarginCtrl.text) ?? 4.0,
             useFastPrint: _useFastPrint,
             printerTransport: _printerTransport,
+            invoiceDesign: _invoiceDesign,
             invoicePrinterUrl: _invoicePrinterUrl,
             bankAccounts: _bankAccounts,
           );
@@ -558,9 +561,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           marginCtrl: _receiptMarginCtrl,
           useFastPrint: _useFastPrint,
           printerTransport: _printerTransport,
+          invoiceDesign: _invoiceDesign,
           invoicePrinterUrl: _invoicePrinterUrl,
           onFastPrintChanged: (v) => setState(() => _useFastPrint = v),
           onTransportChanged: (v) => setState(() => _printerTransport = v),
+          onDesignChanged: (v) => setState(() => _invoiceDesign = v),
           onInvoicePrinterChanged: (v) =>
               setState(() => _invoicePrinterUrl = v),
         ),

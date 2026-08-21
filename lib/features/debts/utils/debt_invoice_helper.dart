@@ -44,7 +44,7 @@ class DebtInvoiceHelper {
     final profile = PrinterProfile(
       id: 'debt-receipt',
       name: 'Debt Receipt',
-      transport: PrinterTransport.officePdf,
+      transport: _mapTransport(settings.printerTransport),
       paperWidthMm: settings.receiptWidth,
       marginMm: settings.receiptMargin,
     );
@@ -56,6 +56,50 @@ class DebtInvoiceHelper {
   static Future<void> printDebtInvoice(Customer customer, Debt debt,
       List<DebtPayment> payments, StoreSettings settings, {Transaction? transaction}) async {
     
+    // Optimization: If "Fast Raw" design is used with native transport, send straight data
+    final transport = _mapTransport(settings.printerTransport);
+    final isNativeTransport = transport == PrinterTransport.escposBluetooth ||
+                              transport == PrinterTransport.escposUsb ||
+                              transport == PrinterTransport.escposTcpIp;
+
+    if (settings.invoiceDesign == 'fast' && isNativeTransport) {
+      final receipt = ReceiptDocument(
+        title: 'NOTA PIUTANG',
+        lines: [],
+        metadata: {
+          'customer': customer,
+          'debt': debt,
+          'payments': payments,
+          'settings': settings,
+          'transaction': transaction,
+        },
+      );
+
+      final profile = PrinterProfile(
+        id: 'debt-receipt-fast',
+        name: 'Fast Raw Debt Receipt',
+        transport: transport,
+        paperWidthMm: settings.receiptWidth,
+        marginMm: settings.receiptMargin,
+      );
+
+      final result = await PrintOrchestrator().printReceipt(receipt, profile);
+      if (result.success && result.bytes != null) {
+        final printer = settings.invoicePrinterUrl != null 
+            ? Printer(url: settings.invoicePrinterUrl!) 
+            : const Printer(url: 'default');
+
+        debugPrint('NATIVE-FAST-DEBT-PRINT: Sending ${result.bytes!.length} bytes to ${printer.url}');
+
+        await Printing.directPrintPdf(
+          printer: printer,
+          onLayout: (format) async => Uint8List.fromList(result.bytes!),
+          format: PdfPageFormat.undefined,
+        );
+        return;
+      }
+    }
+
     // Direct PDF Optimization for Debt Invoices
     if (settings.useFastPrint) {
       final pdfBytes = await generateDebtPdf(
@@ -65,7 +109,7 @@ class DebtInvoiceHelper {
           ? Printer(url: settings.invoicePrinterUrl!) 
           : const Printer(url: 'default');
 
-      debugPrint('DIRECT-PDF-DEBT-PRINT: Sending ${pdfBytes.length} bytes to ${printer.url}');
+      debugPrint('DIRECT-PDF-DEBT-PRINT: Sending ${pdfBytes.length} bytes to ${printer.url} (Design: ${settings.invoiceDesign})');
 
       await Printing.directPrintPdf(
         printer: printer,
@@ -96,6 +140,15 @@ class DebtInvoiceHelper {
       await OpenFilex.open(file.path);
     } else {
       await Printing.sharePdf(bytes: pdfBytes, filename: filename);
+    }
+  }
+
+  static PrinterTransport _mapTransport(String t) {
+    switch (t) {
+      case 'usb':       return PrinterTransport.escposUsb;
+      case 'bluetooth': return PrinterTransport.escposBluetooth;
+      case 'tcp':       return PrinterTransport.escposTcpIp;
+      default:          return PrinterTransport.officePdf;
     }
   }
 }

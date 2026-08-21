@@ -48,8 +48,13 @@ class EscPosDriver {
         sectionBuilder.buildTransactionSummary(tx);
       }
 
+      // 4.1 NOTES
+      if ((tx?.notes?.isNotEmpty ?? false) || (debt?.notes?.isNotEmpty ?? false)) {
+        sectionBuilder.buildNotes(tx?.notes ?? debt?.notes ?? '');
+      }
+
       // 5. PAYMENT HISTORY (For Debt)
-      if (payments != null) {
+      if (payments != null && payments.isNotEmpty) {
         sectionBuilder.buildPaymentHistory(payments);
       }
 
@@ -169,7 +174,7 @@ class ReceiptSectionBuilder {
   void buildHeader(StoreSettings s) {
     b.setAlign(1);
     b.setFontSize(doubleWidth: true, doubleHeight: true);
-    b.setBold(true);
+    // b.setBold(true); // Removed bold
     b.text(s.businessName.toUpperCase());
 
     b.resetStyle();
@@ -227,6 +232,12 @@ class ReceiptSectionBuilder {
       final subtotalStr = Formatters.currency(item.subtotal);
       b.row(qtyStr, subtotalStr);
 
+      if (item.totalDiscount > 0) {
+        b.setAlign(2);
+        b.text('(Disc: -${Formatters.currency(item.totalDiscount)})');
+        b.setAlign(0);
+      }
+
       b.emptyLine();
     }
     b.line('-');
@@ -244,7 +255,7 @@ class ReceiptSectionBuilder {
     }
 
     if (tx.taxAmount > 0) {
-      b.row('Pajak', Formatters.currency(tx.taxAmount));
+      b.row('Pajak (PPN)', Formatters.currency(tx.taxAmount));
     }
 
     if (tx.shippingFee > 0) {
@@ -255,12 +266,9 @@ class ReceiptSectionBuilder {
     b.emptyLine();
     b.setAlign(2);
     b.setFontSize(doubleWidth: true, doubleHeight: true);
-    b.setBold(true);
-    final totalLabel = 'TOTAL  ';
+    // b.setBold(true); // Removed bold
     final totalVal = Formatters.currency(tx.total);
-    // Note: In double size, charsPerLine is effectively halved.
-    // However, for right align, the printer handles the margin.
-    b.text('$totalLabel$totalVal');
+    b.text('TOTAL  $totalVal');
 
     b.resetStyle();
     b.line('-');
@@ -279,7 +287,7 @@ class ReceiptSectionBuilder {
     b.emptyLine();
     b.setAlign(2);
     b.setFontSize(doubleWidth: true, doubleHeight: true);
-    b.setBold(true);
+    // b.setBold(true); // Removed bold
     b.text('SISA PIUTANG  ${Formatters.currency(d.remainingBalance)}');
 
     b.resetStyle();
@@ -289,9 +297,9 @@ class ReceiptSectionBuilder {
   void buildPaymentHistory(List<DebtPayment> payments) {
     b.resetStyle();
     b.setAlign(1);
-    b.setBold(true);
+    // b.setBold(true); // Removed bold
     b.text('RIWAYAT CICILAN / PEMBAYARAN');
-    b.setBold(false);
+    // b.setBold(false);
     b.emptyLine();
 
     if (payments.isEmpty) {
@@ -305,14 +313,28 @@ class ReceiptSectionBuilder {
     b.line('-');
   }
 
+  void buildNotes(String notes) {
+    b.resetStyle();
+    b.setAlign(0);
+    // b.setBold(true); // Removed bold
+    b.text('Keterangan:');
+    // b.setBold(false);
+    final lines = _wrapText(notes, b.charsPerLine);
+    for (final l in lines) {
+      b.text(l);
+    }
+    b.emptyLine();
+    b.line('-');
+  }
+
   void buildPaymentInfo(StoreSettings s) {
     if (s.bankAccounts.isEmpty) return;
 
     b.resetStyle();
     b.setAlign(1);
-    b.setBold(true);
+    // b.setBold(true); // Removed bold
     b.text('INFORMASI PEMBAYARAN TRANSFER');
-    b.setBold(false);
+    // b.setBold(false);
 
     for (final acc in s.bankAccounts) {
       b.text('${acc.bankName}: ${acc.accountNumber}');
@@ -333,7 +355,7 @@ class ReceiptSectionBuilder {
     }
 
     b.emptyLine();
-    b.text('Printed: ${Formatters.dateTime(DateTime.now())}');
+    b.text('Waktu Cetak: ${Formatters.dateTime(DateTime.now())}');
   }
 
   List<String> _wrapText(String text, int width) {

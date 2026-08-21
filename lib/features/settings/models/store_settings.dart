@@ -47,6 +47,7 @@ class StoreSettings {
   final double receiptMargin;
   final bool useFastPrint; // Direct Print for Invoices
   final String printerTransport;
+  final String invoiceDesign; // New: classic, modern, fast
   final String? invoicePrinterUrl; // Dedicated for invoices
   final String? labelPrinterUrl;   // Dedicated for labels
 
@@ -69,6 +70,7 @@ class StoreSettings {
     this.receiptMargin = 4.0,
     this.useFastPrint = false,
     this.printerTransport = 'pdf',
+    this.invoiceDesign = 'classic',
     this.invoicePrinterUrl,
     this.labelPrinterUrl,
   });
@@ -93,6 +95,7 @@ class StoreSettings {
       'receiptMargin': receiptMargin,
       'useFastPrint': useFastPrint,
       'printerTransport': printerTransport,
+      'invoiceDesign': invoiceDesign,
       'invoicePrinterUrl': invoicePrinterUrl,
       'labelPrinterUrl': labelPrinterUrl,
     };
@@ -121,6 +124,7 @@ class StoreSettings {
       receiptMargin: (map['receiptMargin'] as num?)?.toDouble() ?? 4.0,
       useFastPrint: map['useFastPrint'] as bool? ?? false,
       printerTransport: map['printerTransport']?.toString() ?? 'pdf',
+      invoiceDesign: map['invoiceDesign']?.toString() ?? 'classic',
       invoicePrinterUrl: map['invoicePrinterUrl']?.toString(),
       labelPrinterUrl: map['labelPrinterUrl']?.toString(),
     );
@@ -149,6 +153,7 @@ class StoreSettings {
     double? receiptMargin,
     bool? useFastPrint,
     String? printerTransport,
+    String? invoiceDesign,
     String? invoicePrinterUrl,
     String? labelPrinterUrl,
   }) {
@@ -171,6 +176,7 @@ class StoreSettings {
       receiptMargin: receiptMargin ?? this.receiptMargin,
       useFastPrint: useFastPrint ?? this.useFastPrint,
       printerTransport: printerTransport ?? this.printerTransport,
+      invoiceDesign: invoiceDesign ?? this.invoiceDesign,
       invoicePrinterUrl: invoicePrinterUrl ?? this.invoicePrinterUrl,
       labelPrinterUrl: labelPrinterUrl ?? this.labelPrinterUrl,
     );

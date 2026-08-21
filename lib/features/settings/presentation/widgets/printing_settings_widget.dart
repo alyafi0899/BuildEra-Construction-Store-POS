@@ -9,9 +9,11 @@ class PrintingSettingsWidget extends StatelessWidget {
   final TextEditingController marginCtrl;
   final bool useFastPrint;
   final String printerTransport;
+  final String invoiceDesign;
   final String? invoicePrinterUrl;
   final ValueChanged<bool> onFastPrintChanged;
   final ValueChanged<String> onTransportChanged;
+  final ValueChanged<String> onDesignChanged;
   final ValueChanged<String?> onInvoicePrinterChanged;
 
   const PrintingSettingsWidget({
@@ -20,9 +22,11 @@ class PrintingSettingsWidget extends StatelessWidget {
     required this.marginCtrl,
     required this.useFastPrint,
     required this.printerTransport,
-    required this.invoicePrinterUrl,
+    required this.invoiceDesign,
+    this.invoicePrinterUrl,
     required this.onFastPrintChanged,
     required this.onTransportChanged,
+    required this.onDesignChanged,
     required this.onInvoicePrinterChanged,
   });
 
@@ -89,6 +93,34 @@ class PrintingSettingsWidget extends StatelessWidget {
             const Text(
               'Tips: Naikkan "Margin Kiri" jika teks terpotong di kiri. Umumnya 4-12pt tergantung printer. 1mm = 2.8pt.',
               style: TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontStyle: FontStyle.italic),
+            ),
+            const Row(
+              children: [
+                Icon(Icons.style_rounded, size: 20, color: AppTheme.accent),
+                SizedBox(width: 12),
+                Text('Desain Struk', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              ],
+            ),
+            const SizedBox(height: 20),
+            DropdownButtonFormField<String>(
+              initialValue: invoiceDesign,
+              decoration: const InputDecoration(
+                labelText: 'Pilih Style Desain',
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'classic', child: Text('Classic (PDF)')),
+                DropdownMenuItem(value: 'modern', child: Text('Modern (PDF - Clean)')),
+                DropdownMenuItem(value: 'fast', child: Text('Fast Raw (Native Font - Sangat Cepat)')),
+              ],
+              onChanged: (v) => onDesignChanged(v!),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              invoiceDesign == 'fast' 
+                ? 'Tips: Mode Fast menggunakan font bawaan printer (thin font). Sangat cepat namun layout terbatas.'
+                : 'Tips: Mode Classic/Modern menggunakan PDF. Lebih rapi namun sedikit lebih lambat di beberapa printer thermal.',
+              style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontStyle: FontStyle.italic),
             ),
             const Divider(height: 40),
             const Row(

@@ -104,10 +104,17 @@ class ProductRepository {
   // ── Write Operations ───────────────────────────────────────────────────────
 
   Future<void> saveProduct(Product product, List<ProductUnit> units) async {
+    if (product.name.trim().isEmpty) {
+      debugPrint('Warning: Attempted to save product with empty name. ID: ${product.id}');
+    }
+    
     final box = await _getBox();
     
-    // Create the final product object with units attached
-    final finalProduct = product.copyWith(units: units);
+    // Create the final product object with units attached and ensure updatedAt is fresh
+    final finalProduct = product.copyWith(
+      units: units,
+      updatedAt: DateTime.now(),
+    );
     final data = finalProduct.toMap();
 
     await box.put(product.id, data);
@@ -165,6 +172,12 @@ class ProductRepository {
       final p = item.keys.first;
       final nameLower = p.name.trim().toLowerCase();
       final barcode = p.barcode?.trim();
+
+      // Skip products with empty names
+      if (nameLower.isEmpty) {
+        debugPrint('Warning: Skipping product with empty name in batch. ID: ${p.id}');
+        continue;
+      }
 
       // Check for Barcode match first (PRIORITY: UPDATE)
       if (barcode != null && barcode.isNotEmpty) {

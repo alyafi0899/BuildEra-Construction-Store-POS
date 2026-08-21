@@ -97,11 +97,15 @@ class Product {
         .map((u) => ProductUnit.fromMap(Map<String, dynamic>.from(u as Map)))
         .toList();
 
+    final id = m['id'] as String? ?? '';
+    final barcode = m['barcode'] as String?;
+    final name = m['name'] as String?;
+
     return Product(
-      id: m['id'] as String? ?? '',
-      name: m['name'] as String? ?? 'Produk Tanpa Nama',
+      id: id,
+      name: _sanitizeName(name, id, barcode),
       category: m['category'] as String? ?? 'Lainnya',
-      barcode: m['barcode'] as String?,
+      barcode: barcode,
       description: m['description'] as String?,
       costPrice: (m['cost_price'] as num? ?? 0).toDouble(),
       basePrice: (m['base_price'] as num? ?? 0).toDouble(),
@@ -117,6 +121,12 @@ class Product {
           DateTime.now(),
       units: units,
     );
+  }
+
+  static String _sanitizeName(String? name, String id, String? barcode) {
+    if (name != null && name.trim().isNotEmpty) return name.trim();
+    if (barcode != null && barcode.trim().isNotEmpty) return 'Produk [$barcode]';
+    return 'Tanpa Nama ${id.length > 5 ? id.substring(0, 5) : id}';
   }
 
   Map<String, dynamic> toMap() => {

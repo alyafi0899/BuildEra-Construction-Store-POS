@@ -1,6 +1,7 @@
 import '../models/label_template.dart';
 import '../models/print_document.dart';
 import '../models/printer_profile.dart';
+import '../../features/settings/models/store_settings.dart';
 import 'receipt_layout_service.dart';
 import 'label_layout_service.dart';
 import '../drivers/pdf/pdf_driver.dart';
@@ -26,11 +27,24 @@ class PrintOrchestrator {
 
   Future<PrintResult> printReceipt(
       ReceiptDocument receipt, PrinterProfile profile) async {
+    final settings = receipt.metadata['settings'] as StoreSettings?;
+    
+    // If "Fast Raw" design is selected and we are using an ESC/POS transport, 
+    // bypass PDF rendering and send native data.
+    if (settings?.invoiceDesign == 'fast' && 
+        (profile.transport == PrinterTransport.escposBluetooth ||
+         profile.transport == PrinterTransport.escposUsb ||
+         profile.transport == PrinterTransport.escposTcpIp)) {
+      return EscPosDriver().printReceipt(receipt, profile);
+    }
+
     switch (profile.transport) {
       case PrinterTransport.escposBluetooth:
       case PrinterTransport.escposUsb:
       case PrinterTransport.escposTcpIp:
-        return EscPosDriver().printReceipt(receipt, profile);
+        // Default to PDF rendering for non-fast designs on ESC/POS
+        // This ensures Classic/Modern styles look consistent
+        return buildReceiptPdf(receipt, profile);
       case PrinterTransport.officePdf:
         return buildReceiptPdf(receipt, profile);
       case PrinterTransport.tspl:
