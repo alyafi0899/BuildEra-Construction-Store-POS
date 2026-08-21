@@ -47,7 +47,8 @@ class StoreSettings {
   final double receiptMargin;
   final bool useFastPrint; // Direct Print for Invoices
   final String printerTransport;
-  final String invoiceDesign; // New: classic, modern, fast
+  final String invoiceDesign; // classic, modern, fast
+  final String printMethod;   // pdf, raw
   final String? invoicePrinterUrl; // Dedicated for invoices
   final String? labelPrinterUrl;   // Dedicated for labels
 
@@ -71,6 +72,7 @@ class StoreSettings {
     this.useFastPrint = false,
     this.printerTransport = 'pdf',
     this.invoiceDesign = 'classic',
+    this.printMethod = 'pdf',
     this.invoicePrinterUrl,
     this.labelPrinterUrl,
   });
@@ -96,6 +98,7 @@ class StoreSettings {
       'useFastPrint': useFastPrint,
       'printerTransport': printerTransport,
       'invoiceDesign': invoiceDesign,
+      'printMethod': printMethod,
       'invoicePrinterUrl': invoicePrinterUrl,
       'labelPrinterUrl': labelPrinterUrl,
     };
@@ -125,6 +128,7 @@ class StoreSettings {
       useFastPrint: map['useFastPrint'] as bool? ?? false,
       printerTransport: map['printerTransport']?.toString() ?? 'pdf',
       invoiceDesign: map['invoiceDesign']?.toString() ?? 'classic',
+      printMethod: map['printMethod']?.toString() ?? 'pdf',
       invoicePrinterUrl: map['invoicePrinterUrl']?.toString(),
       labelPrinterUrl: map['labelPrinterUrl']?.toString(),
     );
@@ -154,6 +158,7 @@ class StoreSettings {
     bool? useFastPrint,
     String? printerTransport,
     String? invoiceDesign,
+    String? printMethod,
     String? invoicePrinterUrl,
     String? labelPrinterUrl,
   }) {
@@ -177,6 +182,7 @@ class StoreSettings {
       useFastPrint: useFastPrint ?? this.useFastPrint,
       printerTransport: printerTransport ?? this.printerTransport,
       invoiceDesign: invoiceDesign ?? this.invoiceDesign,
+      printMethod: printMethod ?? this.printMethod,
       invoicePrinterUrl: invoicePrinterUrl ?? this.invoicePrinterUrl,
       labelPrinterUrl: labelPrinterUrl ?? this.labelPrinterUrl,
     );

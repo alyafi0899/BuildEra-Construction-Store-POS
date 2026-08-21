@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import '../../../shared/models/transaction.dart';
 import '../../../features/settings/models/store_settings.dart';
 import '../../printing/printing.dart';
+import '../../printing/services/windows_raw_spooler.dart';
 
 class InvoiceHelper {
   static String? get _downloadsPath {
@@ -43,13 +44,11 @@ class InvoiceHelper {
 
   static Future<void> printInvoice(
       Transaction tx, StoreSettings settings) async {
-    // Optimization: If "Fast Raw" design is used with native transport, send straight data
     final transport = _mapTransport(settings.printerTransport);
-    final isNativeTransport = transport == PrinterTransport.escposBluetooth ||
-                              transport == PrinterTransport.escposUsb ||
-                              transport == PrinterTransport.escposTcpIp;
 
-    if (settings.invoiceDesign == 'fast' && isNativeTransport) {
+    // --- CASE 1: DIRECT RAW (The New "Straight Data" System) ---
+    // Use this for maximum speed and to avoid "Soft Font" vs "Image" issues on Windows.
+    if (settings.printMethod == 'raw' && Platform.isWindows && settings.invoicePrinterUrl != null) {
       final receipt = ReceiptDocument(
         title: settings.businessName.toUpperCase(),
         lines: [],
@@ -57,8 +56,32 @@ class InvoiceHelper {
       );
 
       final profile = PrinterProfile(
-        id: 'receipt-fast',
-        name: 'Fast Raw Receipt',
+        id: 'receipt-raw',
+        name: 'Direct Raw Receipt',
+        transport: transport,
+        paperWidthMm: settings.receiptWidth,
+        marginMm: settings.receiptMargin,
+      );
+
+      // We use EscPosDriver directly to get raw bytes
+      final result = await PrintOrchestrator().printReceipt(receipt, profile);
+      if (result.success && result.bytes != null) {
+        await WindowsRawSpooler.printRaw(settings.invoicePrinterUrl!, result.bytes!);
+        return;
+      }
+    }
+    
+    // --- CASE 2: NATIVE NETWORK (TCP) ---
+    if (settings.invoiceDesign == 'fast' && transport == PrinterTransport.escposTcpIp && settings.invoicePrinterUrl != null) {
+      final receipt = ReceiptDocument(
+        title: settings.businessName.toUpperCase(),
+        lines: [],
+        metadata: {'transaction': tx, 'settings': settings},
+      );
+
+      final profile = PrinterProfile(
+        id: 'receipt-tcp',
+        name: 'TCP Raw Receipt',
         transport: transport,
         paperWidthMm: settings.receiptWidth,
         marginMm: settings.receiptMargin,
@@ -66,24 +89,12 @@ class InvoiceHelper {
 
       final result = await PrintOrchestrator().printReceipt(receipt, profile);
       if (result.success && result.bytes != null) {
-        final printer = settings.invoicePrinterUrl != null 
-            ? Printer(url: settings.invoicePrinterUrl!) 
-            : const Printer(url: 'default');
-
-        debugPrint('NATIVE-FAST-PRINT: Sending ${result.bytes!.length} bytes to ${printer.url}');
-
-        await Printing.directPrintPdf(
-          printer: printer,
-          onLayout: (format) async => Uint8List.fromList(result.bytes!),
-          format: PdfPageFormat.undefined, // Special case for raw bytes on some drivers
-        );
+        await _printRawTcp(settings.invoicePrinterUrl!, result.bytes!);
         return;
       }
     }
 
-    // Optimization: If useFastPrint is ON, we use Direct PDF (no dialog)
-    // We send a valid PDF because Windows Spooler doesn't always accept raw bytes via directPrintPdf 
-    // unless the driver supports "Generic / Text Only"
+    // --- CASE 3: DIRECT PDF (The High Fidelity "Print as Image" System) ---
     if (settings.useFastPrint) {
       final pdfBytes = await generatePdf(tx, settings);
       final printer = settings.invoicePrinterUrl != null 
@@ -99,12 +110,30 @@ class InvoiceHelper {
       return;
     }
 
-    // Normal mode: Show Dialog
+    // --- CASE 4: INTERACTIVE PRINT ---
     final pdfBytes = await generatePdf(tx, settings);
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdfBytes,
       name: 'Invoice-${tx.invoiceNumber}',
     );
+  }
+
+  static Future<void> _printRawTcp(String url, List<int> bytes) async {
+    try {
+      // Parse IP and Port (default 9100)
+      final parts = url.split(':');
+      final host = parts[0];
+      final port = parts.length > 1 ? int.tryParse(parts[1]) ?? 9100 : 9100;
+
+      debugPrint('NATIVE-TCP-PRINT: Connecting to $host:$port...');
+      final socket = await Socket.connect(host, port, timeout: const Duration(seconds: 5));
+      socket.add(bytes);
+      await socket.flush();
+      await socket.close();
+      debugPrint('NATIVE-TCP-PRINT: Success (${bytes.length} bytes)');
+    } catch (e) {
+      debugPrint('NATIVE-TCP-PRINT: Error - $e');
+    }
   }
 
   static Future<void> shareInvoice(

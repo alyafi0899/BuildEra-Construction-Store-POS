@@ -10,6 +10,7 @@ import '../models/customer.dart';
 import '../models/debt.dart';
 import '../models/debt_payment.dart';
 import '../../settings/models/store_settings.dart';
+import '../../../printing/services/windows_raw_spooler.dart';
 
 class DebtInvoiceHelper {
   static String? get _downloadsPath {
@@ -55,14 +56,10 @@ class DebtInvoiceHelper {
 
   static Future<void> printDebtInvoice(Customer customer, Debt debt,
       List<DebtPayment> payments, StoreSettings settings, {Transaction? transaction}) async {
-    
-    // Optimization: If "Fast Raw" design is used with native transport, send straight data
     final transport = _mapTransport(settings.printerTransport);
-    final isNativeTransport = transport == PrinterTransport.escposBluetooth ||
-                              transport == PrinterTransport.escposUsb ||
-                              transport == PrinterTransport.escposTcpIp;
 
-    if (settings.invoiceDesign == 'fast' && isNativeTransport) {
+    // --- CASE 1: DIRECT RAW ---
+    if (settings.printMethod == 'raw' && Platform.isWindows && settings.invoicePrinterUrl != null) {
       final receipt = ReceiptDocument(
         title: 'NOTA PIUTANG',
         lines: [],
@@ -76,8 +73,8 @@ class DebtInvoiceHelper {
       );
 
       final profile = PrinterProfile(
-        id: 'debt-receipt-fast',
-        name: 'Fast Raw Debt Receipt',
+        id: 'debt-receipt-raw',
+        name: 'Direct Raw Debt Receipt',
         transport: transport,
         paperWidthMm: settings.receiptWidth,
         marginMm: settings.receiptMargin,
@@ -85,17 +82,36 @@ class DebtInvoiceHelper {
 
       final result = await PrintOrchestrator().printReceipt(receipt, profile);
       if (result.success && result.bytes != null) {
-        final printer = settings.invoicePrinterUrl != null 
-            ? Printer(url: settings.invoicePrinterUrl!) 
-            : const Printer(url: 'default');
+        await WindowsRawSpooler.printRaw(settings.invoicePrinterUrl!, result.bytes!);
+        return;
+      }
+    }
+    
+    // --- CASE 2: NATIVE NETWORK (TCP) ---
+    if (settings.invoiceDesign == 'fast' && transport == PrinterTransport.escposTcpIp && settings.invoicePrinterUrl != null) {
+      final receipt = ReceiptDocument(
+        title: 'NOTA PIUTANG',
+        lines: [],
+        metadata: {
+          'customer': customer,
+          'debt': debt,
+          'payments': payments,
+          'settings': settings,
+          'transaction': transaction,
+        },
+      );
 
-        debugPrint('NATIVE-FAST-DEBT-PRINT: Sending ${result.bytes!.length} bytes to ${printer.url}');
+      final profile = PrinterProfile(
+        id: 'debt-receipt-tcp',
+        name: 'TCP Raw Debt Receipt',
+        transport: transport,
+        paperWidthMm: settings.receiptWidth,
+        marginMm: settings.receiptMargin,
+      );
 
-        await Printing.directPrintPdf(
-          printer: printer,
-          onLayout: (format) async => Uint8List.fromList(result.bytes!),
-          format: PdfPageFormat.undefined,
-        );
+      final result = await PrintOrchestrator().printReceipt(receipt, profile);
+      if (result.success && result.bytes != null) {
+        await _printRawTcp(settings.invoicePrinterUrl!, result.bytes!);
         return;
       }
     }
@@ -124,6 +140,23 @@ class DebtInvoiceHelper {
       onLayout: (PdfPageFormat format) async => pdfBytes,
       name: 'Piutang-${customer.name}-${debt.invoiceNumber}',
     );
+  }
+
+  static Future<void> _printRawTcp(String url, List<int> bytes) async {
+    try {
+      final parts = url.split(':');
+      final host = parts[0];
+      final port = parts.length > 1 ? int.tryParse(parts[1]) ?? 9100 : 9100;
+
+      debugPrint('NATIVE-TCP-DEBT-PRINT: Connecting to $host:$port...');
+      final socket = await Socket.connect(host, port, timeout: const Duration(seconds: 5));
+      socket.add(bytes);
+      await socket.flush();
+      await socket.close();
+      debugPrint('NATIVE-TCP-DEBT-PRINT: Success (${bytes.length} bytes)');
+    } catch (e) {
+      debugPrint('NATIVE-TCP-DEBT-PRINT: Error - $e');
+    }
   }
 
   static Future<void> downloadDebtInvoice(Customer customer, Debt debt,

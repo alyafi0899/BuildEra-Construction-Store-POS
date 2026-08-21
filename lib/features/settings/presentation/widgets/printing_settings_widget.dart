@@ -10,10 +10,12 @@ class PrintingSettingsWidget extends StatelessWidget {
   final bool useFastPrint;
   final String printerTransport;
   final String invoiceDesign;
+  final String printMethod;
   final String? invoicePrinterUrl;
   final ValueChanged<bool> onFastPrintChanged;
   final ValueChanged<String> onTransportChanged;
   final ValueChanged<String> onDesignChanged;
+  final ValueChanged<String> onMethodChanged;
   final ValueChanged<String?> onInvoicePrinterChanged;
 
   const PrintingSettingsWidget({
@@ -23,10 +25,12 @@ class PrintingSettingsWidget extends StatelessWidget {
     required this.useFastPrint,
     required this.printerTransport,
     required this.invoiceDesign,
+    required this.printMethod,
     this.invoicePrinterUrl,
     required this.onFastPrintChanged,
     required this.onTransportChanged,
     required this.onDesignChanged,
+    required this.onMethodChanged,
     required this.onInvoicePrinterChanged,
   });
 
@@ -104,9 +108,10 @@ class PrintingSettingsWidget extends StatelessWidget {
             const SizedBox(height: 20),
             DropdownButtonFormField<String>(
               initialValue: invoiceDesign,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Pilih Style Desain',
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                enabled: printMethod != 'raw', // Disable if Direct Raw is selected
               ),
               items: const [
                 DropdownMenuItem(value: 'classic', child: Text('Classic (PDF)')),
@@ -117,9 +122,44 @@ class PrintingSettingsWidget extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              invoiceDesign == 'fast' 
-                ? 'Tips: Mode Fast menggunakan font bawaan printer (thin font). Sangat cepat namun layout terbatas.'
-                : 'Tips: Mode Classic/Modern menggunakan PDF. Lebih rapi namun sedikit lebih lambat di beberapa printer thermal.',
+              printMethod == 'raw'
+                ? 'Info: Mode Direct Raw diatur khusus untuk desain "Fast Raw" guna menjamin kecepatan dan kejelasan.'
+                : (invoiceDesign == 'fast' 
+                    ? 'Tips: Mode Fast menggunakan font monospaced. Sangat jelas untuk struk belanja.'
+                    : 'Tips: Mode Classic/Modern menggunakan PDF. Lebih rapi namun memerlukan driver yang mendukung grafik.'),
+              style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontStyle: FontStyle.italic),
+            ),
+            const SizedBox(height: 24),
+            const Row(
+              children: [
+                Icon(Icons.settings_ethernet_rounded, size: 20, color: AppTheme.accent),
+                SizedBox(width: 12),
+                Text('Metode Pengiriman Data', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              ],
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: printMethod,
+              decoration: const InputDecoration(
+                labelText: 'Pilih Jalur Data',
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'pdf', child: Text('Standard PDF (High Fidelity)')),
+                DropdownMenuItem(value: 'raw', child: Text('Direct Raw Spooler (High Speed - No PDF)')),
+              ],
+              onChanged: (v) {
+                onMethodChanged(v!);
+                if (v == 'raw') {
+                  onDesignChanged('fast');
+                }
+              },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              printMethod == 'raw'
+                ? 'Peringatan: Gunakan Direct Raw hanya untuk printer USB/Bluetooth. Bypasses PDF rendering.'
+                : 'Info: Standard PDF akan merender struk sebagai dokumen. Gunakan mode "Print as image" di driver jika hasil blank.',
               style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontStyle: FontStyle.italic),
             ),
             const Divider(height: 40),

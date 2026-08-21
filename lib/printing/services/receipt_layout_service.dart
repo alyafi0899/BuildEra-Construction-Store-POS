@@ -28,57 +28,56 @@ class ReceiptLayoutService {
     if (settings == null) return Uint8List(0);
 
     final design = settings.invoiceDesign;
-    final font = design == 'fast' ? pw.Font.courier() : null;
-    final baseFontSize = design == 'fast' ? 7.0 : 8.0;
+    final isFast = design == 'fast';
+    final baseFontSize = isFast ? 7.0 : 8.0;
 
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat(width, double.infinity, marginAll: profile.marginMm * PdfPageFormat.mm),
-        theme: font != null ? pw.ThemeData.withFont(base: font, bold: pw.Font.courierBold()) : null,
         build: (context) {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               // 1. Header
               _buildHeader(settings, design),
-              if (design != 'fast') pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
+              if (!isFast) pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
 
               // 2. Info
               if (debt != null && customer != null)
                 _buildDebtInfo(customer, debt, baseFontSize)
               else if (tx != null)
                 _buildTransactionInfo(tx, baseFontSize),
-              if (design != 'fast') pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
+              if (!isFast) pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
 
               // 3. Items
               if (tx != null && tx.items.isNotEmpty) ...[
                 _buildItems(tx.items, baseFontSize, design),
-                if (design != 'fast') pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
+                if (!isFast) pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
               ],
 
               // 4. Summary
               if (debt != null)
-                _buildDebtSummary(debt, baseFontSize, design)
+                _buildDebtSummary(debt, baseFontSize, design, tx: tx)
               else if (tx != null)
                 _buildTransactionSummary(tx, baseFontSize, design),
-              if (design != 'fast') pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
+              if (!isFast) pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
 
               // 4.1 Notes
               if ((tx?.notes?.isNotEmpty ?? false) || (debt?.notes?.isNotEmpty ?? false)) ...[
                 _buildNotes(tx?.notes ?? debt?.notes ?? '', baseFontSize),
-                if (design != 'fast') pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
+                if (!isFast) pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
               ],
 
               // 5. Payment History (Debt only)
               if (payments != null && payments.isNotEmpty) ...[
                 _buildPaymentHistory(payments, baseFontSize),
-                if (design != 'fast') pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
+                if (!isFast) pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
               ],
 
               // 6. Conditional Payment Info (Banks)
               if (debt != null || tx?.paymentMethod == AppConstants.paymentTransfer || tx?.paymentMethod == AppConstants.paymentPiutang) ...[
                 _buildPaymentInfo(settings, baseFontSize),
-                if (design != 'fast') pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
+                if (!isFast) pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
               ],
 
               // 7. Final Footer
@@ -164,7 +163,7 @@ class ReceiptLayoutService {
                 pw.Align(
                   alignment: pw.Alignment.centerRight,
                   child: pw.Text('(Disc: -${Formatters.currency(item.totalDiscount)})', 
-                    style: pw.TextStyle(fontSize: fontSize - 1, fontStyle: pw.FontStyle.italic)),
+                    style: pw.TextStyle(fontSize: fontSize - 1)), // Removed italic
                 ),
             ],
           ),
@@ -196,11 +195,13 @@ class ReceiptLayoutService {
     );
   }
 
-  pw.Widget _buildDebtSummary(Debt d, double fontSize, String design) {
+  pw.Widget _buildDebtSummary(Debt d, double fontSize, String design, {Transaction? tx}) {
     final isModern = design == 'modern';
     return pw.Column(
       children: [
         _row('Total Piutang Awal', Formatters.currency(d.totalAmount), fontSize: fontSize),
+        if (tx != null && tx.shippingFee > 0)
+          _row('Termasuk Ongkir', Formatters.currency(tx.shippingFee), fontSize: fontSize),
         _row('Total Sudah Bayar', Formatters.currency(d.paidAmount), fontSize: fontSize),
         pw.SizedBox(height: 4),
         pw.Align(
@@ -250,7 +251,7 @@ class ReceiptLayoutService {
               style: pw.TextStyle(fontSize: fontSize)),
           pw.SizedBox(height: 2),
           pw.Text('Waktu Cetak: ${Formatters.dateTime(DateTime.now())}', 
-              style: pw.TextStyle(fontSize: fontSize - 1, fontStyle: pw.FontStyle.italic)),
+              style: pw.TextStyle(fontSize: fontSize - 1)), // Removed italic
         ],
       ),
     );
@@ -277,4 +278,3 @@ class ReceiptLayoutService {
     );
   }
 }
-

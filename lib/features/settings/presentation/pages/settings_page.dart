@@ -44,6 +44,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   bool _useFastPrint = false;
   String _printerTransport = 'pdf';
   String _invoiceDesign = 'classic';
+  String _printMethod = 'pdf';
   String? _invoicePrinterUrl;
 
   List<BankAccount> _bankAccounts = [];
@@ -65,6 +66,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     _useFastPrint = settings.useFastPrint;
     _printerTransport = settings.printerTransport;
     _invoiceDesign = settings.invoiceDesign;
+    _printMethod = settings.printMethod;
     _invoicePrinterUrl = settings.invoicePrinterUrl;
     _bankAccounts = List.from(settings.bankAccounts);
   }
@@ -109,6 +111,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             useFastPrint: _useFastPrint,
             printerTransport: _printerTransport,
             invoiceDesign: _invoiceDesign,
+            printMethod: _printMethod,
             invoicePrinterUrl: _invoicePrinterUrl,
             bankAccounts: _bankAccounts,
           );
@@ -562,10 +565,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           useFastPrint: _useFastPrint,
           printerTransport: _printerTransport,
           invoiceDesign: _invoiceDesign,
+          printMethod: _printMethod,
           invoicePrinterUrl: _invoicePrinterUrl,
           onFastPrintChanged: (v) => setState(() => _useFastPrint = v),
           onTransportChanged: (v) => setState(() => _printerTransport = v),
           onDesignChanged: (v) => setState(() => _invoiceDesign = v),
+          onMethodChanged: (v) => setState(() => _printMethod = v),
           onInvoicePrinterChanged: (v) =>
               setState(() => _invoicePrinterUrl = v),
         ),

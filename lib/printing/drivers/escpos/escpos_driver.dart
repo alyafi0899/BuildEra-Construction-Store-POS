@@ -43,7 +43,7 @@ class EscPosDriver {
 
       // 4. SUMMARY SECTION
       if (debt != null) {
-        sectionBuilder.buildDebtSummary(debt);
+        sectionBuilder.buildDebtSummary(debt, tx: tx);
       } else if (tx != null) {
         sectionBuilder.buildTransactionSummary(tx);
       }
@@ -265,7 +265,7 @@ class ReceiptSectionBuilder {
     // TOTAL
     b.emptyLine();
     b.setAlign(2);
-    b.setFontSize(doubleWidth: true, doubleHeight: true);
+    // b.setFontSize(doubleWidth: true, doubleHeight: true); // Removed stretch
     // b.setBold(true); // Removed bold
     final totalVal = Formatters.currency(tx.total);
     b.text('TOTAL  $totalVal');
@@ -277,16 +277,19 @@ class ReceiptSectionBuilder {
     b.row('Kembalian', Formatters.currency(tx.changeAmount));
   }
 
-  void buildDebtSummary(Debt d) {
+  void buildDebtSummary(Debt d, {Transaction? tx}) {
     b.resetStyle();
     b.setAlign(0);
 
     b.row('Total Piutang Awal', Formatters.currency(d.totalAmount));
+    if (tx != null && tx.shippingFee > 0) {
+      b.row('Termasuk Ongkir', Formatters.currency(tx.shippingFee));
+    }
     b.row('Total Sudah Bayar', Formatters.currency(d.paidAmount));
 
     b.emptyLine();
     b.setAlign(2);
-    b.setFontSize(doubleWidth: true, doubleHeight: true);
+    // b.setFontSize(doubleWidth: true, doubleHeight: true); // Removed stretch
     // b.setBold(true); // Removed bold
     b.text('SISA PIUTANG  ${Formatters.currency(d.remainingBalance)}');
 
