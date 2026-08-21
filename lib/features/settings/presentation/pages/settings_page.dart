@@ -619,11 +619,40 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => _handleFullBackup(ref),
               ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.delete_forever_rounded, color: AppTheme.danger),
+                title: const Text('Hapus Seluruh Data Produk', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.danger)),
+                subtitle: const Text('PERINGATAN: Menghapus permanen semua produk dari lokal dan cloud. Gunakan jika ada data rusak.'),
+                trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.danger),
+                onTap: () => _handleWipeProducts(),
+              ),
             ],
           ),
         ),
       ],
     );
+  }
+
+  void _handleWipeProducts() {
+    requirePin(context, ref, () async {
+      final confirm = await showConfirmDialog(
+        context,
+        title: 'Konfirmasi Penghapusan Total',
+        content: 'Apakah Anda yakin ingin menghapus SELURUH data produk? Tindakan ini tidak dapat dibatalkan dan akan menyinkronkan penghapusan ke semua perangkat.',
+        confirmLabel: 'HAPUS SEMUA',
+        confirmColor: AppTheme.danger,
+      );
+
+      if (confirm) {
+        try {
+          await ref.read(productsActionProvider).wipeAllProducts();
+          if (mounted) showSuccess(context, 'Seluruh data produk berhasil dihapus');
+        } catch (e) {
+          if (mounted) showError(context, 'Gagal menghapus data: $e');
+        }
+      }
+    });
   }
 
   Widget _buildPageLockToggle({

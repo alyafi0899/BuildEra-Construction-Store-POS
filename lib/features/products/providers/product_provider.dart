@@ -328,6 +328,36 @@ class ProductRepository {
     await _ref.read(syncProvider.notifier).addBatchToQueue(tasks);
   }
 
+  /// Permanently deletes ALL products from local and remote.
+  /// Used for "Wipe Data" feature.
+  Future<void> wipeAllProducts() async {
+    final box = await _getBox();
+    final allProducts = await getAllProducts();
+    final ids = allProducts.map((p) => p.id).toList();
+    
+    // Archive all barcodes first
+    for (final p in allProducts) {
+      if (p.barcode != null) await _historyRepo.archiveBarcode(p.barcode!);
+    }
+
+    // 1. Clear Local Box
+    await box.clear();
+
+    // 2. Queue Sync deletes for ALL IDs
+    final tasks = ids.map((id) => SyncTask(
+      id: _uuid.v4(),
+      collection: 'products',
+      documentId: id,
+      action: SyncAction.delete,
+      data: {},
+      createdAt: DateTime.now(),
+    )).toList();
+
+    if (tasks.isNotEmpty) {
+      await _ref.read(syncProvider.notifier).addBatchToQueue(tasks);
+    }
+  }
+
   Future<void> updateStock(String productId, double delta) async {
     final box = await _getBox();
     final data = box.get(productId);
@@ -564,6 +594,10 @@ class ProductsActionNotifier {
 
   Future<void> adjustStock(String productId, double delta) async {
     await _repo.updateStock(productId, delta);
+  }
+
+  Future<void> wipeAllProducts() async {
+    await _repo.wipeAllProducts();
   }
 }
 
