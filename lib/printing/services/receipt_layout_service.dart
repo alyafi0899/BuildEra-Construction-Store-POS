@@ -6,6 +6,7 @@ import '../../../core/constants/app_constants.dart';
 import '../models/print_document.dart';
 import '../models/printer_profile.dart';
 import '../../shared/models/transaction.dart';
+import '../../shared/models/purchase.dart';
 import '../../features/debts/models/debt.dart';
 import '../../features/debts/models/customer.dart';
 import '../../features/debts/models/debt_payment.dart';
@@ -22,6 +23,7 @@ class ReceiptLayoutService {
     final tx = receipt.metadata['transaction'] as Transaction?;
     final settings = receipt.metadata['settings'] as StoreSettings?;
     final debt = receipt.metadata['debt'] as Debt?;
+    final purchase = receipt.metadata['purchase'] as Purchase?;
     final customer = receipt.metadata['customer'] as Customer?;
     final payments = receipt.metadata['payments'] as List<DebtPayment>?;
 
@@ -45,6 +47,8 @@ class ReceiptLayoutService {
               // 2. Info
               if (debt != null && customer != null)
                 _buildDebtInfo(customer, debt, baseFontSize)
+              else if (purchase != null)
+                _buildPurchaseInfo(purchase, baseFontSize)
               else if (tx != null)
                 _buildTransactionInfo(tx, baseFontSize),
               if (!isFast) pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
@@ -53,18 +57,23 @@ class ReceiptLayoutService {
               if (tx != null && tx.items.isNotEmpty) ...[
                 _buildItems(tx.items, baseFontSize, design),
                 if (!isFast) pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
+              ] else if (purchase != null && purchase.items.isNotEmpty) ...[
+                _buildPurchaseItems(purchase.items, baseFontSize, design),
+                if (!isFast) pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
               ],
 
               // 4. Summary
               if (debt != null)
                 _buildDebtSummary(debt, baseFontSize, design, tx: tx)
+              else if (purchase != null)
+                _buildPurchaseSummary(purchase, baseFontSize, design)
               else if (tx != null)
                 _buildTransactionSummary(tx, baseFontSize, design),
               if (!isFast) pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
 
               // 4.1 Notes
-              if ((tx?.notes?.isNotEmpty ?? false) || (debt?.notes?.isNotEmpty ?? false)) ...[
-                _buildNotes(tx?.notes ?? debt?.notes ?? '', baseFontSize),
+              if ((tx?.notes?.isNotEmpty ?? false) || (debt?.notes?.isNotEmpty ?? false) || (purchase?.notes?.isNotEmpty ?? false)) ...[
+                _buildNotes(tx?.notes ?? debt?.notes ?? purchase?.notes ?? '', baseFontSize),
                 if (!isFast) pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
               ],
 
@@ -131,6 +140,21 @@ class ReceiptLayoutService {
     );
   }
 
+  pw.Widget _buildPurchaseInfo(Purchase purchase, double fontSize) {
+    final dateStr = Formatters.date(purchase.createdAt);
+    final timeStr = DateFormat('HH:mm').format(purchase.createdAt);
+
+    return pw.Column(
+      children: [
+        pw.Center(child: pw.Text('NOTA MASUK (PEMBELIAN)', style: pw.TextStyle(fontSize: fontSize, fontWeight: pw.FontWeight.bold))),
+        pw.SizedBox(height: 4),
+        _row('Staff : ${purchase.staffName ?? 'Admin'}', dateStr, fontSize: fontSize),
+        _row('Supp  : ${purchase.supplierName ?? 'Umum'}', timeStr, fontSize: fontSize),
+        _row('No    : ${purchase.invoiceNumber}', '', fontSize: fontSize),
+      ],
+    );
+  }
+
   pw.Widget _buildDebtInfo(Customer c, Debt d, double fontSize) {
     final now = DateTime.now();
     return pw.Column(
@@ -172,6 +196,28 @@ class ReceiptLayoutService {
     );
   }
 
+  pw.Widget _buildPurchaseItems(List<PurchaseItem> items, double fontSize, String design) {
+    final isModern = design == 'modern';
+    return pw.Column(
+      children: items.map((item) {
+        return pw.Padding(
+          padding: pw.EdgeInsets.only(bottom: isModern ? 6 : 4),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(item.productName, style: pw.TextStyle(fontSize: fontSize, fontWeight: pw.FontWeight.bold)),
+              _row(
+                '${Formatters.decimal(item.quantity)} ${item.unitName} x ${Formatters.currency(item.purchasePrice)}',
+                Formatters.currency(item.subtotal),
+                fontSize: fontSize,
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
   pw.Widget _buildTransactionSummary(Transaction tx, double fontSize, String design) {
     final disc = tx.itemDiscountTotal + tx.transDiscountAmount;
     final isModern = design == 'modern';
@@ -191,6 +237,27 @@ class ReceiptLayoutService {
         pw.SizedBox(height: 4),
         _row('Bayar (${tx.paymentMethod})', Formatters.currency(tx.amountPaid), fontSize: fontSize),
         _row('Kembalian', Formatters.currency(tx.changeAmount), fontSize: fontSize),
+      ],
+    );
+  }
+
+  pw.Widget _buildPurchaseSummary(Purchase purchase, double fontSize, String design) {
+    final isModern = design == 'modern';
+    
+    return pw.Column(
+      children: [
+        _row('Subtotal', Formatters.currency(purchase.subtotal), fontSize: fontSize),
+        if (purchase.shippingFee > 0) _row('Biaya Kirim', Formatters.currency(purchase.shippingFee), fontSize: fontSize),
+        pw.SizedBox(height: 4),
+        pw.Align(
+          alignment: pw.Alignment.centerRight,
+          child: pw.Text('TOTAL  ${Formatters.currency(purchase.total)}',
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: isModern ? 14 : 12)),
+        ),
+        pw.SizedBox(height: 4),
+        _row('Bayar (${purchase.paymentMethod})', Formatters.currency(purchase.amountPaid), fontSize: fontSize),
+        if (purchase.total > purchase.amountPaid)
+          _row('Sisa Hutang', Formatters.currency(purchase.total - purchase.amountPaid), fontSize: fontSize, color: PdfColors.red900),
       ],
     );
   }
@@ -268,12 +335,12 @@ class ReceiptLayoutService {
     );
   }
 
-  pw.Widget _row(String left, String right, {double fontSize = 8}) {
+  pw.Widget _row(String left, String right, {double fontSize = 8, PdfColor? color}) {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       children: [
-        pw.Text(left, style: pw.TextStyle(fontSize: fontSize)),
-        pw.Text(right, style: pw.TextStyle(fontSize: fontSize)),
+        pw.Text(left, style: pw.TextStyle(fontSize: fontSize, color: color)),
+        pw.Text(right, style: pw.TextStyle(fontSize: fontSize, color: color)),
       ],
     );
   }

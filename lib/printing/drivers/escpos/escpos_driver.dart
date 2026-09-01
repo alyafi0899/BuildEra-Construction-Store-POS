@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/models/transaction.dart';
+import '../../../shared/models/purchase.dart';
 import '../../../features/debts/models/debt.dart';
 import '../../../features/debts/models/customer.dart';
 import '../../../features/debts/models/debt_payment.dart';
@@ -21,6 +22,7 @@ class EscPosDriver {
       final tx = receipt.metadata['transaction'] as Transaction?;
       final settings = receipt.metadata['settings'] as StoreSettings?;
       final debt = receipt.metadata['debt'] as Debt?;
+      final purchase = receipt.metadata['purchase'] as Purchase?;
       final customer = receipt.metadata['customer'] as Customer?;
       final payments = receipt.metadata['payments'] as List<DebtPayment>?;
 
@@ -32,6 +34,8 @@ class EscPosDriver {
       // 2. INFORMATION SECTION
       if (debt != null && customer != null) {
         sectionBuilder.buildDebtInfo(customer, debt);
+      } else if (purchase != null) {
+        sectionBuilder.buildPurchaseInfo(purchase);
       } else if (tx != null) {
         sectionBuilder.buildTransactionInfo(tx);
       }
@@ -39,18 +43,22 @@ class EscPosDriver {
       // 3. ITEM SECTION
       if (tx != null) {
         sectionBuilder.buildItems(tx.items);
+      } else if (purchase != null) {
+        sectionBuilder.buildPurchaseItems(purchase.items);
       }
 
       // 4. SUMMARY SECTION
       if (debt != null) {
         sectionBuilder.buildDebtSummary(debt, tx: tx);
+      } else if (purchase != null) {
+        sectionBuilder.buildPurchaseSummary(purchase);
       } else if (tx != null) {
         sectionBuilder.buildTransactionSummary(tx);
       }
 
       // 4.1 NOTES
-      if ((tx?.notes?.isNotEmpty ?? false) || (debt?.notes?.isNotEmpty ?? false)) {
-        sectionBuilder.buildNotes(tx?.notes ?? debt?.notes ?? '');
+      if ((tx?.notes?.isNotEmpty ?? false) || (debt?.notes?.isNotEmpty ?? false) || (purchase?.notes?.isNotEmpty ?? false)) {
+        sectionBuilder.buildNotes(tx?.notes ?? debt?.notes ?? purchase?.notes ?? '');
       }
 
       // 5. PAYMENT HISTORY (For Debt)
@@ -201,6 +209,23 @@ class ReceiptSectionBuilder {
     b.line('-');
   }
 
+  void buildPurchaseInfo(Purchase p) {
+    b.resetStyle();
+    b.setAlign(1);
+    b.text('NOTA MASUK (PEMBELIAN)', newline: true);
+    b.setAlign(0);
+
+    final dateStr = Formatters.date(p.createdAt);
+    final timeStr = DateFormat('HH:mm').format(p.createdAt);
+
+    b.row('Staff : ${p.staffName ?? 'Admin'}', dateStr);
+    b.row('Supp  : ${p.supplierName ?? 'Umum'}', timeStr);
+    b.row('No    : ${p.invoiceNumber}', '');
+
+    b.emptyLine();
+    b.line('-');
+  }
+
   void buildDebtInfo(Customer c, Debt d) {
     b.resetStyle();
     b.setAlign(0);
@@ -243,6 +268,23 @@ class ReceiptSectionBuilder {
     b.line('-');
   }
 
+  void buildPurchaseItems(List<PurchaseItem> items) {
+    b.resetStyle();
+    for (final item in items) {
+      final nameLines = _wrapText(item.productName, b.charsPerLine);
+      for (final nLine in nameLines) {
+        b.text(nLine);
+      }
+
+      final qtyStr = '${Formatters.decimal(item.quantity)} ${item.unitName} x ${Formatters.currency(item.purchasePrice)}';
+      final subtotalStr = Formatters.currency(item.subtotal);
+      b.row(qtyStr, subtotalStr);
+
+      b.emptyLine();
+    }
+    b.line('-');
+  }
+
   void buildTransactionSummary(Transaction tx) {
     b.resetStyle();
     b.setAlign(0);
@@ -275,6 +317,29 @@ class ReceiptSectionBuilder {
 
     b.row('Bayar (${tx.paymentMethod})', Formatters.currency(tx.amountPaid));
     b.row('Kembalian', Formatters.currency(tx.changeAmount));
+  }
+
+  void buildPurchaseSummary(Purchase p) {
+    b.resetStyle();
+    b.setAlign(0);
+
+    b.row('Subtotal', Formatters.currency(p.subtotal));
+    if (p.shippingFee > 0) {
+      b.row('Biaya Kirim', Formatters.currency(p.shippingFee));
+    }
+
+    b.emptyLine();
+    b.setAlign(2);
+    final totalVal = Formatters.currency(p.total);
+    b.text('TOTAL  $totalVal');
+
+    b.resetStyle();
+    b.line('-');
+
+    b.row('Bayar (${p.paymentMethod})', Formatters.currency(p.amountPaid));
+    if (p.total > p.amountPaid) {
+      b.row('Sisa Hutang', Formatters.currency(p.total - p.amountPaid));
+    }
   }
 
   void buildDebtSummary(Debt d, {Transaction? tx}) {

@@ -16,6 +16,8 @@ class _NavItem {
 const _navItems = [
   // OPERASIONAL
   _NavItem(Icons.point_of_sale_rounded,       'Kasir',       0, 'OPERASIONAL'),
+  _NavItem(Icons.local_shipping_rounded,      'Pembelian',   10, 'OPERASIONAL'),
+  _NavItem(Icons.history_edu_rounded,         'Riwayat Beli', 11, 'OPERASIONAL'),
   _NavItem(Icons.receipt_long_rounded,        'Transaksi',   2, 'OPERASIONAL'),
   _NavItem(Icons.account_balance_wallet_rounded, 'Piutang',   3, 'OPERASIONAL'),
   _NavItem(Icons.people_rounded,               'Pelanggan',   4, 'OPERASIONAL'),
