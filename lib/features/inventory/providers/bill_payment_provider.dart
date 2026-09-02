@@ -49,7 +49,6 @@ class BillPaymentRepository {
     required double amount,
     required bool isForSupplier,
   }) async {
-    // SECURITY: Get current entity names before creating payment
     final repo = _ref.read(productRepositoryProvider);
     final products = await repo.getAllProducts();
     final p = products.where((item) => item.id == billId).firstOrNull;
@@ -58,7 +57,6 @@ class BillPaymentRepository {
     if (p != null) {
       entityName = isForSupplier ? p.financials.supplierName : p.financials.shippingServiceName;
     } else {
-      // Check restock history if product not found (could be a restock bill ID)
       final restockBox = await LocalDatabase.openBox(_uid, 'restock_history');
       final rData = restockBox.get(billId);
       if (rData != null) {
@@ -67,13 +65,11 @@ class BillPaymentRepository {
       }
     }
 
-    // ONLY create payment record if entity name is NOT null/empty
     if (entityName == null || entityName.trim().isEmpty) return;
 
     final box = await _getBox();
     final allPayments = _paymentsFromBox(box).where((p) => p.billId == billId && p.isForSupplier == isForSupplier).toList();
     
-    // Only create if NO payments exist yet for this bill/entity (prevent duplicates on edit)
     if (allPayments.isEmpty) {
       final payment = BillPayment(
         id: Uuid().v4(),
@@ -118,7 +114,6 @@ class BillPaymentRepository {
       if (p != null) {
         final f = p.financials;
 
-        // --- 1. Supplier Status Calculation ---
         PaymentStatus sStatus = f.supplierPaymentStatus;
         if (targetIsSupplier == null || targetIsSupplier == true) {
           final sDue = f.supplierPrice;
@@ -135,7 +130,6 @@ class BillPaymentRepository {
           }
         }
         
-        // --- 2. Shipping Status Calculation ---
         PaymentStatus shStatus = f.shippingPaymentStatus;
         if (targetIsSupplier == null || targetIsSupplier == false) {
           final shDue = f.supplierShippingCost;
@@ -171,7 +165,6 @@ class BillPaymentRepository {
       if (rData != null) {
         final r = RestockRecord.fromMap(Map<String, dynamic>.from(rData as Map));
         
-        // --- 1. Supplier Status Calculation ---
         PaymentStatus sStatus = r.supplierPaymentStatus;
         if (targetIsSupplier == null || targetIsSupplier == true) {
           final sDue = r.supplierPrice;
@@ -188,7 +181,6 @@ class BillPaymentRepository {
           }
         }
         
-        // --- 2. Shipping Status Calculation ---
         PaymentStatus shStatus = r.shippingPaymentStatus;
         if (targetIsSupplier == null || targetIsSupplier == false) {
           final shDue = r.shippingCost;

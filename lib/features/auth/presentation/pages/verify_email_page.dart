@@ -21,9 +21,9 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
   @override
   void initState() {
     super.initState();
-    // Auto check verification status every 3 seconds
-    _timer = Timer.periodic(const Duration(seconds: 3), (_) {
-      ref.read(authRepositoryProvider).reloadUser();
+    // Auto check verification status every 5 seconds
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
+      _checkVerificationSilently();
     });
   }
 
@@ -33,18 +33,23 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
     super.dispose();
   }
 
+  Future<void> _checkVerificationSilently() async {
+    // Only check if user is actually signed in partially
+    final user = ref.read(authStateProvider).value;
+    if (user != null) {
+      await ref.read(authRepositoryProvider).reloadUser();
+    }
+  }
+
   Future<void> _checkVerification() async {
     setState(() => _isChecking = true);
     try {
       await ref.read(authRepositoryProvider).reloadUser();
       
-      // The reloadUser() updates Firebase Auth state, 
-      // which will eventually update authStateProvider.
-      // But we can check current state immediately for feedback.
       final user = ref.read(authStateProvider).value;
       if (mounted) {
         if (user?.isEmailVerified ?? false) {
-          showSuccess(context, 'Email berhasil diverifikasi! Mengalihkan...');
+          showSuccess(context, 'Email berhasil diverifikasi!');
         } else {
           showError(context, 'Email belum terverifikasi. Silakan cek inbox Anda.');
         }
@@ -73,7 +78,10 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).value;
+    final registrationEmail = ref.watch(registrationEmailProvider);
     final isOnline = ref.watch(isOnlineProvider);
+
+    final displayEmail = user?.email ?? registrationEmail ?? 'Email Anda';
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -89,7 +97,6 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Connectivity Badge
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
@@ -104,11 +111,7 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
                     const SizedBox(width: 8),
                     Text(
                       isOnline ? 'ONLINE' : 'OFFLINE',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: isOnline ? Colors.green : Colors.red,
-                      ),
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isOnline ? Colors.green : Colors.red),
                     ),
                   ],
                 ),
@@ -118,13 +121,11 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
               const SizedBox(height: 24),
               Text('Verifikasi Email Anda', style: Theme.of(context).textTheme.headlineMedium),
               const SizedBox(height: 16),
-              if (user != null) ...[
-                Text(
-                  user.email,
-                  style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-              ],
+              Text(
+                displayEmail,
+                style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
               const Text(
                 'Kami telah mengirimkan email verifikasi. Silakan cek inbox (atau folder spam) dan klik link verifikasi untuk melanjutkan.',
                 textAlign: TextAlign.center,
@@ -153,7 +154,7 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
                   }
                 },
                 icon: const Icon(Icons.logout),
-                label: const Text('Keluar dan Gunakan Akun Lain'),
+                label: const Text('Kembali ke Login'),
                 style: TextButton.styleFrom(foregroundColor: AppTheme.danger),
               ),
             ],

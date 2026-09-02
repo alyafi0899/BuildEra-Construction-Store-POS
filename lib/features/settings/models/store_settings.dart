@@ -13,17 +13,17 @@ class BankAccount {
 
   Map<String, dynamic> toMap() {
     return {
-      'bankName': bankName,
-      'accountNumber': accountNumber,
-      'accountHolder': accountHolder,
+      'bank_name': bankName,
+      'account_number': accountNumber,
+      'account_holder': accountHolder,
     };
   }
 
   factory BankAccount.fromMap(Map<dynamic, dynamic> map) {
     return BankAccount(
-      bankName: map['bankName']?.toString() ?? '',
-      accountNumber: map['accountNumber']?.toString() ?? '',
-      accountHolder: map['accountHolder']?.toString() ?? '',
+      bankName: map['bank_name']?.toString() ?? map['bankName']?.toString() ?? '',
+      accountNumber: map['account_number']?.toString() ?? map['accountNumber']?.toString() ?? '',
+      accountHolder: map['account_holder']?.toString() ?? map['accountHolder']?.toString() ?? '',
     );
   }
 }
@@ -33,24 +33,24 @@ class StoreSettings {
   final String ownerName;
   final String phone;
   final String email; // Business email
-  final String? loginEmail; // New: For security checks
+  final String? loginEmail; 
   final String address;
   final String description;
   final List<BankAccount> bankAccounts;
   final String? logoUrl;
-  final String? qrisImagePath; // New: Local path for QRIS barcode
-  final String? securityPin; // New: PIN for sensitive data
-  final bool lockAnalyticsPage; // New: Toggle for Analytics page
-  final bool lockProductsPage; // New: Toggle for Products page
-  final bool lockInventoryPage; // New: Toggle for Inventory page
+  final String? qrisImagePath; 
+  final String? securityPin; 
+  final bool lockAnalyticsPage; 
+  final bool lockProductsPage; 
+  final bool lockInventoryPage; 
   final double receiptWidth;
   final double receiptMargin;
-  final bool useFastPrint; // Direct Print for Invoices
+  final bool useFastPrint; 
   final String printerTransport;
-  final String invoiceDesign; // classic, modern, fast
-  final String printMethod;   // pdf, raw
-  final String? invoicePrinterUrl; // Dedicated for invoices
-  final String? labelPrinterUrl;   // Dedicated for labels
+  final String invoiceDesign; 
+  final String printMethod;   
+  final String? invoicePrinterUrl; 
+  final String? labelPrinterUrl;   
 
   const StoreSettings({
     this.businessName = '',
@@ -79,58 +79,58 @@ class StoreSettings {
 
   Map<String, dynamic> toMap() {
     return {
-      'businessName': businessName,
-      'ownerName': ownerName,
+      'business_name': businessName,
+      'owner_name': ownerName,
       'phone': phone,
       'email': email,
-      'loginEmail': loginEmail,
+      'login_email': loginEmail,
       'address': address,
       'description': description,
-      'bankAccounts': bankAccounts.map((x) => x.toMap()).toList(),
-      'logoUrl': logoUrl,
-      'qrisImagePath': qrisImagePath,
-      'securityPin': securityPin,
-      'lockAnalyticsPage': lockAnalyticsPage,
-      'lockProductsPage': lockProductsPage,
-      'lockInventoryPage': lockInventoryPage,
-      'receiptWidth': receiptWidth,
-      'receiptMargin': receiptMargin,
-      'useFastPrint': useFastPrint,
-      'printerTransport': printerTransport,
-      'invoiceDesign': invoiceDesign,
-      'printMethod': printMethod,
-      'invoicePrinterUrl': invoicePrinterUrl,
-      'labelPrinterUrl': labelPrinterUrl,
+      'bank_accounts': bankAccounts.map((x) => x.toMap()).toList(),
+      'logo_url': logoUrl,
+      'qris_image_path': qrisImagePath,
+      'security_pin': securityPin,
+      'lock_analytics_page': lockAnalyticsPage,
+      'lock_products_page': lockProductsPage,
+      'lock_inventory_page': lockInventoryPage,
+      'receipt_width': receiptWidth,
+      'receipt_margin': receiptMargin,
+      'use_fast_print': useFastPrint,
+      'printer_transport': printerTransport,
+      'invoice_design': invoiceDesign,
+      'print_method': printMethod,
+      'invoice_printer_url': invoicePrinterUrl,
+      'label_printer_url': labelPrinterUrl,
     };
   }
 
   factory StoreSettings.fromMap(Map<dynamic, dynamic> map) {
     return StoreSettings(
-      businessName: map['businessName']?.toString() ?? '',
-      ownerName: map['ownerName']?.toString() ?? '',
+      businessName: map['business_name']?.toString() ?? map['businessName']?.toString() ?? '',
+      ownerName: map['owner_name']?.toString() ?? map['ownerName']?.toString() ?? '',
       phone: map['phone']?.toString() ?? '',
       email: map['email']?.toString() ?? '',
-      loginEmail: map['loginEmail']?.toString(),
+      loginEmail: map['login_email']?.toString() ?? map['loginEmail']?.toString(),
       address: map['address']?.toString() ?? '',
       description: map['description']?.toString() ?? '',
-      bankAccounts: (map['bankAccounts'] as List?)
+      bankAccounts: (map['bank_accounts'] as List? ?? map['bankAccounts'] as List?)
               ?.map((x) => BankAccount.fromMap(x as Map))
               .toList() ??
           [],
-      logoUrl: map['logoUrl']?.toString(),
-      qrisImagePath: map['qrisImagePath']?.toString(),
-      securityPin: map['securityPin']?.toString(),
-      lockAnalyticsPage: map['lockAnalyticsPage'] as bool? ?? true,
-      lockProductsPage: map['lockProductsPage'] as bool? ?? true,
-      lockInventoryPage: map['lockInventoryPage'] as bool? ?? true,
-      receiptWidth: (map['receiptWidth'] as num?)?.toDouble() ?? 80.0,
-      receiptMargin: (map['receiptMargin'] as num?)?.toDouble() ?? 4.0,
-      useFastPrint: map['useFastPrint'] as bool? ?? false,
-      printerTransport: map['printerTransport']?.toString() ?? 'pdf',
-      invoiceDesign: map['invoiceDesign']?.toString() ?? 'classic',
-      printMethod: map['printMethod']?.toString() ?? 'pdf',
-      invoicePrinterUrl: map['invoicePrinterUrl']?.toString(),
-      labelPrinterUrl: map['labelPrinterUrl']?.toString(),
+      logoUrl: map['logo_url']?.toString() ?? map['logoUrl']?.toString(),
+      qrisImagePath: map['qris_image_path']?.toString() ?? map['qrisImagePath']?.toString(),
+      securityPin: map['security_pin']?.toString() ?? map['securityPin']?.toString(),
+      lockAnalyticsPage: (map['lock_analytics_page'] ?? map['lockAnalyticsPage']) as bool? ?? true,
+      lockProductsPage: (map['lock_products_page'] ?? map['lockProductsPage']) as bool? ?? true,
+      lockInventoryPage: (map['lock_inventory_page'] ?? map['lockInventoryPage']) as bool? ?? true,
+      receiptWidth: (map['receipt_width'] as num? ?? map['receiptWidth'] as num?)?.toDouble() ?? 80.0,
+      receiptMargin: (map['receipt_margin'] as num? ?? map['receiptMargin'] as num?)?.toDouble() ?? 4.0,
+      useFastPrint: (map['use_fast_print'] ?? map['useFastPrint']) as bool? ?? false,
+      printerTransport: map['printer_transport']?.toString() ?? map['printerTransport']?.toString() ?? 'pdf',
+      invoiceDesign: map['invoice_design']?.toString() ?? map['invoiceDesign']?.toString() ?? 'classic',
+      printMethod: map['print_method']?.toString() ?? map['printMethod']?.toString() ?? 'pdf',
+      invoicePrinterUrl: map['invoice_printer_url']?.toString() ?? map['invoicePrinterUrl']?.toString(),
+      labelPrinterUrl: map['label_printer_url']?.toString() ?? map['labelPrinterUrl']?.toString(),
     );
   }
 

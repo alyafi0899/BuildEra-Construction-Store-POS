@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'firebase_options.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
 import 'shared/widgets/sidebar.dart';
@@ -59,8 +57,9 @@ Future<void> main(List<String> args) async {
     }
 
     await LocalDatabase.init();
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
+    await Supabase.initialize(
+      url: 'https://xlkncjimgriwrxxpweue.supabase.co',
+      publishableKey: 'sb_publishable_RfxfRsQv2zm-Gt0rdTQP0w_23dkq2Zh',
     );
     await initializeDateFormatting('id_ID', null);
 
@@ -135,20 +134,10 @@ Future<void> main(List<String> args) async {
 
   try {
     // Perform all heavy lifting while splash is showing
-    // Add timeout to prevent hanging if internet is extremely poor
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    ).timeout(const Duration(seconds: 10), onTimeout: () {
-      debugPrint('BOOT: Firebase Init Timeout (Continuing Offline)');
-      return Firebase.app(); // Attempt to use already initialized app or continue
-    });
-    
-    if (!kIsWeb && Platform.isWindows) {
-      FirebaseFirestore.instance.settings = const Settings(
-        persistenceEnabled: true, // Enable offline cache for instant loading
-        cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-      );
-    }
+    await Supabase.initialize(
+      url: 'https://xlkncjimgriwrxxpweue.supabase.co',
+      publishableKey: 'sb_publishable_RfxfRsQv2zm-Gt0rdTQP0w_23dkq2Zh',
+    );
 
     await initializeDateFormatting('id_ID', null);
 

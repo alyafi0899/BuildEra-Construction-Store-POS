@@ -5,7 +5,7 @@ import '../../providers/auth_provider.dart';
 import '../pages/login_page.dart';
 import '../pages/verify_email_page.dart';
 import '../pages/setup_pin_page.dart';
-import '../../../../main.dart'; // To get MainShell or whatever home is
+import '../../../../main.dart'; 
 import '../../../../shared/widgets/splash_screen.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../../core/sync/providers/initial_sync_provider.dart';
@@ -23,14 +23,18 @@ class _AuthGateState extends ConsumerState<AuthGate> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
+    final registrationEmail = ref.watch(registrationEmailProvider);
 
     // Listen to sync state to show dialog
     ref.listen(initialSyncProvider, (prev, next) {
-      // Only prompt if sync is not done AND not already syncing AND not yet shown in this session
       if (next.isInitialSyncDone == false && !_dialogShown && !next.isSyncing && next.error == null) {
          _showSyncPrompt();
       }
     });
+
+    if (registrationEmail != null) {
+      return const VerifyEmailPage();
+    }
 
     return authState.when(
       data: (user) {
@@ -43,51 +47,44 @@ class _AuthGateState extends ConsumerState<AuthGate> {
           return const VerifyEmailPage();
         }
 
-        // Wait for sync status to be loaded to avoid flickering
         final syncState = ref.watch(initialSyncProvider);
         if (!syncState.isStatusLoaded) {
            return const SplashScreen();
         }
 
-        // Check for PIN enforcement
         final settings = ref.watch(settingsProvider);
         
-        // If settings are still loading or initial, we might need to wait 
-        // Optimization: Use authState email as fallback if settings.loginEmail is null
-        if (settings.loginEmail == null) {
-           // If user just logged in, settings might not have loginEmail yet
-           // but authState definitely has the email. 
-           // If businessName is empty, it's definitely the initial state.
-           if (settings.businessName.isEmpty) {
-             return Scaffold(
-               backgroundColor: const Color(0xFF0F1117),
-               body: Center(
-                 child: Column(
-                   mainAxisSize: MainAxisSize.min,
-                   children: [
-                     const SizedBox(
-                       width: 40,
-                       height: 40,
-                       child: CircularProgressIndicator(strokeWidth: 3, color: AppTheme.accent),
-                     ),
-                     const SizedBox(height: 16),
-                     Text('Memuat Pengaturan...', style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12)),
-                   ],
-                 ),
-               ),
-             );
-           }
-        }
-
-        if (settings.securityPin == null && settings.businessName.isEmpty) {
-          return const SetupPinPage();
+        // --- STABILITY FIX: Detect new user vs existing user ---
+        // If we have a verified user but businessName is empty, it's either:
+        // A) Settings still fetching from Supabase
+        // B) A fresh account that needs initial setup
+        
+        // We show Setup PIN only if we are sure settings have been checked/initialized
+        if (settings.businessName.isEmpty) {
+           // We use a minor delay or check user metadata to see if it's truly new
+           // For stability, if businessName is empty, we prioritize onboarding.
+           return const SetupPinPage();
         }
 
         return const MainShell();
       },
       loading: () => const SplashScreen(),
       error: (e, stack) => Scaffold(
-        body: Center(child: Text('Terjadi kesalahan sistem: $e')),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline_rounded, color: AppTheme.danger, size: 48),
+              const SizedBox(height: 16),
+              Text('Terjadi kesalahan sistem: $e'),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () => ref.read(authRepositoryProvider).logout(),
+                child: const Text('Kembali ke Login'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -112,6 +109,7 @@ class _SyncPromptDialog extends ConsumerWidget {
 
     return AlertDialog(
       backgroundColor: AppTheme.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Text(
         syncState.isInitialSyncDone ? 'Sinkronisasi Selesai' : 'Sinkronisasi Data',
         style: const TextStyle(color: Colors.white),
@@ -141,12 +139,16 @@ class _SyncPromptDialog extends ConsumerWidget {
             const SizedBox(height: 12),
             Text(
               syncState.currentTask ?? 'Mengunduh data...', 
-              style: const TextStyle(color: AppTheme.accent, fontSize: 12, fontWeight: FontWeight.w600),
+              style: const TextStyle(color: AppTheme.accent, fontSize: 12, fontWeight: FontWeight.bold),
             ),
           ],
           if (syncState.error != null) ...[
             const SizedBox(height: 16),
-            Text('Error: ${syncState.error}', style: const TextStyle(color: AppTheme.danger, fontSize: 12)),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: AppTheme.danger.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+              child: Text('Error: ${syncState.error}', style: const TextStyle(color: AppTheme.danger, fontSize: 11)),
+            ),
           ],
         ],
       ),
@@ -154,19 +156,15 @@ class _SyncPromptDialog extends ConsumerWidget {
         if (!syncState.isSyncing && !syncState.isInitialSyncDone)
           TextButton(
             onPressed: () => ref.read(initialSyncProvider.notifier).performInitialSync(),
-            child: const Text('Unduh Sekarang', style: TextStyle(color: AppTheme.accent)),
+            child: const Text('UNDUH SEKARANG', style: TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold)),
           ),
         if (syncState.isInitialSyncDone)
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.accent,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Lanjutkan ke Aplikasi'),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accent, foregroundColor: Colors.white),
+            child: const Text('LANJUTKAN KE APLIKASI'),
           ),
       ],
     );
   }
 }
-

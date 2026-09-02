@@ -1,16 +1,13 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:collection/collection.dart';
 import '../../../shared/models/purchase.dart';
-import '../../../shared/models/product.dart';
 import '../../products/models/product_financials.dart';
 import '../../inventory/models/restock_record.dart';
 import '../../inventory/providers/restock_provider.dart';
-import '../../inventory/providers/bill_payment_provider.dart';
 import '../../products/providers/product_provider.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -128,7 +125,6 @@ class PurchaseNotifier extends Notifier<void> {
     final settings = ref.read(settingsProvider);
     final prodRepo = ref.read(productRepositoryProvider);
     final restockRepo = ref.read(restockRepositoryProvider);
-    final payRepo = ref.read(billPaymentRepositoryProvider);
 
     final purchaseId = _uuid.v4();
     final invoice = _repo.generateInvoiceNumber();
@@ -180,10 +176,6 @@ class PurchaseNotifier extends Notifier<void> {
       // Update stock
       await prodRepo.updateStock(item.product.id, baseQty);
 
-      // Create a RestockRecord to integrate with existing "Manajemen Tagihan" and "Financials"
-      // We calculate per-item shipping allocation if needed, but for simplicity, we'll follow single-product restock logic
-      // where possible, or just link the purchase.
-      
       // Calculate allocation of shipping fee per item based on value weight
       final weight = item.subtotal / cart.subtotal;
       final allocatedShipping = cart.shippingFee * weight;
@@ -237,12 +229,9 @@ class PurchaseNotifier extends Notifier<void> {
       final restockRepo = ref.read(restockRepositoryProvider);
 
       // 1. Revert Stock & Delete Linked Restock Records
-      // When we delete a purchase, we need to subtract the added stock
       for (final item in p.items) {
-        final baseQty = item.quantity * item.conversionRate;
-        await prodRepo.updateStock(item.productId, -baseQty);
+        await prodRepo.updateStock(item.productId, - (item.quantity * item.conversionRate));
 
-        // Find and delete the linked restock record
         final restocks = await ref.read(restockHistoryProvider.future);
         final linkedRestock = restocks.firstWhereOrNull(
           (r) => r.productId == item.productId && 

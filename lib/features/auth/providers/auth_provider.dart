@@ -1,102 +1,161 @@
 import 'dart:async';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/auth_user.dart';
+import '../models/auth_user.dart' as model;
+import '../../settings/models/store_settings.dart';
 
-final firebaseAuthProvider = Provider<FirebaseAuth>((ref) => FirebaseAuth.instance);
+final supabaseClientProvider = Provider<SupabaseClient>((ref) => Supabase.instance.client);
 
-final authStateProvider = StreamProvider<AuthUser?>((ref) {
-  // Use userChanges() instead of authStateChanges() to catch metadata changes like email verification
-  return ref.watch(firebaseAuthProvider).userChanges().map((user) {
-    if (user == null) return null;
-    return AuthUser.fromFirebase(user);
-  });
-});
+/// Tracks the email used during the most recent registration attempt to show the verify screen
+final registrationEmailProvider = NotifierProvider<RegistrationEmailNotifier, String?>(RegistrationEmailNotifier.new);
+
+class RegistrationEmailNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+  void set(String? email) => state = email;
+}
+
+/// Robust Auth Notifier that handles session changes and manual refreshes
+class AuthNotifier extends StreamNotifier<model.AuthUser?> {
+  @override
+  Stream<model.AuthUser?> build() {
+    final client = ref.watch(supabaseClientProvider);
+    
+    // Listen to Supabase Auth Changes
+    return client.auth.onAuthStateChange.asyncMap((data) async {
+      final user = data.session?.user;
+      if (user == null) return null;
+      
+      // Clear registration email if we successfully signed in
+      ref.read(registrationEmailProvider.notifier).set(null);
+      
+      return model.AuthUser.fromSupabase(user);
+    });
+  }
+
+  /// Manually force a user reload to check for email verification status
+  Future<void> refreshUser() async {
+    try {
+      final client = ref.read(supabaseClientProvider);
+      // getUser() fetches the latest user data from the server, 
+      // bypassing the local cached session.
+      final response = await client.auth.getUser();
+      if (response.user != null) {
+        state = AsyncData(model.AuthUser.fromSupabase(response.user!));
+      }
+    } catch (e) {
+      // Ignore refresh errors
+    }
+  }
+}
+
+final authStateProvider = StreamNotifierProvider<AuthNotifier, model.AuthUser?>(AuthNotifier.new);
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  return AuthRepository(ref.watch(firebaseAuthProvider));
+  return AuthRepository(ref.watch(supabaseClientProvider), ref);
 });
 
 class AuthRepository {
-  final FirebaseAuth _auth;
-  AuthRepository(this._auth);
+  final SupabaseClient _client;
+  final Ref _ref;
+  AuthRepository(this._client, this._ref);
+
+  GoTrueClient get _auth => _client.auth;
 
   Future<void> login(String email, String password) async {
-    await _auth.signInWithEmailAndPassword(email: email, password: password);
+    await _auth.signInWithPassword(email: email, password: password);
   }
 
-  Future<User?> register(String email, String password) async {
-    final cred = await _auth.createUserWithEmailAndPassword(email: email, password: password);
-    await cred.user?.sendEmailVerification();
-    return cred.user;
+  Future<User?> register({
+    required String email, 
+    required String password,
+    required StoreSettings settings,
+  }) async {
+    try {
+      final response = await _auth.signUp(
+        email: email, 
+        password: password,
+        data: settings.toMap(), 
+      );
+      
+      if (response.user != null) {
+        _ref.read(registrationEmailProvider.notifier).set(email);
+      }
+      
+      return response.user;
+    } on AuthException catch (e) {
+      if (e.statusCode == '429' || e.code == 'over_email_send_rate_limit' || e.message.contains('User already registered')) {
+        _ref.read(registrationEmailProvider.notifier).set(email);
+        if (e.code == 'over_email_send_rate_limit') {
+           throw 'Limit pengiriman email tercapai. Akun telah dibuat, silakan cek inbox Anda atau tunggu 1 menit.';
+        }
+      }
+      rethrow;
+    }
   }
 
   Future<void> logout() async {
     await _auth.signOut();
+    _ref.read(registrationEmailProvider.notifier).set(null);
   }
 
   Future<void> sendPasswordReset(String email) async {
-    await _auth.sendPasswordResetEmail(email: email);
+    await _auth.resetPasswordForEmail(email);
+  }
+
+  Future<void> verifyAndSendPasswordReset({required String email, required String phone}) async {
+    // FIX: Using Case-Insensitive (ilike) and robust trimming for search
+    final response = await _client
+        .from('users')
+        .select('id, login_email, phone')
+        .ilike('login_email', email.trim())
+        .eq('phone', phone.trim())
+        .maybeSingle();
+
+    if (response == null) {
+      throw 'Data tidak ditemukan atau tidak cocok dengan sistem kami.\nPastikan Email dan No HP Pemilik sudah benar.';
+    }
+
+    await _auth.resetPasswordForEmail(email.trim());
   }
 
   Future<void> sendVerificationEmail() async {
-    await _auth.currentUser?.sendEmailVerification();
+    final email = _ref.read(registrationEmailProvider) ?? _auth.currentUser?.email;
+    if (email != null) {
+      await _auth.resend(type: OtpType.signup, email: email);
+    }
   }
 
   Future<void> reloadUser() async {
-    await _auth.currentUser?.reload();
+    await _ref.read(authStateProvider.notifier).refreshUser();
   }
 
   Future<void> updatePassword(String newPassword) async {
-    await _auth.currentUser?.updatePassword(newPassword);
+    await _auth.updateUser(UserAttributes(password: newPassword));
   }
 
-  Future<void> verifyBeforeUpdateEmail(String newEmail) async {
-    await _auth.currentUser?.verifyBeforeUpdateEmail(newEmail);
-  }
-
-  /// Standard sign-in check for "Forgot PIN" scenario to bypass strict reauthentication timeouts
   Future<void> verifyCredentials(String email, String password) async {
     try {
-      // Use a temporary firebase auth instance or just try to sign in with credentials
-      // to verify they are correct without binding to the main session if possible
-      final tempAuth = FirebaseAuth.instance;
-      await tempAuth.signInWithEmailAndPassword(email: email, password: password).timeout(const Duration(seconds: 10));
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'wrong-password' || e.code == 'invalid-credential' || e.code == 'user-not-found') {
-        throw 'Password yang Anda masukkan salah atau email tidak terdaftar.';
-      }
-      rethrow;
+      await _auth.signInWithPassword(email: email, password: password).timeout(const Duration(seconds: 10));
     } catch (e) {
-      throw 'Gagal verifikasi: $e';
+      throw 'Password yang Anda masukkan salah atau email tidak terdaftar.';
     }
   }
 
   Future<void> reauthenticate(String email, String password) async {
     final user = _auth.currentUser;
     if (user == null) {
-      throw FirebaseAuthException(
-        code: 'user-not-found',
-        message: 'Sesi login tidak ditemukan. Silakan login kembali.',
-      );
+      throw Exception('Sesi login tidak ditemukan. Silakan login kembali.');
     }
     
-    // Safety check to ensure we are re-authenticating the right user
     if (user.email != null && user.email!.toLowerCase() != email.toLowerCase()) {
-      throw FirebaseAuthException(
-        code: 'email-mismatch',
-        message: 'Email konfirmasi tidak sesuai dengan akun yang login.',
-      );
+      throw Exception('Email konfirmasi tidak sesuai dengan akun yang login.');
     }
 
-    final cred = EmailAuthProvider.credential(email: email, password: password);
     try {
-      await user.reauthenticateWithCredential(cred).timeout(const Duration(seconds: 15));
-    } on TimeoutException {
-      throw FirebaseAuthException(
-        code: 'network-timeout',
-        message: 'Waktu verifikasi habis. Periksa koneksi internet Anda.',
-      );
+      await _auth.signInWithPassword(email: email, password: password).timeout(const Duration(seconds: 15));
+    } catch (e) {
+      throw Exception('Waktu verifikasi habis atau kredensial salah. Periksa koneksi internet Anda.');
     }
   }
 }

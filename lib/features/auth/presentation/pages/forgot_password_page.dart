@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../providers/auth_provider.dart';
@@ -33,20 +32,11 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
       final email = _emailCtrl.text.trim();
       final phone = _phoneCtrl.text.trim();
 
-      // SECURITY CHECK: Verify if email and phone match in Firestore
-      final userQuery = await FirebaseFirestore.instance
-          .collection('users')
-          .where('loginEmail', isEqualTo: email)
-          .where('phone', isEqualTo: phone)
-          .limit(1)
-          .get();
-
-      if (userQuery.docs.isEmpty) {
-        // Generic error message for security
-        throw 'Data tidak ditemukan atau tidak cocok dengan sistem kami.';
-      }
-
-      await ref.read(authRepositoryProvider).sendPasswordReset(email);
+      // SECURITY CHECK & RESET: Verify email/phone match in Supabase before sending reset
+      await ref.read(authRepositoryProvider).verifyAndSendPasswordReset(
+        email: email, 
+        phone: phone,
+      );
       
       if (mounted) {
         showSuccess(context, 'Link reset password telah dikirim ke email Anda.');

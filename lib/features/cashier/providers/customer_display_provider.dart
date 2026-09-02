@@ -1,40 +1,64 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/providers/auth_provider.dart';
 import 'cart_provider.dart';
 
-/// Global variable to store the UID when launched as a secondary process.
 String? forcedUidForDisplay;
 
-/// This provider is used by the customer display to listen to the "live" cart from Firestore.
 final customerDisplayCartProvider = StreamProvider<CartState?>((ref) {
+  final client = ref.watch(supabaseClientProvider);
   final user = ref.watch(authStateProvider).value;
   final uid = forcedUidForDisplay ?? user?.uid;
   
   if (uid == null) return Stream.value(null);
 
-  return FirebaseFirestore.instance
-      .collection('users')
-      .doc(uid)
-      .collection('metadata')
-      .doc('customer_display')
-      .snapshots()
-      .map((doc) {
-        if (!doc.exists) return const CartState();
-        return CartState.fromMap(doc.data()!);
-      });
+  final controller = StreamController<CartState?>();
+
+  // Helper to fetch current state
+  Future<void> fetch() async {
+    try {
+      final res = await client.from('customer_display').select().eq('user_id', uid).maybeSingle();
+      if (res != null && !controller.isClosed) {
+        controller.add(CartState.fromMap(res['cart_data']));
+      }
+    } catch (e) {
+      // Quietly ignore
+    }
+  }
+
+  fetch();
+
+  final channel = client.channel('customer_display_sync')
+    .onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: 'customer_display',
+      filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: uid),
+      callback: (payload) {
+        if (payload.newRecord.isNotEmpty && !controller.isClosed) {
+          controller.add(CartState.fromMap(payload.newRecord['cart_data']));
+        }
+      },
+    ).subscribe();
+
+  ref.onDispose(() {
+    channel.unsubscribe();
+    controller.close();
+  });
+
+  return controller.stream;
 });
 
 class CustomerDisplayBridge {
-  /// Writes the current cart state to Firestore for the customer display to pick up.
   static Future<void> syncCart(String uid, CartState cart) async {
     try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('metadata')
-          .doc('customer_display')
-          .set(cart.toMap());
+      final client = Supabase.instance.client;
+      await client.from('customer_display').upsert({
+        'user_id': uid,
+        'cart_data': cart.toMap(),
+        'updated_at': DateTime.now().toIso8601String(),
+      });
     } catch (e) {
       // Quietly ignore sync errors
     }

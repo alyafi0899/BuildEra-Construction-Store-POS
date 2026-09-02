@@ -39,7 +39,7 @@ class SyncStatusBar extends ConsumerWidget {
       icon = Icons.cloud_done_rounded;
       label = 'Tersinkronisasi';
       if (syncState.lastSyncAt != null) {
-        subLabel = 'Terakhir:${Formatters.dateTime(syncState.lastSyncAt!)}';
+        subLabel = 'Terakhir: ${Formatters.dateTime(syncState.lastSyncAt!)}';
       }
     }
 
@@ -48,32 +48,33 @@ class SyncStatusBar extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: color.withValues(alpha: 0.2)),
           ),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
             children: [
               _PulseIcon(icon: icon, color: color, pulsing: syncState.isSyncing),
               const SizedBox(width: 10),
-              Flexible(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       label,
-                      style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13),
-                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12),
                       maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     if (subLabel != null)
                       Text(
                         subLabel,
-                        style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 11),
+                        style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 10),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                   ],
                 ),
@@ -82,13 +83,15 @@ class SyncStatusBar extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 8),
-        _ManualSyncButton(),
+        const _ManualSyncButton(),
       ],
     );
   }
 }
 
 class _ManualSyncButton extends ConsumerWidget {
+  const _ManualSyncButton();
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final syncState = ref.watch(initialSyncProvider);
@@ -100,7 +103,7 @@ class _ManualSyncButton extends ConsumerWidget {
           : () => ref.read(initialSyncProvider.notifier).triggerManualSync(),
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
         decoration: BoxDecoration(
           border: Border.all(color: AppTheme.border),
           borderRadius: BorderRadius.circular(8),
@@ -114,11 +117,15 @@ class _ManualSyncButton extends ConsumerWidget {
                 child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent),
               )
             else
-              const Icon(Icons.download_for_offline_rounded, size: 16, color: AppTheme.accent),
-            const SizedBox(width: 8),
-            Text(
-              syncState.isSyncing ? 'Mengunduh...' : 'Unduh Data Cloud',
-              style: const TextStyle(color: AppTheme.accent, fontSize: 11, fontWeight: FontWeight.bold),
+              const Icon(Icons.download_for_offline_rounded, size: 14, color: AppTheme.accent),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                syncState.isSyncing ? 'Mengunduh...' : 'Unduh Data Cloud',
+                style: const TextStyle(color: AppTheme.accent, fontSize: 10, fontWeight: FontWeight.bold),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -126,7 +133,6 @@ class _ManualSyncButton extends ConsumerWidget {
     );
   }
 }
-
 
 class _PulseIcon extends StatefulWidget {
   final IconData icon;
@@ -172,7 +178,7 @@ class _PulseIconState extends State<_PulseIcon> with SingleTickerProviderStateMi
   Widget build(BuildContext context) {
     return RotationTransition(
       turns: widget.pulsing ? _controller : const AlwaysStoppedAnimation(0),
-      child: Icon(widget.icon, color: widget.color, size: 20),
+      child: Icon(widget.icon, color: widget.color, size: 18),
     );
   }
 }

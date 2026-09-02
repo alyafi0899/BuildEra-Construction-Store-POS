@@ -1,5 +1,5 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -9,13 +9,10 @@ import '../../../core/sync/providers/sync_provider.dart';
 
 class BarcodeHistoryRepository {
   final String _uid;
+  final SupabaseClient _client;
   final Ref _ref;
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  BarcodeHistoryRepository(this._uid, this._ref);
-
-  CollectionReference get _historyCol => 
-      _db.collection('users').doc(_uid).collection('barcode_history');
+  BarcodeHistoryRepository(this._uid, this._client, this._ref);
 
   Future<Box> _getBox() => LocalDatabase.openBox(_uid, 'barcode_history');
 
@@ -25,18 +22,19 @@ class BarcodeHistoryRepository {
     final box = await _getBox();
     if (box.isNotEmpty && !force) return;
 
-    final snapshot = await _historyCol.get().timeout(const Duration(seconds: 20));
+    final response = await _client
+        .from('barcode_history')
+        .select()
+        .eq('user_id', _uid)
+        .timeout(const Duration(seconds: 20));
     
-    // 1. Prepare data in memory
     final Map<String, dynamic> allEntries = {};
-    for (final doc in snapshot.docs) {
-      final data = Map<String, dynamic>.from(doc.data() as Map);
-      allEntries[doc.id] = LocalDatabase.sanitize(data);
+    for (final item in response) {
+      allEntries[item['id']] = LocalDatabase.sanitize(item);
     }
 
     if (force) await box.clear();
     
-    // 2. Chunked write
     const int chunkSize = 50;
     final keys = allEntries.keys.toList();
     for (var i = 0; i < keys.length; i += chunkSize) {
@@ -52,32 +50,32 @@ class BarcodeHistoryRepository {
     }
   }
 
-  /// Checks if a barcode was EVER used (even in deleted products)
   Future<bool> isBarcodeUsed(String barcode) async {
     final normalized = barcode.trim();
     if (normalized.isEmpty) return false;
     
-    // 1. Check in local history log first
     final box = await _getBox();
     if (box.containsKey(normalized)) return true;
 
-    // 2. Check in Firestore only if online
     try {
-      final historyDoc = await _historyCol.doc(normalized).get().timeout(const Duration(seconds: 2));
-      if (historyDoc.exists) {
-        // Cache it locally if we found it on server
-        final data = LocalDatabase.sanitize(historyDoc.data() as Map<String, dynamic>);
+      final response = await _client
+          .from('barcode_history')
+          .select()
+          .eq('barcode', normalized)
+          .eq('user_id', _uid)
+          .maybeSingle()
+          .timeout(const Duration(seconds: 2));
+      
+      if (response != null) {
+        final data = LocalDatabase.sanitize(response);
         await box.put(normalized, data);
         return true;
       }
-    } catch (_) {
-      // If offline or timeout, we rely on local check only
-    }
+    } catch (_) {}
 
     return false;
   }
 
-  /// Logs a barcode into the permanent history
   Future<void> logBarcode(String barcode, String productName, String productId) async {
     final normalized = barcode.trim();
     if (normalized.isEmpty) return;
@@ -90,11 +88,9 @@ class BarcodeHistoryRepository {
       'status': 'active',
     };
 
-    // 1. Save Local
     final box = await _getBox();
     await box.put(normalized, data);
 
-    // 2. Queue Sync
     await _ref.read(syncProvider.notifier).addToQueue(
       collection: 'barcode_history',
       documentId: normalized,
@@ -103,7 +99,6 @@ class BarcodeHistoryRepository {
     );
   }
 
-  /// Logs multiple barcodes into the permanent history in a single batch
   Future<void> logBarcodesBatch(List<({String barcode, String name, String id})> items) async {
     if (items.isEmpty) return;
     
@@ -142,7 +137,6 @@ class BarcodeHistoryRepository {
     }
   }
 
-  /// Archives a barcode when a product is deleted
   Future<void> archiveBarcode(String barcode) async {
     final normalized = barcode.trim();
     if (normalized.isEmpty) return;
@@ -155,7 +149,6 @@ class BarcodeHistoryRepository {
       m['archivedAt'] = DateTime.now().toIso8601String();
       await box.put(normalized, m);
 
-      // Sync Update
       await _ref.read(syncProvider.notifier).addToQueue(
         collection: 'barcode_history',
         documentId: normalized,
@@ -168,5 +161,6 @@ class BarcodeHistoryRepository {
 
 final barcodeHistoryRepositoryProvider = Provider<BarcodeHistoryRepository>((ref) {
   final user = ref.watch(authStateProvider).value;
-  return BarcodeHistoryRepository(user?.uid ?? 'unknown', ref);
+  final client = ref.read(supabaseClientProvider);
+  return BarcodeHistoryRepository(user?.uid ?? 'unknown', client, ref);
 });

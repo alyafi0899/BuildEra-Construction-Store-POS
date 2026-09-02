@@ -1,25 +1,15 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/image_helper.dart';
+import '../../../../shared/widgets/common_widgets.dart';
+import '../../../auth/providers/auth_provider.dart';
+import '../../../products/providers/product_provider.dart';
+import '../../models/store_settings.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/app_settings_provider.dart';
-import '../../models/store_settings.dart';
-import '../../../auth/providers/auth_provider.dart';
-import '../../../../shared/widgets/common_widgets.dart';
-
-import '../../../inventory/providers/restock_provider.dart';
-import '../../../inventory/providers/bill_payment_provider.dart';
-import '../../../debts/providers/debt_repository.dart';
-import '../../../payment/providers/transaction_provider.dart';
-import '../../../products/providers/product_provider.dart';
-import '../../../../core/utils/backup_helper.dart';
-import '../../../../shared/widgets/security_gate.dart';
 import '../widgets/printing_settings_widget.dart';
-
-enum SettingsSection { store, payment, printing, security, display, backup }
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -29,47 +19,28 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
+  int _activeTab = 0;
   final _formKey = GlobalKey<FormState>();
-  SettingsSection _currentSection = SettingsSection.store;
 
-  late TextEditingController _businessNameCtrl;
-  late TextEditingController _ownerNameCtrl;
-  late TextEditingController _phoneCtrl;
-  late TextEditingController _emailCtrl;
-  late TextEditingController _addressCtrl;
-  late TextEditingController _descriptionCtrl;
-  late TextEditingController _receiptWidthCtrl;
-  late TextEditingController _receiptMarginCtrl;
+  // Controllers
+  final _businessNameCtrl = TextEditingController();
+  final _ownerNameCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _addressCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+  final _receiptWidthCtrl = TextEditingController();
+  final _receiptMarginCtrl = TextEditingController();
 
+  // State for non-text settings
+  List<BankAccount> _bankAccounts = [];
   bool _useFastPrint = false;
   String _printerTransport = 'pdf';
   String _invoiceDesign = 'classic';
   String _printMethod = 'pdf';
   String? _invoicePrinterUrl;
 
-  List<BankAccount> _bankAccounts = [];
-
-  @override
-  void initState() {
-    super.initState();
-    final settings = ref.read(settingsProvider);
-    _businessNameCtrl = TextEditingController(text: settings.businessName);
-    _ownerNameCtrl = TextEditingController(text: settings.ownerName);
-    _phoneCtrl = TextEditingController(text: settings.phone);
-    _emailCtrl = TextEditingController(text: settings.email);
-    _addressCtrl = TextEditingController(text: settings.address);
-    _descriptionCtrl = TextEditingController(text: settings.description);
-    _receiptWidthCtrl =
-        TextEditingController(text: settings.receiptWidth.toString());
-    _receiptMarginCtrl =
-        TextEditingController(text: settings.receiptMargin.toString());
-    _useFastPrint = settings.useFastPrint;
-    _printerTransport = settings.printerTransport;
-    _invoiceDesign = settings.invoiceDesign;
-    _printMethod = settings.printMethod;
-    _invoicePrinterUrl = settings.invoicePrinterUrl;
-    _bankAccounts = List.from(settings.bankAccounts);
-  }
+  bool _initialized = false;
 
   @override
   void dispose() {
@@ -78,452 +49,271 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     _phoneCtrl.dispose();
     _emailCtrl.dispose();
     _addressCtrl.dispose();
-    _descriptionCtrl.dispose();
+    _descCtrl.dispose();
     _receiptWidthCtrl.dispose();
     _receiptMarginCtrl.dispose();
     super.dispose();
   }
 
-  void _addBankAccount() {
-    setState(() {
-      _bankAccounts.add(
-          const BankAccount(bankName: '', accountNumber: '', accountHolder: ''));
-    });
+  void _initFields(StoreSettings settings) {
+    if (_initialized) return;
+    _businessNameCtrl.text = settings.businessName;
+    _ownerNameCtrl.text = settings.ownerName;
+    _phoneCtrl.text = settings.phone;
+    _emailCtrl.text = settings.email;
+    _addressCtrl.text = settings.address;
+    _descCtrl.text = settings.description;
+    _bankAccounts = List.from(settings.bankAccounts);
+    _receiptWidthCtrl.text = settings.receiptWidth.toString();
+    _receiptMarginCtrl.text = settings.receiptMargin.toString();
+    _useFastPrint = settings.useFastPrint;
+    _printerTransport = settings.printerTransport;
+    _invoiceDesign = settings.invoiceDesign;
+    _printMethod = settings.printMethod;
+    _invoicePrinterUrl = settings.invoicePrinterUrl;
+    _initialized = true;
   }
 
-  void _removeBankAccount(int index) {
-    setState(() {
-      _bankAccounts.removeAt(index);
-    });
-  }
+  Future<void> _saveSettings() async {
+    if (!_formKey.currentState!.validate()) return;
 
-  void _save() {
-    if (_formKey.currentState!.validate()) {
-      final settings = ref.read(settingsProvider).copyWith(
-            businessName: _businessNameCtrl.text,
-            ownerName: _ownerNameCtrl.text,
-            phone: _phoneCtrl.text,
-            email: _emailCtrl.text,
-            address: _addressCtrl.text,
-            description: _descriptionCtrl.text,
-            receiptWidth: double.tryParse(_receiptWidthCtrl.text) ?? 80.0,
-            receiptMargin: double.tryParse(_receiptMarginCtrl.text) ?? 4.0,
-            useFastPrint: _useFastPrint,
-            printerTransport: _printerTransport,
-            invoiceDesign: _invoiceDesign,
-            printMethod: _printMethod,
-            invoicePrinterUrl: _invoicePrinterUrl,
-            bankAccounts: _bankAccounts,
-          );
-
-      ref.read(settingsProvider.notifier).updateSettings(settings);
-      showSuccess(context, 'Pengaturan berhasil disimpan');
-    }
-  }
-
-  Future<void> _handleFullBackup(WidgetRef ref) async {
-    debugPrint('DEBUG: _handleFullBackup invoked');
-
-    // 1. Fetch data from cache first
-    final products = ref.read(productsProvider).asData?.value ?? [];
-    final restocks = ref.read(restockHistoryProvider).asData?.value ?? [];
-    final billPayments = ref.read(billPaymentsProvider).asData?.value ?? [];
-    final customers = ref.read(customersProvider).asData?.value ?? [];
-    final customerDebts = ref.read(debtsProvider(null)).asData?.value ?? [];
-    final customerPayments =
-        ref.read(debtPaymentsProvider((customerId: null, debtId: null))).asData?.value ?? [];
-    final transactions = ref.read(transactionsProvider).asData?.value ?? [];
-    final settings = ref.read(settingsProvider);
-
-    debugPrint(
-        'DEBUG: Data counts - Products: ${products.length}, Transactions: ${transactions.length}');
-
-    // 2. Immediate Feedback
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('Membuka Folder Picker...'),
-          duration: Duration(seconds: 1)),
+    final current = ref.read(settingsProvider);
+    final updated = current.copyWith(
+      businessName: _businessNameCtrl.text.trim(),
+      ownerName: _ownerNameCtrl.text.trim(),
+      phone: _phoneCtrl.text.trim(),
+      email: _emailCtrl.text.trim(),
+      address: _addressCtrl.text.trim(),
+      description: _descCtrl.text.trim(),
+      bankAccounts: _bankAccounts,
+      receiptWidth: double.tryParse(_receiptWidthCtrl.text) ?? 80.0,
+      receiptMargin: double.tryParse(_receiptMarginCtrl.text) ?? 4.0,
+      useFastPrint: _useFastPrint,
+      printerTransport: _printerTransport,
+      invoiceDesign: _invoiceDesign,
+      printMethod: _printMethod,
+      invoicePrinterUrl: _invoicePrinterUrl,
     );
 
     try {
-      await BackupHelper.performFullBackup(
-        context: context,
-        products: products,
-        restocks: restocks,
-        billPayments: billPayments,
-        customers: customers,
-        customerDebts: customerDebts,
-        customerPayments: customerPayments,
-        transactions: transactions,
-        settings: settings,
-      );
-
-      if (mounted) showSuccess(context, 'Backup Berhasil Disimpan!');
-    } catch (e, stack) {
-      debugPrint('DEBUG: Backup FATAL ERROR: $e');
-      debugPrint('DEBUG: StackTrace: $stack');
-      if (mounted) showError(context, 'Gagal Backup: $e');
+      await ref.read(settingsProvider.notifier).updateSettings(updated);
+      if (mounted) showSuccess(context, 'Pengaturan berhasil disimpan');
+    } catch (e) {
+      if (mounted) showError(context, 'Gagal menyimpan pengaturan: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Sync UI with provider changes
-    ref.listen(settingsProvider, (prev, next) {
-      if (_businessNameCtrl.text.isEmpty && next.businessName.isNotEmpty) {
-        _businessNameCtrl.text = next.businessName;
-        _ownerNameCtrl.text = next.ownerName;
-        _phoneCtrl.text = next.phone;
-        _emailCtrl.text = next.email;
-        _addressCtrl.text = next.address;
-        _descriptionCtrl.text = next.description;
-        _receiptWidthCtrl.text = next.receiptWidth.toString();
-        _receiptMarginCtrl.text = next.receiptMargin.toString();
-        _invoicePrinterUrl = next.invoicePrinterUrl;
-        setState(() {
-          _bankAccounts = List.from(next.bankAccounts);
-          _useFastPrint = next.useFastPrint;
-          _printerTransport = next.printerTransport;
-        });
-      }
-    });
+    final settings = ref.watch(settingsProvider);
+    _initFields(settings);
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      body: Column(
+      body: Row(
         children: [
-          PageHeader(
-            title: 'Pengaturan Akun & Toko',
-            icon: Icons.settings_rounded,
-            actions: [
-              OutlinedButton.icon(
-                onPressed: () async {
-                  if (await showLogoutDialog(context)) {
-                    if (mounted) ref.read(authRepositoryProvider).logout();
-                  }
-                },
-                icon: const Icon(Icons.logout, size: 18),
-                label: const Text('Keluar (Logout)'),
-                style: OutlinedButton.styleFrom(
-                    foregroundColor: AppTheme.danger,
-                    side: const BorderSide(color: AppTheme.danger)),
-              ),
-              ElevatedButton.icon(
-                onPressed: _save,
-                icon: const Icon(Icons.save_rounded, size: 18),
-                label: const Text('Simpan Perubahan'),
-              ),
-            ],
-          ),
-          Expanded(
-            child: Row(
+          // Sidebar Pengaturan
+          Container(
+            width: 280,
+            decoration: const BoxDecoration(
+              color: AppTheme.surface,
+              border: Border(right: BorderSide(color: AppTheme.border)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildSidebar(),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
-                    child: Form(
-                      key: _formKey,
-                      child: Center(
-                        child: Container(
-                          constraints: const BoxConstraints(maxWidth: 800),
-                          child: _buildSectionContent(),
-                        ),
-                      ),
+                const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text('PENGATURAN',
+                      style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1)),
+                ),
+                _SidebarItem(
+                  icon: Icons.store_rounded,
+                  label: 'Informasi Toko',
+                  isSelected: _activeTab == 0,
+                  onTap: () => setState(() => _activeTab = 0),
+                ),
+                _SidebarItem(
+                  icon: Icons.account_balance_rounded,
+                  label: 'Pembayaran & Bank',
+                  isSelected: _activeTab == 1,
+                  onTap: () => setState(() => _activeTab = 1),
+                ),
+                _SidebarItem(
+                  icon: Icons.print_rounded,
+                  label: 'Printer & Struk',
+                  isSelected: _activeTab == 2,
+                  onTap: () => setState(() => _activeTab = 2),
+                ),
+                _SidebarItem(
+                  icon: Icons.security_rounded,
+                  label: 'Keamanan Data',
+                  isSelected: _activeTab == 3,
+                  onTap: () => setState(() => _activeTab = 3),
+                ),
+                _SidebarItem(
+                  icon: Icons.display_settings_rounded,
+                  label: 'Tampilan Aplikasi',
+                  isSelected: _activeTab == 4,
+                  onTap: () => setState(() => _activeTab = 4),
+                ),
+                const Spacer(),
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: ElevatedButton.icon(
+                    onPressed: _saveSettings,
+                    icon: const Icon(Icons.save_rounded),
+                    label: const Text('SIMPAN PERUBAHAN'),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 50),
                     ),
                   ),
                 ),
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildSidebar() {
-    return Container(
-      width: 240,
-      decoration: const BoxDecoration(
-        color: AppTheme.surface,
-        border: Border(right: BorderSide(color: AppTheme.border)),
-      ),
-      child: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-        children: [
-          _SidebarItem(
-            icon: Icons.store_rounded,
-            label: 'Informasi Toko',
-            isSelected: _currentSection == SettingsSection.store,
-            onTap: () => setState(() => _currentSection = SettingsSection.store),
-          ),
-          _SidebarItem(
-            icon: Icons.payments_rounded,
-            label: 'Metode Pembayaran',
-            isSelected: _currentSection == SettingsSection.payment,
-            onTap: () => setState(() => _currentSection = SettingsSection.payment),
-          ),
-          _SidebarItem(
-            icon: Icons.print_rounded,
-            label: 'Format Struk',
-            isSelected: _currentSection == SettingsSection.printing,
-            onTap: () => setState(() => _currentSection = SettingsSection.printing),
-          ),
-          _SidebarItem(
-            icon: Icons.security_rounded,
-            label: 'Keamanan (PIN)',
-            isSelected: _currentSection == SettingsSection.security,
-            onTap: () => setState(() => _currentSection = SettingsSection.security),
-          ),
-          _SidebarItem(
-            icon: Icons.display_settings_rounded,
-            label: 'Tampilan Aplikasi',
-            isSelected: _currentSection == SettingsSection.display,
-            onTap: () => setState(() => _currentSection = SettingsSection.display),
-          ),
-          _SidebarItem(
-            icon: Icons.backup_rounded,
-            label: 'Data & Backup',
-            isSelected: _currentSection == SettingsSection.backup,
-            onTap: () => setState(() => _currentSection = SettingsSection.backup),
+          // Konten Utama
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(40),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_activeTab == 0) _buildStoreSection(),
+                    if (_activeTab == 1) _buildPaymentSection(),
+                    if (_activeTab == 2) _buildPrintingSection(),
+                    if (_activeTab == 3) _buildSecuritySection(),
+                    if (_activeTab == 4) _buildDisplaySection(),
+                  ],
+                ),
+              ),
+            ),
           ),
         ],
       ),
     );
-  }
-
-  Widget _buildSectionContent() {
-    switch (_currentSection) {
-      case SettingsSection.store:
-        return _buildStoreSection();
-      case SettingsSection.payment:
-        return _buildPaymentSection();
-      case SettingsSection.printing:
-        return _buildPrintingSection();
-      case SettingsSection.security:
-        return _buildSecuritySection();
-      case SettingsSection.display:
-        return _buildDisplaySection();
-      case SettingsSection.backup:
-        return _buildBackupSection();
-    }
   }
 
   Widget _buildStoreSection() {
-    final settings = ref.watch(settingsProvider);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionTitle(title: 'Informasi Bisnis'),
-        const SizedBox(height: 16),
-        AppCard(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        children: [
-                          _buildInput('Nama Bisnis / Toko', _businessNameCtrl,
-                              Icons.business_rounded),
-                          const SizedBox(height: 16),
-                          _buildInput('Nama Pemilik', _ownerNameCtrl,
-                              Icons.person_rounded),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 24),
-                    _buildLogoPicker(settings),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                        child: _buildInput(
-                            'Nomor Telepon', _phoneCtrl, Icons.phone_rounded)),
-                    const SizedBox(width: 16),
-                    Expanded(
-                        child: _buildInput(
-                            'Email Bisnis', _emailCtrl, Icons.email_rounded)),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _buildInput('Alamat Lengkap', _addressCtrl,
-                    Icons.location_on_rounded,
-                    maxLines: 2),
-                const SizedBox(height: 16),
-                _buildInput('Keterangan / Slogan', _descriptionCtrl,
-                    Icons.description_rounded),
-              ],
-            ),
-          ),
-        ),
+        const _SectionTitle(title: 'Identitas Bisnis'),
         const SizedBox(height: 24),
-        const _SectionTitle(title: 'Metode Pembayaran (QRIS)'),
-        const SizedBox(height: 16),
-        AppCard(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Gambar QRIS Toko',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 14)),
-                      SizedBox(height: 4),
-                      Text(
-                          'Upload gambar QRIS statis Anda (GPN/Dana/OVO/dll) untuk memudahkan pelanggan membayar via transfer QR.',
-                          style: TextStyle(
-                              fontSize: 12, color: AppTheme.textSecondary)),
-                    ],
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildLogoPicker(),
+            const SizedBox(width: 40),
+            Expanded(
+              child: Column(
+                children: [
+                  _LocalTextField(
+                    controller: _businessNameCtrl,
+                    label: 'Nama Toko / Perusahaan',
+                    prefixIcon: const Icon(Icons.business_rounded),
+                    validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
                   ),
-                ),
-                const SizedBox(width: 24),
-                _buildQrisPicker(settings),
-              ],
+                  const SizedBox(height: 20),
+                  _LocalTextField(
+                    controller: _ownerNameCtrl,
+                    label: 'Nama Pemilik',
+                    prefixIcon: const Icon(Icons.person_rounded),
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            Expanded(
+              child: _LocalTextField(
+                controller: _phoneCtrl,
+                label: 'Nomor Telepon / WhatsApp',
+                prefixIcon: const Icon(Icons.phone_rounded),
+              ),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: _LocalTextField(
+                controller: _emailCtrl,
+                label: 'Email Bisnis',
+                prefixIcon: const Icon(Icons.email_rounded),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        _LocalTextField(
+          controller: _addressCtrl,
+          label: 'Alamat Lengkap',
+          prefixIcon: const Icon(Icons.location_on_rounded),
+          maxLines: 3,
+        ),
+        const SizedBox(height: 20),
+        _LocalTextField(
+          controller: _descCtrl,
+          label: 'Deskripsi / Slogan Toko',
+          prefixIcon: const Icon(Icons.notes_rounded),
+          maxLines: 2,
         ),
       ],
     );
   }
 
-  Widget _buildLogoPicker(StoreSettings settings) {
+  Widget _buildLogoPicker() {
+    final settings = ref.watch(settingsProvider);
     return Column(
       children: [
-        const Text('Logo Toko',
-            style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textSecondary)),
-        const SizedBox(height: 8),
-        InkWell(
-          onTap: _pickLogo,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceAlt,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.border),
-            ),
-            child: settings.logoUrl != null
-                ? ClipRRect(
-                    borderRadius: BorderRadius.circular(11),
-                    child: Image.network(settings.logoUrl!, fit: BoxFit.cover),
-                  )
-                : const Icon(Icons.add_a_photo_rounded,
-                    color: AppTheme.textMuted),
+        Container(
+          width: 120,
+          height: 120,
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceAlt,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppTheme.border),
+            image: settings.logoUrl != null
+                ? DecorationImage(
+                    image: NetworkImage(settings.logoUrl!), fit: BoxFit.cover)
+                : null,
           ),
+          child: settings.logoUrl == null
+              ? const Icon(Icons.add_a_photo_rounded,
+                  size: 40, color: AppTheme.textMuted)
+              : null,
         ),
-        if (settings.logoUrl != null)
-          TextButton(
-            onPressed: () => ref
-                .read(settingsProvider.notifier)
-                .updateSettings(settings.copyWith(logoUrl: null)),
-            child: const Text('HAPUS',
-                style: TextStyle(color: AppTheme.danger, fontSize: 10)),
-          ),
+        const SizedBox(height: 12),
+        TextButton(
+          onPressed: _pickLogo,
+          child: const Text('GANTI LOGO', style: TextStyle(fontSize: 12)),
+        ),
       ],
-    );
-  }
-
-  Widget _buildQrisPicker(StoreSettings settings) {
-    return FutureBuilder<String?>(
-      future: ImageHelper.resolveLocalPath(settings.qrisImagePath),
-      builder: (context, snapshot) {
-        final localPath = snapshot.data;
-
-        return Column(
-          children: [
-            InkWell(
-              onTap: _pickQris,
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceAlt,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.border),
-                ),
-                child: localPath != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(11),
-                        child: Image.file(File(localPath), fit: BoxFit.contain),
-                      )
-                    : const Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.qr_code_scanner_rounded,
-                              color: AppTheme.textMuted, size: 32),
-                          SizedBox(height: 4),
-                          Text('Upload QRIS',
-                              style: TextStyle(
-                                  fontSize: 10, color: AppTheme.textMuted)),
-                        ],
-                      ),
-              ),
-            ),
-            if (localPath != null)
-              TextButton(
-                onPressed: () => ref
-                    .read(settingsProvider.notifier)
-                    .updateSettings(settings.copyWith(qrisImagePath: null)),
-                child: const Text('HAPUS QRIS',
-                    style: TextStyle(color: AppTheme.danger, fontSize: 10)),
-              ),
-          ],
-        );
-      },
     );
   }
 
   Future<void> _pickLogo() async {
     final bytes = await ImageHelper.pickAndCropImage(context);
     if (bytes == null) return;
-
     final processed = await ImageHelper.processImage(bytes);
     final uid = ref.read(authStateProvider).value?.uid;
     if (uid == null) return;
 
-    // Upload to Firebase Storage
     final url = await ref
         .read(productsActionProvider)
         .uploadImage('store_logo_$uid', processed);
     if (url != null) {
       final current = ref.read(settingsProvider);
-      ref
+      await ref
           .read(settingsProvider.notifier)
           .updateSettings(current.copyWith(logoUrl: url));
-    }
-  }
-
-  Future<void> _pickQris() async {
-    final bytes = await ImageHelper.pickAndCropImage(context);
-    if (bytes == null) return;
-
-    final processed = await ImageHelper.processImage(bytes);
-    final uid = ref.read(authStateProvider).value?.uid;
-    if (uid == null) return;
-
-    final localPath = await ImageHelper.saveLocally(
-        uid, 'qris_static_$uid.jpg', processed,
-        subFolder: 'settings');
-    if (localPath != null) {
-      final current = ref.read(settingsProvider);
-      ref
-          .read(settingsProvider.notifier)
-          .updateSettings(current.copyWith(qrisImagePath: localPath));
     }
   }
 
@@ -550,6 +340,60 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         else
           for (int i = 0; i < _bankAccounts.length; i++) _buildBankCard(i),
       ],
+    );
+  }
+
+  void _addBankAccount() {
+    setState(() {
+      _bankAccounts.add(const BankAccount(
+          bankName: '', accountNumber: '', accountHolder: ''));
+    });
+  }
+
+  Widget _buildBankCard(int index) {
+    final account = _bankAccounts[index];
+    return AppCard(
+      child: Padding(
+        padding: const EdgeInsets.all(4), // Inner padding since AppCard already has padding
+        child: Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: _buildSmallInput('Nama Bank', account.bankName, (v) {
+                _bankAccounts[index] = BankAccount(
+                    bankName: v,
+                    accountNumber: account.accountNumber,
+                    accountHolder: account.accountHolder);
+              }),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 3,
+              child: _buildSmallInput('No. Rekening', account.accountNumber, (v) {
+                _bankAccounts[index] = BankAccount(
+                    bankName: account.bankName,
+                    accountNumber: v,
+                    accountHolder: account.accountHolder);
+              }),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 3,
+              child: _buildSmallInput('Atas Nama', account.accountHolder, (v) {
+                _bankAccounts[index] = BankAccount(
+                    bankName: account.bankName,
+                    accountNumber: account.accountNumber,
+                    accountHolder: v);
+              }),
+            ),
+            IconButton(
+              onPressed: () => setState(() => _bankAccounts.removeAt(index)),
+              icon: const Icon(Icons.delete_outline_rounded,
+                  color: AppTheme.danger),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -583,143 +427,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _SectionTitle(title: 'Keamanan Data'),
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
         _buildPinSetting(ref),
-      ],
-    );
-  }
-
-  Widget _buildDisplaySection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _SectionTitle(title: 'Pengaturan Tampilan & Tema'),
-        const SizedBox(height: 16),
-        _buildAppSettings(ref),
-      ],
-    );
-  }
-
-  Widget _buildBackupSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _SectionTitle(title: 'Data & Backup'),
-        const SizedBox(height: 16),
-        AppCard(
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.download_for_offline_rounded,
-                    color: AppTheme.accent),
-                title: const Text('Backup Keseluruhan (Excel)',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text(
-                    'Download 3 file Excel: Master Produk, Piutang Pelanggan, dan Analitik Penjualan'),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => _handleFullBackup(ref),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.delete_forever_rounded, color: AppTheme.danger),
-                title: const Text('Hapus Seluruh Data Produk', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.danger)),
-                subtitle: const Text('PERINGATAN: Menghapus permanen semua produk dari lokal dan cloud. Gunakan jika ada data rusak.'),
-                trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.danger),
-                onTap: () => _handleWipeProducts(),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _handleWipeProducts() {
-    requirePin(context, ref, () async {
-      final confirm = await showConfirmDialog(
-        context,
-        title: 'Konfirmasi Penghapusan Total',
-        content: 'Apakah Anda yakin ingin menghapus SELURUH data produk? Tindakan ini tidak dapat dibatalkan dan akan menyinkronkan penghapusan ke semua perangkat.',
-        confirmLabel: 'HAPUS SEMUA',
-        confirmColor: AppTheme.danger,
-      );
-
-      if (confirm) {
-        try {
-          await ref.read(productsActionProvider).wipeAllProducts();
-          if (mounted) showSuccess(context, 'Seluruh data produk berhasil dihapus');
-        } catch (e) {
-          if (mounted) showError(context, 'Gagal menghapus data: $e');
-        }
-      }
-    });
-  }
-
-  Widget _buildPageLockToggle({
-    required String label,
-    required String subtitle,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.border),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.lock_person_rounded, size: 20, color: AppTheme.accent),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 13)),
-                Text(subtitle,
-                    style: const TextStyle(
-                        fontSize: 11, color: AppTheme.textSecondary)),
-              ],
-            ),
-          ),
-          Switch.adaptive(
-            value: value,
-            onChanged: onChanged,
-            activeTrackColor: AppTheme.accent,
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _updatePageLock(StoreSettings Function() updateFn) {
-    requirePin(context, ref, () {
-      final updated = updateFn();
-      ref.read(settingsProvider.notifier).updateSettings(updated);
-      showSuccess(context, 'Pengaturan proteksi diperbarui');
-    });
-  }
-
-  Widget _buildInput(String label, TextEditingController ctrl, IconData icon,
-      {int maxLines = 1}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-        const SizedBox(height: 6),
-        TextFormField(
-          controller: ctrl,
-          maxLines: maxLines,
-          decoration: InputDecoration(
-            prefixIcon: Icon(icon, size: 20),
-            isDense: true,
-          ),
-          style: const TextStyle(fontSize: 14),
-        ),
       ],
     );
   }
@@ -727,7 +436,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Widget _buildPinSetting(WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
     final hasPin =
-        settings.securityPin != null && settings.securityPin!.length == 4;
+        settings.securityPin != null && settings.securityPin!.length >= 4;
 
     return AppCard(
       child: Column(
@@ -740,9 +449,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             subtitle: Text(hasPin
                 ? 'Gunakan PIN untuk membatasi akses fitur sensitif'
                 : 'Atur PIN agar data toko lebih aman'),
-            trailing: ElevatedButton(
-              onPressed: () => _showPinDialog(hasPin),
-              child: Text(hasPin ? 'UBAH PIN' : 'BUAT PIN'),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (hasPin)
+                  TextButton(
+                    onPressed: _showForgotPinDialog,
+                    child: const Text('LUPA PIN?', style: TextStyle(color: AppTheme.danger, fontSize: 12)),
+                  ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () => _showPinDialog(hasPin),
+                  child: Text(hasPin ? 'UBAH PIN' : 'BUAT PIN'),
+                ),
+              ],
             ),
           ),
           if (hasPin) ...[
@@ -783,56 +503,194 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-  void _showPinDialog(bool isUpdate) {
-    final pinCtrl = TextEditingController();
-    final formKey = GlobalKey<FormState>();
+  void _updatePageLock(StoreSettings Function() updater) {
+    final updated = updater();
+    ref.read(settingsProvider.notifier).updateSettings(updated);
+  }
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(isUpdate ? 'Ubah PIN Keamanan' : 'Buat PIN Keamanan'),
-        content: Form(
-          key: formKey,
+  Widget _buildPageLockToggle({required String label, required String subtitle, required bool value, required ValueChanged<bool> onChanged}) {
+    return Row(
+      children: [
+        Expanded(
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Masukkan 4 digit angka PIN Anda',
-                  style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: pinCtrl,
-                keyboardType: TextInputType.number,
-                maxLength: 4,
-                obscureText: true,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    fontSize: 24, letterSpacing: 16, fontWeight: FontWeight.bold),
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(counterText: ''),
-                validator: (v) =>
-                    (v?.length ?? 0) < 4 ? 'PIN harus 4 digit' : null,
-              ),
+              Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              Text(subtitle, style: const TextStyle(color: AppTheme.textMuted, fontSize: 11)),
             ],
           ),
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Batal')),
-          ElevatedButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                final settings =
-                    ref.read(settingsProvider).copyWith(securityPin: pinCtrl.text);
-                ref.read(settingsProvider.notifier).updateSettings(settings);
-                Navigator.pop(context);
-                showSuccess(context, 'PIN berhasil disimpan');
-              }
-            },
-            child: const Text('Simpan'),
+        Switch.adaptive(value: value, onChanged: onChanged, activeTrackColor: AppTheme.accent),
+      ],
+    );
+  }
+
+  void _showPinDialog(bool isUpdate) {
+    final oldPinCtrl = TextEditingController();
+    final newPinCtrl = TextEditingController();
+    final confirmPinCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    int step = isUpdate ? 0 : 1;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(isUpdate ? 'Ubah PIN Keamanan' : 'Buat PIN Keamanan'),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (step == 0) ...[
+                  const Text('Masukkan PIN Lama Anda', style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
+                  const SizedBox(height: 16),
+                  _buildPinField(oldPinCtrl),
+                ] else if (step == 1) ...[
+                  const Text('Masukkan PIN Baru (4-6 Digit)', style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
+                  const SizedBox(height: 16),
+                  _buildPinField(newPinCtrl),
+                ] else ...[
+                  const Text('Konfirmasi PIN Baru Anda', style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
+                  const SizedBox(height: 16),
+                  _buildPinField(confirmPinCtrl),
+                ],
+              ],
+            ),
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('BATAL')),
+            ElevatedButton(
+              onPressed: () {
+                if (!formKey.currentState!.validate()) return;
+                
+                if (step == 0) {
+                  final currentPin = ref.read(settingsProvider).securityPin;
+                  if (oldPinCtrl.text != currentPin) {
+                    showError(context, 'PIN lama salah!');
+                    return;
+                  }
+                  setDialogState(() => step = 1);
+                } else if (step == 1) {
+                  setDialogState(() => step = 2);
+                } else {
+                  if (newPinCtrl.text != confirmPinCtrl.text) {
+                    showError(context, 'Konfirmasi PIN tidak cocok!');
+                    return;
+                  }
+                  final settings = ref.read(settingsProvider).copyWith(securityPin: newPinCtrl.text);
+                  ref.read(settingsProvider.notifier).updateSettings(settings);
+                  Navigator.pop(context);
+                  showSuccess(context, 'PIN berhasil diperbarui');
+                }
+              },
+              child: Text(step == 2 ? 'SIMPAN' : 'LANJUT'),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  void _showForgotPinDialog() {
+    final passCtrl = TextEditingController();
+    bool obscure = true;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Reset PIN via Password'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Untuk mereset PIN, silakan masukkan password akun Anda untuk verifikasi identitas.',
+                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: passCtrl,
+                obscureText: obscure,
+                decoration: InputDecoration(
+                  labelText: 'Password Akun',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(obscure ? Icons.visibility_off : Icons.visibility),
+                    onPressed: () => setDialogState(() => obscure = !obscure),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('BATAL')),
+            ElevatedButton(
+              onPressed: () async {
+                final email = ref.read(authStateProvider).value?.email;
+                if (email == null) return;
+                
+                try {
+                  _showLocalLoadingDialog('Memverifikasi...');
+                  await ref.read(authRepositoryProvider).verifyCredentials(email, passCtrl.text);
+                  
+                  if (!mounted) return;
+                  Navigator.pop(context); // Close loading
+                  Navigator.pop(context); // Close password dialog
+                  _showPinDialog(false); // Open "Create PIN" flow
+                  showSuccess(context, 'Verifikasi sukses! Silakan buat PIN baru.');
+                } catch (e) {
+                  if (!mounted) return;
+                  Navigator.pop(context); // Close loading
+                  showError(context, e.toString());
+                }
+              },
+              child: const Text('VERIFIKASI'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showLocalLoadingDialog(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        content: Row(
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 20),
+            Text(message),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPinField(TextEditingController ctrl) {
+    return TextFormField(
+      controller: ctrl,
+      keyboardType: TextInputType.number,
+      maxLength: 6,
+      obscureText: true,
+      textAlign: TextAlign.center,
+      style: const TextStyle(fontSize: 24, letterSpacing: 12, fontWeight: FontWeight.bold),
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      decoration: const InputDecoration(counterText: '', contentPadding: EdgeInsets.zero),
+      validator: (v) => (v?.length ?? 0) < 4 ? 'Minimal 4 digit' : null,
+    );
+  }
+
+  Widget _buildDisplaySection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionTitle(title: 'Pengaturan Tampilan & Tema'),
+        const SizedBox(height: 16),
+        _buildAppSettings(ref),
+      ],
     );
   }
 
@@ -868,90 +726,29 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
-                Expanded(
+                const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Skala Tampilan UI',
+                      Text('Skala Tampilan UI',
                           style: TextStyle(
                               fontWeight: FontWeight.bold, fontSize: 14)),
-                      const Text(
-                          'Sesuaikan ukuran teks & tombol (Rekomendasi: 100%)',
-                          style: TextStyle(
-                              fontSize: 11, color: AppTheme.textSecondary)),
+                      Text('Sesuaikan ukuran elemen antarmuka',
+                          style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
                     ],
                   ),
                 ),
-                SizedBox(
-                  width: 150,
-                  child: Slider(
-                    value: appSettings.displayScale,
-                    min: 0.7,
-                    max: 1.2,
-                    divisions: 10,
-                    label: '${(appSettings.displayScale * 100).toInt()}%',
-                    activeColor: AppTheme.accent,
-                    onChanged: (v) => notifier.setDisplayScale(v),
-                  ),
+                DropdownButton<double>(
+                  value: appSettings.displayScale,
+                  underline: const SizedBox(),
+                  items: [0.8, 0.9, 1.0, 1.1, 1.2].map((s) {
+                    return DropdownMenuItem(
+                        value: s, child: Text('${(s * 100).toInt()}%'));
+                  }).toList(),
+                  onChanged: (v) => notifier.setDisplayScale(v!),
                 ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBankCard(int i) {
-    final account = _bankAccounts[i];
-    return Container(
-      key: ValueKey('bank_card_$i'),
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceAlt,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.border),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: _buildSmallInput('Nama Bank', account.bankName, (v) {
-                  setState(() => _bankAccounts[i] = BankAccount(
-                      bankName: v,
-                      accountNumber: account.accountNumber,
-                      accountHolder: account.accountHolder));
-                }),
-              ),
-              IconButton(
-                  onPressed: () => _removeBankAccount(i),
-                  icon: const Icon(Icons.delete_outline, color: AppTheme.danger)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildSmallInput('Nomor Rekening', account.accountNumber,
-                    (v) {
-                  setState(() => _bankAccounts[i] = BankAccount(
-                      bankName: account.bankName,
-                      accountNumber: v,
-                      accountHolder: account.accountHolder));
-                }),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildSmallInput('Pemilik', account.accountHolder, (v) {
-                  setState(() => _bankAccounts[i] = BankAccount(
-                      bankName: account.bankName,
-                      accountNumber: account.accountNumber,
-                      accountHolder: v));
-                }),
-              ),
-            ],
           ),
         ],
       ),
@@ -976,6 +773,35 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           style: const TextStyle(fontSize: 13),
         ),
       ],
+    );
+  }
+}
+
+class _LocalTextField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final Widget? prefixIcon;
+  final String? Function(String?)? validator;
+  final int maxLines;
+
+  const _LocalTextField({
+    required this.controller,
+    required this.label,
+    this.prefixIcon,
+    this.validator,
+    this.maxLines = 1,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: controller,
+      validator: validator,
+      maxLines: maxLines,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: prefixIcon,
+      ),
     );
   }
 }

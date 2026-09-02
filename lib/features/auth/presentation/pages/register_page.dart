@@ -3,9 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../providers/auth_provider.dart';
-import '../../../settings/providers/settings_provider.dart';
 import '../../../settings/models/store_settings.dart';
-import '../../../../core/sync/services/local_database.dart';
 import '../../../../core/sync/providers/connectivity_provider.dart';
 
 class RegisterPage extends ConsumerStatefulWidget {
@@ -21,12 +19,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   int _currentStep = 0;
   bool _loading = false;
 
-  // Step 1: Account
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   final _confirmPassCtrl = TextEditingController();
 
-  // Step 2: Business
   final _ownerNameCtrl = TextEditingController();
   final _storeNameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
@@ -51,33 +47,24 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
     setState(() => _loading = true);
     try {
-      final authRepo = ref.read(authRepositoryProvider);
-      
-      // 1. Create Account
-      final user = await authRepo.register(_emailCtrl.text.trim(), _passCtrl.text);
-      if (user == null) throw 'Gagal membuat akun';
-      
-      // 2. Prepare business data
       final settings = StoreSettings(
         businessName: _storeNameCtrl.text.trim(),
         ownerName:    _ownerNameCtrl.text.trim(),
         phone:        _phoneCtrl.text.trim(),
         email:        _bizEmailCtrl.text.trim(),
-        loginEmail:   _emailCtrl.text.trim(), // Save login email for security check
+        loginEmail:   _emailCtrl.text.trim(), 
         address:      _addressCtrl.text.trim(),
         description:  _descCtrl.text.trim(),
       );
 
-      // 3. Save profile using the explicit UID
-      await ref.read(settingsProvider.notifier).updateSettings(settings, uid: user.uid);
-
-      // 4. Mark initial sync as done for new users (nothing to download)
-      final box = await LocalDatabase.openBox(user.uid, 'sync_meta');
-      await box.put('initial_sync_done', true);
+      // FIX: Use ref directly to access the repository
+      await ref.read(authRepositoryProvider).register(
+        email: _emailCtrl.text.trim(), 
+        password: _passCtrl.text,
+        settings: settings,
+      );
 
       if (mounted) {
-        // Pop back to the root (LoginPage), AuthGate will detect the state change
-        // and show VerifyEmailPage automatically.
         Navigator.of(context).popUntil((route) => route.isFirst);
       }
 
@@ -100,20 +87,6 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         backgroundColor: Colors.transparent,
         foregroundColor: Colors.white,
         elevation: 0,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Chip(
-              backgroundColor: isOnline ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
-              side: BorderSide(color: isOnline ? Colors.green : Colors.red),
-              label: Text(
-                isOnline ? 'ONLINE' : 'OFFLINE',
-                style: TextStyle(color: isOnline ? Colors.green : Colors.red, fontSize: 10, fontWeight: FontWeight.bold),
-              ),
-              avatar: Icon(isOnline ? Icons.wifi : Icons.wifi_off, size: 12, color: isOnline ? Colors.green : Colors.red),
-            ),
-          ),
-        ],
       ),
       body: Center(
         child: Container(
@@ -266,7 +239,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                           style: const TextStyle(color: Colors.white),
                           keyboardType: TextInputType.multiline,
                           decoration: const InputDecoration(labelText: 'Alamat Toko', prefixIcon: Icon(Icons.location_on_outlined)),
-                          maxLines: 2,
+                          maxLines: 3,
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
@@ -287,6 +260,4 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       ),
     );
   }
-
-
 }

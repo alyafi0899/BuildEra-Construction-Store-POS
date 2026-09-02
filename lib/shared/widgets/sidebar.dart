@@ -80,8 +80,7 @@ class AppSidebar extends ConsumerWidget {
                         const Text(
                           'BuildEra',
                           maxLines: 1,
-                          overflow: TextOverflow.clip,
-                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 15,
@@ -92,7 +91,7 @@ class AppSidebar extends ConsumerWidget {
                         Text(
                           businessName,
                           maxLines: 1,
-                          overflow: TextOverflow.clip, softWrap: false,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: AppTheme.accent,
                             fontSize: 10,
@@ -161,7 +160,7 @@ class AppSidebar extends ConsumerWidget {
                       Text(
                         settings.ownerName.isEmpty ? 'Admin' : settings.ownerName,
                         maxLines: 1,
-                        overflow: TextOverflow.clip, softWrap: false,
+                        overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       Text('Owner', style: Theme.of(context).textTheme.bodySmall),
@@ -256,7 +255,7 @@ class _NavTile extends StatelessWidget {
                     child: Text(
                       item.label,
                       maxLines: 1,
-                      overflow: TextOverflow.clip, softWrap: false,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: selected ? AppTheme.accent : AppTheme.textSecondary,
                         fontWeight: selected ? FontWeight.w600 : FontWeight.w400,

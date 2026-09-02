@@ -49,7 +49,7 @@ BuildEra is now rigorously optimized for older hardware (Old POS PCs/Monitors) c
 
 ## 🎨 UI/UX Excellence
 - **Adobe-Style Branding**: Premium splash screen with radial gradients and smooth scale transitions.
-- **Instant Boot**: Enabled Firestore Offline Persistence and Hive Hybrid Loading for near-instant access to data after the splash screen.
+- **Instant Boot**: Enabled Hive Hybrid Loading for near-instant access to data after the splash screen.
 - **Fail-Safe Initialization**: 10-second timeout protection during boot to prevent hanging on poor internet connections.
 
 ---
@@ -57,8 +57,8 @@ BuildEra is now rigorously optimized for older hardware (Old POS PCs/Monitors) c
 ## 🛠 Technical Architecture
 
 - **Framework**: Flutter 3.13+ (Desktop/Windows Priority)
-- **Local Storage**: Hive (NoSQL) for ultra-fast local reads/writes + Firestore Offline Cache.
-- **Cloud Sync**: Firebase Firestore with a **Chunked Sync Engine** for large-scale data integrity.
+- **Local Storage**: Hive (NoSQL) for ultra-fast local reads/writes.
+- **Cloud Sync**: Supabase (PostgreSQL) with a **Realtime Sync Engine** for large-scale data integrity.
 - **State Management**: Flutter Riverpod (Notifier & AsyncNotifier patterns).
 
 ---

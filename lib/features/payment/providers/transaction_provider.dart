@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,10 +28,7 @@ enum AnalyticsPeriod { daily, weekly, monthly, yearly, all }
 class AnalyticsPeriodNotifier extends Notifier<AnalyticsPeriod> {
   @override
   AnalyticsPeriod build() => AnalyticsPeriod.all;
-
-  void setPeriod(AnalyticsPeriod period) {
-    state = period;
-  }
+  void setPeriod(AnalyticsPeriod period) => state = period;
 }
 
 final analyticsPeriodProvider = NotifierProvider<AnalyticsPeriodNotifier, AnalyticsPeriod>(AnalyticsPeriodNotifier.new);
@@ -40,9 +37,10 @@ final analyticsPeriodProvider = NotifierProvider<AnalyticsPeriodNotifier, Analyt
 
 class TransactionRepository {
   final String _uid;
+  final SupabaseClient _client;
   final Ref _ref;
 
-  TransactionRepository(this._uid, this._ref);
+  TransactionRepository(this._uid, this._client, this._ref);
 
   Future<Box> _getBox() => LocalDatabase.openBox(_uid, 'transactions');
 
@@ -64,25 +62,19 @@ class TransactionRepository {
     final box = await _getBox();
     if (box.isNotEmpty && !force) return;
 
-    final snapshot = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(_uid)
-        .collection('transactions')
-        .get()
+    final response = await _client
+        .from('transactions')
+        .select('*, items:transaction_items(*)')
+        .eq('user_id', _uid)
         .timeout(const Duration(seconds: 20));
 
-    // 1. Offload processing to Isolate
-    final Map<String, dynamic> allEntries = await compute((List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
-      final Map<String, dynamic> result = {};
-      for (final doc in docs) {
-        result[doc.id] = sanitizeMap(doc.data());
-      }
-      return result;
-    }, snapshot.docs.cast<QueryDocumentSnapshot<Map<String, dynamic>>>());
+    final Map<String, dynamic> allEntries = {};
+    for (final item in response) {
+      allEntries[item['id']] = LocalDatabase.sanitize(item);
+    }
 
     if (force) await box.clear();
     
-    // 2. Chunked write
     const int chunkSize = 50;
     final keys = allEntries.keys.toList();
     
@@ -98,8 +90,6 @@ class TransactionRepository {
       if (batch.isNotEmpty) {
         await box.putAll(batch);
       }
-      
-      // Allow UI to breathe
       await Future.delayed(const Duration(milliseconds: 1));
     }
   }
@@ -169,7 +159,7 @@ class TransactionRepository {
       notes:              notes,
       createdAt:          now,
       updatedAt:          now,
-      items:              items, // CRITICAL FIX: Include items here
+      items:              items,
     );
 
     final data = t.toMap();
@@ -210,7 +200,7 @@ class TransactionRepository {
   }
 }
 
-// ── Models ─────────────────────────────────────────────────────────────
+// ... (SalesSummary and buildSummary logic remains the same)
 
 class UnpaidBillDetail {
   final String entityName;
@@ -227,16 +217,7 @@ class TopProduct {
   final double qty;
   final double costPrice;
   final double soldPrice;
-
-  const TopProduct({
-    required this.name,
-    required this.unit,
-    required this.revenue,
-    required this.profit,
-    required this.qty,
-    required this.costPrice,
-    required this.soldPrice,
-  });
+  const TopProduct({required this.name, required this.unit, required this.revenue, required this.profit, required this.qty, required this.costPrice, required this.soldPrice});
 }
 
 class DailySummary {
@@ -246,35 +227,25 @@ class DailySummary {
   final double netProfit;
   final int transactionCount;
   final List<Transaction> transactions;
-
   double get cashTotal => transactions.where((t) => t.paymentMethod == 'Tunai').fold(0.0, (s, t) => s + t.total);
   double get qrisTotal => transactions.where((t) => t.paymentMethod == 'QRIS').fold(0.0, (s, t) => s + t.total);
   double get debtTotal => transactions.where((t) => t.paymentMethod == AppConstants.paymentPiutang).fold(0.0, (s, t) => s + t.total);
-
-  const DailySummary({
-    required this.date,
-    required this.revenue,
-    required this.grossProfit,
-    required this.netProfit,
-    required this.transactionCount,
-    this.transactions = const [],
-  });
+  const DailySummary({required this.date, required this.revenue, required this.grossProfit, required this.netProfit, required this.transactionCount, this.transactions = const []});
 }
 
 class SalesSummary {
-  final double              totalRevenue;
-  final double              totalGrossProfit;
-  final double              totalNetProfit;
-  final int                 totalTransactions;
-  final double              avgOrderValue;
+  final double totalRevenue;
+  final double totalGrossProfit;
+  final double totalNetProfit;
+  final int totalTransactions;
+  final double avgOrderValue;
   final Map<String, double> revenueByDay;
   final Map<String, double> netProfitByDay;
-  final Map<int, double>    netProfitByHour; // Added for hourly breakdown
+  final Map<int, double> netProfitByHour;
   final Map<String, double> revenueByPayment;
-  final List<TopProduct>    topProducts;
-  final List<DailySummary>  dailyDetails;
-  final AnalyticsPeriod     period; // Keep track of period
-
+  final List<TopProduct> topProducts;
+  final List<DailySummary> dailyDetails;
+  final AnalyticsPeriod period;
   final double todayRevenue;
   final double todayNetProfit;
   final double monthlyRevenue;
@@ -283,37 +254,11 @@ class SalesSummary {
   final double maxInventoryProfit;
   final int unpaidSupplierProducts;
   final int unpaidShippingProducts;
-  
   final List<UnpaidBillDetail> unpaidSupplierDetails;
   final List<UnpaidBillDetail> unpaidShippingDetails;
 
-  const SalesSummary({
-    required this.totalRevenue,
-    required this.totalGrossProfit,
-    required this.totalNetProfit,
-    required this.totalTransactions,
-    required this.avgOrderValue,
-    required this.revenueByDay,
-    required this.netProfitByDay,
-    required this.netProfitByHour,
-    required this.revenueByPayment,
-    required this.topProducts,
-    required this.dailyDetails,
-    required this.todayRevenue,
-    required this.todayNetProfit,
-    required this.monthlyRevenue,
-    required this.monthlyNetProfit,
-    required this.potentialInventoryProfit,
-    required this.maxInventoryProfit,
-    required this.unpaidSupplierProducts,
-    required this.unpaidShippingProducts,
-    required this.unpaidSupplierDetails,
-    required this.unpaidShippingDetails,
-    required this.period,
-  });
+  const SalesSummary({required this.totalRevenue, required this.totalGrossProfit, required this.totalNetProfit, required this.totalTransactions, required this.avgOrderValue, required this.revenueByDay, required this.netProfitByDay, required this.netProfitByHour, required this.revenueByPayment, required this.topProducts, required this.dailyDetails, required this.todayRevenue, required this.todayNetProfit, required this.monthlyRevenue, required this.monthlyNetProfit, required this.potentialInventoryProfit, required this.maxInventoryProfit, required this.unpaidSupplierProducts, required this.unpaidShippingProducts, required this.unpaidSupplierDetails, required this.unpaidShippingDetails, required this.period});
 }
-
-// ── Build Logic ─────────────────────────────────────────────────────────────
 
 SalesSummary buildSummary(List<Transaction> txs, List<Product> products, List<RestockRecord> restocks, {AnalyticsPeriod period = AnalyticsPeriod.all}) {
   final now = DateTime.now();
@@ -351,33 +296,24 @@ SalesSummary buildSummary(List<Transaction> txs, List<Product> products, List<Re
   final byDayGrossProfit = <String, double>{};
   final byDayNetProfit  = <String, double>{};
   final byDayTxs     = <String, List<Transaction>>{};
-  
   final byPay = <String, double>{};
-  
   final productAggregators = <String, _ProductAggregator>{};
 
-  // Hourly profit for daily view
   final byHourNetProfit = period == AnalyticsPeriod.daily ? _getHourlyNetProfit(filteredTxs) : <int, double>{};
 
   for (final t in filteredTxs) {
     totalRevenue += t.total;
-    
     double itemCosts = t.items.fold(0, (s, i) => s + (i.costPrice * i.quantity));
     double tGrossProfit = t.items.fold(0, (s, i) => s + ((i.originalPrice - i.costPrice) * i.quantity));
     totalGrossProfit += tGrossProfit;
-
     double tNetProfit = (t.total - t.taxAmount) - itemCosts;
     totalNetProfit += tNetProfit;
 
-    final day = '${t.createdAt.year}-'
-        '${t.createdAt.month.toString().padLeft(2, '0')}-'
-        '${t.createdAt.day.toString().padLeft(2, '0')}';
-    
+    final day = '${t.createdAt.year}-${t.createdAt.month.toString().padLeft(2, '0')}-${t.createdAt.day.toString().padLeft(2, '0')}';
     if (day == todayStr) {
       todayRev += t.total;
       todayNet += tNetProfit;
     }
-
     if (t.createdAt.month == thisMonth && t.createdAt.year == thisYear) {
       monthlyRev += t.total;
       monthlyNet += tNetProfit;
@@ -387,7 +323,6 @@ SalesSummary buildSummary(List<Transaction> txs, List<Product> products, List<Re
     byDayGrossProfit[day] = (byDayGrossProfit[day] ?? 0) + tGrossProfit;
     byDayNetProfit[day]  = (byDayNetProfit[day] ?? 0) + tNetProfit;
     byDayTxs[day]     = [...(byDayTxs[day] ?? []), t];
-
     byPay[t.paymentMethod] = (byPay[t.paymentMethod] ?? 0) + t.total;
     
     for (final i in t.items) {
@@ -416,7 +351,6 @@ SalesSummary buildSummary(List<Transaction> txs, List<Product> products, List<Re
   void addBill(String? name, double total, double paid, PaymentStatus status, bool isShip) {
     if (status == PaymentStatus.notApplicable) return;
     if (name == null || name.trim().isEmpty) return;
-
     final n = name.trim();
     if (isShip) {
       final prev = shippingMap[n] ?? (amount: 0.0, paid: 0.0, count: 0);
@@ -440,23 +374,12 @@ SalesSummary buildSummary(List<Transaction> txs, List<Product> products, List<Re
     }
   }
 
-  const epsilon = 0.5;
-  final unpaidSupList = supplierMap.entries.where((e) => e.value.amount - e.value.paid > epsilon).map((e) => UnpaidBillDetail(entityName: e.key, remainingAmount: e.value.amount - e.value.paid, count: e.value.count)).toList();
-  final unpaidShipList = shippingMap.entries.where((e) => e.value.amount - e.value.paid > epsilon).map((e) => UnpaidBillDetail(entityName: e.key, remainingAmount: e.value.amount - e.value.paid, count: e.value.count)).toList();
-
+  final unpaidSupList = supplierMap.entries.where((e) => e.value.amount - e.value.paid > 0.5).map((e) => UnpaidBillDetail(entityName: e.key, remainingAmount: e.value.amount - e.value.paid, count: e.value.count)).toList();
+  final unpaidShipList = shippingMap.entries.where((e) => e.value.amount - e.value.paid > 0.5).map((e) => UnpaidBillDetail(entityName: e.key, remainingAmount: e.value.amount - e.value.paid, count: e.value.count)).toList();
   final top = productAggregators.values.map((a) => TopProduct(name: a.name, unit: a.unit, revenue: a.revenue, profit: a.profit, qty: a.qty, costPrice: a.costPrice, soldPrice: a.soldPrice)).toList()..sort((a, b) => b.revenue.compareTo(a.revenue));
+  final dailyDetails = byDayRevenue.entries.map((e) => DailySummary(date: e.key, revenue: e.value, grossProfit: byDayGrossProfit[e.key] ?? 0, netProfit: byDayNetProfit[e.key] ?? 0, transactionCount: byDayTxs[e.key]?.length ?? 0, transactions: byDayTxs[e.key] ?? [])).toList()..sort((a, b) => b.date.compareTo(a.date));
 
-  final dailyDetails = byDayRevenue.entries.map((e) {
-    return DailySummary(date: e.key, revenue: e.value, grossProfit: byDayGrossProfit[e.key] ?? 0, netProfit: byDayNetProfit[e.key] ?? 0, transactionCount: byDayTxs[e.key]?.length ?? 0, transactions: byDayTxs[e.key] ?? []);
-  }).toList()..sort((a, b) => b.date.compareTo(a.date));
-
-  return SalesSummary(
-    totalRevenue: totalRevenue, totalGrossProfit: totalGrossProfit, totalNetProfit: totalNetProfit, totalTransactions: count, avgOrderValue: count > 0 ? totalRevenue / count : 0, 
-    revenueByDay: byDayRevenue, netProfitByDay: byDayNetProfit, 
-    netProfitByHour: byHourNetProfit, // Pass hourly data
-    revenueByPayment: byPay, topProducts: top.toList(), dailyDetails: dailyDetails, todayRevenue: todayRev, todayNetProfit: todayNet, monthlyRevenue: monthlyRev, monthlyNetProfit: monthlyNet, potentialInventoryProfit: potentialProfit, maxInventoryProfit: maxPossibleProfit, unpaidSupplierProducts: unpaidSupList.length, unpaidShippingProducts: unpaidShipList.length, unpaidSupplierDetails: unpaidSupList, unpaidShippingDetails: unpaidShipList,
-    period: period, // Pass period
-  );
+  return SalesSummary(totalRevenue: totalRevenue, totalGrossProfit: totalGrossProfit, totalNetProfit: totalNetProfit, totalTransactions: count, avgOrderValue: count > 0 ? totalRevenue / count : 0, revenueByDay: byDayRevenue, netProfitByDay: byDayNetProfit, netProfitByHour: byHourNetProfit, revenueByPayment: byPay, topProducts: top.toList(), dailyDetails: dailyDetails, todayRevenue: todayRev, todayNetProfit: todayNet, monthlyRevenue: monthlyRev, monthlyNetProfit: monthlyNet, potentialInventoryProfit: potentialProfit, maxInventoryProfit: maxPossibleProfit, unpaidSupplierProducts: unpaidSupList.length, unpaidShippingProducts: unpaidShipList.length, unpaidSupplierDetails: unpaidSupList, unpaidShippingDetails: unpaidShipList, period: period);
 }
 
 Map<int, double> _getHourlyNetProfit(List<Transaction> txs) {
@@ -485,107 +408,55 @@ class _ProductAggregator {
 
 final transactionRepositoryProvider = Provider<TransactionRepository>((ref) {
   final user = ref.watch(authStateProvider).value;
-  return TransactionRepository(user?.uid ?? 'unknown', ref);
+  final client = ref.read(supabaseClientProvider);
+  return TransactionRepository(user?.uid ?? 'unknown', client, ref);
 });
 
 final transactionsProvider = StreamProvider<List<Transaction>>((ref) {
   final repo = ref.watch(transactionRepositoryProvider);
   if (repo._uid == 'unknown') return Stream.value([]);
-  
-  // Create a stream that emits the current transactions and then watches for changes
   final controller = StreamController<List<Transaction>>();
-  
   void update() async {
     final list = await repo.getAllTransactions();
     if (!controller.isClosed) controller.add(list);
   }
-
-  // Initial fetch
   update();
-
-  // Watch the Hive box for changes
   final boxFuture = repo._getBox();
   boxFuture.then((box) {
     if (!ref.mounted) return;
     final subscription = box.watch().listen((_) => update());
     ref.onDispose(() => subscription.cancel());
   });
-
   ref.onDispose(() => controller.close());
   return controller.stream;
 });
 
 class TransactionsNotifier extends Notifier<void> {
   TransactionRepository get _repo => ref.read(transactionRepositoryProvider);
+  @override void build() {}
+  Future<void> refresh() async => ref.invalidate(transactionsProvider);
 
-  @override
-  void build() {}
-
-  Future<void> refresh() async {
-    // With StreamProvider, refresh is usually automatic, but we can invalidate if needed
-    ref.invalidate(transactionsProvider);
-  }
-
-  Future<Transaction> checkout({
-    required String paymentMethod,
-    required double amountPaid,
-    double shippingFee = 0,
-    DateTime? dueDate,
-    String? notes,
-  }) async {
+  Future<Transaction> checkout({required String paymentMethod, required double amountPaid, double shippingFee = 0, DateTime? dueDate, String? notes}) async {
     final cart = ref.read(cartProvider);
     final settings = ref.read(settingsProvider);
     final prodRepo = ref.read(productRepositoryProvider);
     final debtRepo = ref.read(debtRepositoryProvider);
-
-    // 1. Update Product Stock
     for (final item in cart.items) {
       final baseQty = item.quantity * item.selectedUnit.conversionRate;
       await prodRepo.updateStock(item.product.id, -baseQty);
     }
-
-    // 2. Save Transaction
-    final tx = await _repo.saveTransaction(
-      cart: cart,
-      paymentMethod: paymentMethod,
-      amountPaid: amountPaid,
-      shippingFee: shippingFee,
-      cashierName: settings.ownerName.isEmpty ? 'Admin' : settings.ownerName,
-      notes: notes,
-    );
-
-    // 3. Handle Piutang
+    final tx = await _repo.saveTransaction(cart: cart, paymentMethod: paymentMethod, amountPaid: amountPaid, shippingFee: shippingFee, cashierName: settings.ownerName.isEmpty ? 'Admin' : settings.ownerName, notes: notes);
     if (paymentMethod == AppConstants.paymentPiutang && cart.customerId != null) {
       final remaining = tx.total - amountPaid;
       if (remaining > 0) {
-        final debtId = _uuid.v4();
-        final debt = Debt(
-          id: debtId,
-          transactionId: tx.id,
-          customerId: cart.customerId!,
-          customerName: cart.customerName ?? 'Pelanggan',
-          invoiceNumber: tx.invoiceNumber,
-          totalAmount: tx.total,
-          paidAmount: amountPaid,
-          remainingBalance: remaining,
-          dueDate: dueDate ?? DateTime.now().add(const Duration(days: 30)),
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          status: amountPaid > 0 ? DebtStatus.partiallyPaid : DebtStatus.unpaid,
-          notes: notes,
-        );
+        final debt = Debt(id: _uuid.v4(), transactionId: tx.id, customerId: cart.customerId!, customerName: cart.customerName ?? 'Pelanggan', invoiceNumber: tx.invoiceNumber, totalAmount: tx.total, paidAmount: amountPaid, remainingBalance: remaining, dueDate: dueDate ?? DateTime.now().add(const Duration(days: 30)), createdAt: DateTime.now(), updatedAt: DateTime.now(), status: amountPaid > 0 ? DebtStatus.partiallyPaid : DebtStatus.unpaid, notes: notes);
         await debtRepo.createDebt(debt);
       }
     }
-
-    // 4. Clear Cart and Notify Related Providers
     ref.read(cartProvider.notifier).clear();
-    
-    // Explicitly invalidate to ensure UI sync
     ref.invalidate(productsProvider);
     ref.invalidate(customersProvider);
     ref.invalidate(salesSummaryProvider);
-    
     return tx;
   }
 
@@ -593,8 +464,6 @@ class TransactionsNotifier extends Notifier<void> {
     try {
       final prodRepo = ref.read(productRepositoryProvider);
       final debtRepo = ref.read(debtRepositoryProvider);
-      
-      // 1. Get transaction to restore stock
       final tx = await _repo.getTransactionById(id);
       if (tx != null) {
         for (final item in tx.items) {
@@ -602,18 +471,10 @@ class TransactionsNotifier extends Notifier<void> {
           await prodRepo.updateStock(item.productId, baseQty);
         }
       }
-
-      // 2. Delete linked debt if exists
       final debts = await ref.read(debtsProvider(null).future);
       final debt = debts.firstWhereOrNull((d) => d.transactionId == id);
-      if (debt != null) {
-        await debtRepo.deleteDebt(debt.id);
-      }
-
-      // 3. Delete transaction record
+      if (debt != null) await debtRepo.deleteDebt(debt.id);
       await _repo.deleteTransaction(id);
-
-      // 4. Invalidate related providers to ensure sync
       ref.invalidate(productsProvider);
       ref.invalidate(customersProvider);
       ref.invalidate(salesSummaryProvider);
@@ -624,34 +485,14 @@ class TransactionsNotifier extends Notifier<void> {
   }
 }
 
-// Re-expose the notifier
 final transactionsActionProvider = NotifierProvider<TransactionsNotifier, void>(TransactionsNotifier.new);
-
-final transactionByIdProvider = FutureProvider.family<Transaction?, String>((ref, id) async {
-  return ref.watch(transactionRepositoryProvider).getTransactionById(id);
-});
-
+final transactionByIdProvider = FutureProvider.family<Transaction?, String>((ref, id) async => ref.watch(transactionRepositoryProvider).getTransactionById(id));
 final salesSummaryProvider = FutureProvider<SalesSummary>((ref) async {
   final txs = await ref.watch(transactionsProvider.future);
   final products = await ref.watch(productsProvider.future);
   final restocks = await ref.watch(restockHistoryProvider.future);
   final period = ref.watch(analyticsPeriodProvider);
-  
-  // Use compute to run the heavy summary calculation in a background isolate
-  return compute(_buildSummaryIsolate, {
-    'txs': txs,
-    'products': products,
-    'restocks': restocks,
-    'period': period,
-  });
+  return compute(_buildSummaryIsolate, {'txs': txs, 'products': products, 'restocks': restocks, 'period': period});
 });
 
-/// Top-level helper for background computation
-SalesSummary _buildSummaryIsolate(Map<String, dynamic> data) {
-  return buildSummary(
-    data['txs'] as List<Transaction>,
-    data['products'] as List<Product>,
-    data['restocks'] as List<RestockRecord>,
-    period: data['period'] as AnalyticsPeriod,
-  );
-}
+SalesSummary _buildSummaryIsolate(Map<String, dynamic> data) => buildSummary(data['txs'] as List<Transaction>, data['products'] as List<Product>, data['restocks'] as List<RestockRecord>, period: data['period'] as AnalyticsPeriod);

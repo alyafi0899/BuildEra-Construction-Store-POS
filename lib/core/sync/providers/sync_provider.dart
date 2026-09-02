@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -46,7 +46,7 @@ class SyncNotifier extends Notifier<SyncState> {
   Box? _queueBox;
   String? _uid;
   Timer? _syncTimer;
-  StreamSubscription? _signalSub;
+  RealtimeChannel? _signalChannel;
   final String _sessionId = const Uuid().v4();
   bool _isFetchingDeltas = false;
 
@@ -74,7 +74,7 @@ class SyncNotifier extends Notifier<SyncState> {
 
     ref.onDispose(() {
       _syncTimer?.cancel();
-      _signalSub?.cancel();
+      _signalChannel?.unsubscribe();
     });
 
     return const SyncState();
@@ -103,34 +103,44 @@ class SyncNotifier extends Notifier<SyncState> {
   }
 
   void _startSignalListener() {
-    if (_signalSub != null || _uid == null) return;
+    if (_signalChannel != null || _uid == null) return;
     
-    final doc = FirebaseFirestore.instance.collection('users').doc(_uid!).collection('metadata').doc('sync');
-    _signalSub = doc.snapshots().listen((snap) async {
-      if (!snap.exists) return;
-      
-      final data = snap.data();
-      final lastUpdateBy = data?['updated_by_session'] as String?;
-      
-      // Skip if the update was made by this session to prevent circular fetch
-      if (lastUpdateBy == _sessionId) return;
+    final client = ref.read(supabaseClientProvider);
+    _signalChannel = client.channel('public:sync_metadata:$_uid')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'sync_metadata',
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'user_id',
+          value: _uid!,
+        ),
+        callback: (payload) async {
+          final data = payload.newRecord;
+          if (data.isEmpty) return;
+          
+          final lastUpdateBy = data['updated_by_session'] as String?;
+          if (lastUpdateBy == _sessionId) return;
 
-      final remoteLastUpdate = (data?['last_update'] as Timestamp?)?.toDate();
-      if (remoteLastUpdate == null) return;
+          final remoteLastUpdateStr = data['last_update'] as String?;
+          if (remoteLastUpdateStr == null) return;
+          final remoteLastUpdate = DateTime.parse(remoteLastUpdateStr);
 
-      final localLastSyncRaw = await LocalDatabase.getMetadata(_uid!, 'last_remote_sync');
-      final localLastSync = localLastSyncRaw != null ? DateTime.parse(localLastSyncRaw as String) : DateTime(2000);
+          final localLastSyncRaw = await LocalDatabase.getMetadata(_uid!, 'last_remote_sync');
+          final localLastSync = localLastSyncRaw != null ? DateTime.parse(localLastSyncRaw as String) : DateTime(2000);
 
-      // Add a small buffer to avoid missing updates due to clock skew
-      if (remoteLastUpdate.isAfter(localLastSync.subtract(const Duration(seconds: 1)))) {
-        await fetchDeltas(remoteLastUpdate);
-      }
-    });
+          if (remoteLastUpdate.isAfter(localLastSync.subtract(const Duration(seconds: 1)))) {
+            await fetchDeltas(remoteLastUpdate);
+          }
+        },
+      )
+      .subscribe();
   }
 
   void _stopSignalListener() {
-    _signalSub?.cancel();
-    _signalSub = null;
+    _signalChannel?.unsubscribe();
+    _signalChannel = null;
   }
 
   // ── Actions ──────────────────────────────────────────────────────────────
@@ -157,7 +167,7 @@ class SyncNotifier extends Notifier<SyncState> {
 
     final Map<dynamic, dynamic> entries = {};
     for (final task in tasks) {
-      entries[task.id] = task.toMap(); // Use task ID as key
+      entries[task.id] = task.toMap();
     }
 
     await _queueBox!.putAll(entries);
@@ -174,85 +184,64 @@ class SyncNotifier extends Notifier<SyncState> {
     if (_uid == null || _isFetchingDeltas || !ref.read(isOnlineProvider)) return;
 
     _isFetchingDeltas = true;
-    final db = FirebaseFirestore.instance;
-    final userDoc = db.collection('users').doc(_uid!);
+    final client = ref.read(supabaseClientProvider);
     
     final localLastSyncRaw = await LocalDatabase.getMetadata(_uid!, 'last_remote_sync');
     final localLastSync = localLastSyncRaw != null ? DateTime.parse(localLastSyncRaw as String) : DateTime(2000);
 
-    final collections = ['products', 'customers', 'debts', 'debt_payments', 'transactions', 'suppliers', 'shipping_services'];
-
-    // Add 1 second overlap to avoid missing updates due to clock skew
+    final collections = ['products', 'customers', 'debts', 'debt_payments', 'transactions', 'purchases'];
     final queryTimestamp = localLastSync.subtract(const Duration(seconds: 1));
 
-    // Get IDs of documents currently in the sync queue to avoid overwriting local changes
     final pendingIds = _queueBox?.values
         .map((e) => Map<String, dynamic>.from(e as Map)['document_id'] as String)
         .toSet() ?? {};
 
     try {
-      // Fetch all deltas in parallel to improve performance
       final futures = collections.map((col) async {
-        final snap = await userDoc.collection(col)
-            .where('updated_at', isGreaterThan: queryTimestamp.toIso8601String())
-            .get(const GetOptions(source: Source.server)); 
+        try {
+          final List<dynamic> response = await client
+              .from(col)
+              .select()
+              .eq('user_id', _uid!)
+              .gt('updated_at', queryTimestamp.toIso8601String());
 
-        if (snap.docs.isNotEmpty) {
-          final box = await LocalDatabase.openBox(_uid!, col);
-          
-          const int chunkSize = 50;
-          final docs = snap.docs;
-          for (var i = 0; i < docs.length; i += chunkSize) {
-            final end = (i + chunkSize < docs.length) ? i + chunkSize : docs.length;
-            final chunk = docs.sublist(i, end);
+          if (response.isNotEmpty) {
+            final box = await LocalDatabase.openBox(_uid!, col);
             
-            // Offload sanitization to background thread if the chunk is substantial
-            final Map<String, dynamic> entries = await compute((List<QueryDocumentSnapshot<Map<String, dynamic>>> docList) {
-              final Map<String, dynamic> result = {};
-              for (final doc in docList) {
-                result[doc.id] = sanitizeMap(doc.data());
-              }
-              return result;
-            }, chunk);
+            for (final item in response) {
+              final data = LocalDatabase.sanitize(item as Map<String, dynamic>);
+              final id = data['id'] as String?;
 
-            // Conflict Resolution: Only update if remote is strictly newer than local
-            for (final entry in entries.entries) {
-              final id = entry.key;
-              final remoteData = entry.value as Map<String, dynamic>;
-              
-              if (pendingIds.contains(id)) {
-                // Skip if local has a pending change in the queue to avoid loss of local-first edits
-                continue;
-              }
+              if (id == null || pendingIds.contains(id)) continue;
 
               final localDataRaw = box.get(id);
               if (localDataRaw != null) {
                 final localData = Map<String, dynamic>.from(localDataRaw as Map);
                 final localUpdatedStr = localData['updated_at'] as String?;
-                final remoteUpdatedStr = remoteData['updated_at'] as String?;
+                final remoteUpdatedStr = data['updated_at'] as String?;
 
                 if (localUpdatedStr != null && remoteUpdatedStr != null) {
                   final localUpdated = DateTime.tryParse(localUpdatedStr) ?? DateTime(2000);
                   final remoteUpdated = DateTime.tryParse(remoteUpdatedStr) ?? DateTime(2000);
 
-                  // If local is newer or same as remote, skip overwrite
                   if (localUpdated.isAfter(remoteUpdated) || localUpdated.isAtSameMomentAs(remoteUpdated)) {
                     continue;
                   }
                 }
               }
-
-              // Apply update
-              await box.put(id, remoteData);
+              await box.put(id, data);
             }
           }
+        } catch (e) {
+          // Table might not exist yet, skip
+          debugPrint('Delta Fetch Error for $col: $e');
         }
       });
 
       await Future.wait(futures);
       await LocalDatabase.setMetadata(_uid!, 'last_remote_sync', remoteTimestamp.toIso8601String());
     } catch (e) {
-      debugPrint('Parallel Delta Fetch Error: $e');
+      debugPrint('Supabase Delta Fetch Error: $e');
     } finally {
       _isFetchingDeltas = false;
     }
@@ -264,17 +253,14 @@ class SyncNotifier extends Notifier<SyncState> {
     _isCurrentlyProcessing = true;
     state = state.copyWith(isSyncing: true, lastError: null);
     
-    final db = FirebaseFirestore.instance;
-    final userDoc = db.collection('users').doc(_uid!);
+    final client = ref.read(supabaseClientProvider);
 
     try {
-      const int chunkSize = 200;
       bool hasChanges = false;
 
       while (_queueBox!.isNotEmpty && ref.read(isOnlineProvider)) {
-        final batch = db.batch();
+        final keys = _queueBox!.keys.take(50).toList();
         final processedKeys = <dynamic>[];
-        final keys = _queueBox!.keys.take(chunkSize).toList();
 
         for (final key in keys) {
           final raw = _queueBox!.get(key);
@@ -285,61 +271,68 @@ class SyncNotifier extends Notifier<SyncState> {
           
           try {
             final task = SyncTask.fromMap(Map<String, dynamic>.from(raw as Map));
-            final docRef = userDoc.collection(task.collection).doc(task.documentId);
+            final table = task.collection;
+
+            // ENSURE ID IS PRESENT (Fixes PGRST 23502)
+            final Map<String, dynamic> finalData = Map.from(task.data);
+            if (!finalData.containsKey('id')) {
+              finalData['id'] = task.documentId;
+            }
 
             switch (task.action) {
               case SyncAction.create:
               case SyncAction.update:
-                batch.set(docRef, task.data, SetOptions(merge: true));
+                await client.from(table).upsert({
+                  'user_id': _uid,
+                  ...finalData,
+                });
                 break;
               case SyncAction.delete:
-                batch.delete(docRef);
+                await client.from(table).delete().eq('id', task.documentId).eq('user_id', _uid!);
                 break;
               case SyncAction.increment:
-                final incrementData = <String, dynamic>{};
-                task.data.forEach((k, v) {
-                  if (v is num) {
-                    incrementData[k] = FieldValue.increment(v);
-                  } else {
-                    incrementData[k] = v;
-                  }
+                await client.from(table).upsert({
+                  'user_id': _uid,
+                  ...finalData,
                 });
-                batch.set(docRef, incrementData, SetOptions(merge: true));
                 break;
             }
             processedKeys.add(key);
           } catch (e) {
-            debugPrint('Sync Task Parse Error for key $key: $e');
-            processedKeys.add(key);
+            debugPrint('Sync Task Process Error for key $key: $e');
+            // Discared if it's a structural error (column not found) to prevent infinite loop
+            if (e.toString().contains('PGRST204') || e.toString().contains('PGRST205')) {
+               processedKeys.add(key);
+            }
+            // Discard if it's a foreign key error for now, until full sync is re-run
+            if (e.toString().contains('23503')) {
+               processedKeys.add(key);
+            }
           }
         }
 
         if (processedKeys.isNotEmpty) {
-          await batch.commit();
           await _queueBox!.deleteAll(processedKeys);
           hasChanges = true;
-          
           state = state.copyWith(
             pendingCount: _queueBox!.length, 
             lastSyncAt: DateTime.now(),
           );
-          await Future.delayed(const Duration(milliseconds: 100));
         }
       }
 
       if (hasChanges) {
-        // Broadcast signal to other devices with current session ID
-        await userDoc.collection('metadata').doc('sync').set({
-          'last_update': FieldValue.serverTimestamp(),
-          'updated_by': _uid,
-          'updated_by_session': _sessionId,
-        }, SetOptions(merge: true));
+        try {
+          await client.from('sync_metadata').upsert({
+            'user_id': _uid,
+            'last_update': DateTime.now().toIso8601String(),
+            'updated_by_session': _sessionId,
+          });
+        } catch (_) {}
       }
     } catch (e) {
       debugPrint('Sync Batch FATAL Error: $e');
       state = state.copyWith(lastError: e.toString());
-      
-      // If it's a quota or temporary network issue, we stop and wait for the next timer pulse
     } finally {
       _isCurrentlyProcessing = false;
       state = state.copyWith(isSyncing: false);

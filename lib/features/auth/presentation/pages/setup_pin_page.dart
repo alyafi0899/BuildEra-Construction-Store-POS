@@ -62,9 +62,19 @@ class _SetupPinPageState extends ConsumerState<SetupPinPage> {
     setState(() => _loading = true);
     try {
       final settings = ref.read(settingsProvider);
-      final updated = settings.copyWith(securityPin: _pinCtrl.text);
+      // Explicitly update both securityPin and businessName (temporary) to bypass AuthGate
+      final updated = settings.copyWith(
+        securityPin: _pinCtrl.text,
+        businessName: settings.businessName.isEmpty ? 'Toko Saya' : settings.businessName,
+      );
+      
       await ref.read(settingsProvider.notifier).updateSettings(updated);
-      // AuthGate will rebuild and see the PIN is set
+      
+      if (mounted) {
+        showSuccess(context, 'PIN Berhasil disimpan. Memasuki aplikasi...');
+        // Small delay to let user see success before AuthGate switches
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
     } catch (e) {
       if (mounted) showError(context, 'Gagal menyimpan PIN: $e');
     } finally {
@@ -162,8 +172,21 @@ class _SetupPinPageState extends ConsumerState<SetupPinPage> {
               const SizedBox(height: 16),
               TextButton(
                 onPressed: () async {
-                  if (await showLogoutDialog(context)) {
-                    if (mounted) ref.read(authRepositoryProvider).logout();
+                  if (mounted) {
+                    final logout = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Logout?'),
+                        content: const Text('Apakah Anda ingin keluar dari akun ini?'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('TIDAK')),
+                          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('YA, LOGOUT')),
+                        ],
+                      ),
+                    );
+                    if (logout == true) {
+                      ref.read(authRepositoryProvider).logout();
+                    }
                   }
                 },
                 child: const Text('Keluar (Logout)', style: TextStyle(color: AppTheme.danger)),

@@ -185,7 +185,7 @@ class PrintingSettingsWidget extends StatelessWidget {
                     onChanged: onFastPrintChanged,
                     title: const Text('Mode Cetak Cepat (Native)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                     subtitle: const Text('Gunakan font bawaan printer untuk cetak lebih cepat. Lewati dialog sistem.', style: TextStyle(fontSize: 12)),
-                    activeColor: AppTheme.accent,
+                    activeTrackColor: AppTheme.accent,
                     contentPadding: EdgeInsets.zero,
                   ),
                   if (useFastPrint) ...[
