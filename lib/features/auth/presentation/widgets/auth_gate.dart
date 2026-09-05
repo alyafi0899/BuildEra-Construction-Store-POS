@@ -49,26 +49,23 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 
         final syncState = ref.watch(initialSyncProvider);
         if (!syncState.isStatusLoaded) {
-           return const SplashScreen();
+           return const SplashScreen(status: 'Memuat Status Sinkronisasi...');
         }
 
+        // --- STABILITY FIX: Wait for settings to load ---
         final settings = ref.watch(settingsProvider);
+        if (settings.isLoading) {
+           return const SplashScreen(status: 'Memuat Pengaturan...');
+        }
         
-        // --- STABILITY FIX: Detect new user vs existing user ---
-        // If we have a verified user but businessName is empty, it's either:
-        // A) Settings still fetching from Supabase
-        // B) A fresh account that needs initial setup
-        
-        // We show Setup PIN only if we are sure settings have been checked/initialized
+        // If settings are loaded and businessName is empty, it's a new account
         if (settings.businessName.isEmpty) {
-           // We use a minor delay or check user metadata to see if it's truly new
-           // For stability, if businessName is empty, we prioritize onboarding.
            return const SetupPinPage();
         }
 
         return const MainShell();
       },
-      loading: () => const SplashScreen(),
+      loading: () => const SplashScreen(status: 'Menghubungkan ke Server...'),
       error: (e, stack) => Scaffold(
         body: Center(
           child: Column(

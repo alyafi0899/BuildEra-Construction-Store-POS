@@ -17,6 +17,7 @@ class SettingsNotifier extends Notifier<StoreSettings> {
     if (user != null && !_isInitialized) {
       _isInitialized = true;
       Future.microtask(() => _loadSettings(user.uid));
+      return const StoreSettings(isLoading: true);
     } else if (user == null) {
       _isInitialized = false;
     }
@@ -32,7 +33,10 @@ class SettingsNotifier extends Notifier<StoreSettings> {
       final box = await _getBox(uid);
       final cached = box.get('store_settings');
       if (cached != null) {
-        state = StoreSettings.fromMap(Map<String, dynamic>.from(cached as Map));
+        state = StoreSettings.fromMap(
+          Map<String, dynamic>.from(cached as Map),
+          isLoading: true, // Still "loading" until Supabase confirms or fails
+        );
       }
     } catch (e) {
       debugPrint('Hive Load Error: $e');
@@ -51,22 +55,29 @@ class SettingsNotifier extends Notifier<StoreSettings> {
             
         if (response != null) {
           final data = LocalDatabase.sanitize(response);
-          final settings = StoreSettings.fromMap(data);
+          final settings = StoreSettings.fromMap(data, isLoading: false);
           state = settings;
           
           final box = await _getBox(uid);
           await box.put('store_settings', settings.toMap());
           return; 
         } else {
+          // New user (no remote settings)
           final user = ref.read(authStateProvider).value;
-          if (user != null && state.loginEmail == null) {
-            state = state.copyWith(loginEmail: user.email);
-          }
+          state = state.copyWith(
+            loginEmail: user?.email,
+            isLoading: false,
+          );
           return;
         }
       } catch (e) {
         retries--;
-        if (retries == 0) debugPrint('Supabase Settings Fatal Error: $e');
+        if (retries == 0) {
+          debugPrint('Supabase Settings Fatal Error: $e');
+          // If we have Hive data, just mark loading as done. 
+          // If not, it's a blank fresh state.
+          state = state.copyWith(isLoading: false);
+        }
         await Future.delayed(const Duration(seconds: 2));
       }
     }
@@ -78,7 +89,7 @@ class SettingsNotifier extends Notifier<StoreSettings> {
     
     try {
       // Update local state IMMEDIATELY so UI can react (e.g. AuthGate)
-      state = settings;
+      state = settings.copyWith(isLoading: false);
 
       // 1. Persist to Remote
       await _supabase.from('users').upsert({
@@ -93,8 +104,7 @@ class SettingsNotifier extends Notifier<StoreSettings> {
 
     } catch (e) {
       debugPrint('Update Settings Error: $e');
-      // If remote fails, we already updated 'state', but we should ensure 
-      // Hive is also updated for offline consistency
+      // Update Hive anyway for offline consistency
       final box = await _getBox(targetUid);
       await box.put('store_settings', settings.toMap());
       rethrow;

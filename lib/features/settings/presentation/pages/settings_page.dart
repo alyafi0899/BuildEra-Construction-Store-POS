@@ -10,6 +10,8 @@ import '../../models/store_settings.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/app_settings_provider.dart';
 import '../widgets/printing_settings_widget.dart';
+import '../../../subscription/presentation/pages/subscription_page.dart';
+import '../../../subscription/providers/subscription_provider.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -160,6 +162,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   isSelected: _activeTab == 4,
                   onTap: () => setState(() => _activeTab = 4),
                 ),
+                _SidebarItem(
+                  icon: Icons.stars_rounded,
+                  label: 'Paket Langganan',
+                  isSelected: _activeTab == 5,
+                  onTap: () => setState(() => _activeTab = 5),
+                  trailing: ref.watch(isPremiumProvider)
+                      ? const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 16)
+                      : null,
+                ),
                 const Spacer(),
                 Padding(
                   padding: const EdgeInsets.all(24),
@@ -178,22 +189,24 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
           // Konten Utama
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(40),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (_activeTab == 0) _buildStoreSection(),
-                    if (_activeTab == 1) _buildPaymentSection(),
-                    if (_activeTab == 2) _buildPrintingSection(),
-                    if (_activeTab == 3) _buildSecuritySection(),
-                    if (_activeTab == 4) _buildDisplaySection(),
-                  ],
-                ),
-              ),
-            ),
+            child: _activeTab == 5 
+                ? const SubscriptionPage()
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.all(40),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (_activeTab == 0) _buildStoreSection(),
+                          if (_activeTab == 1) _buildPaymentSection(),
+                          if (_activeTab == 2) _buildPrintingSection(),
+                          if (_activeTab == 3) _buildSecuritySection(),
+                          if (_activeTab == 4) _buildDisplaySection(),
+                        ],
+                      ),
+                    ),
+                  ),
           ),
         ],
       ),
@@ -738,14 +751,30 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     ],
                   ),
                 ),
-                DropdownButton<double>(
-                  value: appSettings.displayScale,
-                  underline: const SizedBox(),
-                  items: [0.8, 0.9, 1.0, 1.1, 1.2].map((s) {
-                    return DropdownMenuItem(
-                        value: s, child: Text('${(s * 100).toInt()}%'));
-                  }).toList(),
-                  onChanged: (v) => notifier.setDisplayScale(v!),
+                SizedBox(
+                  width: 250,
+                  child: Row(
+                    children: [
+                      const Text('80%', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                      Expanded(
+                        child: Slider(
+                          value: appSettings.displayScale,
+                          min: 0.8,
+                          max: 1.2,
+                          divisions: 8, // 0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2
+                          label: '${(appSettings.displayScale * 100).toInt()}%',
+                          activeColor: AppTheme.accent,
+                          onChanged: (v) => notifier.setDisplayScale(double.parse(v.toStringAsFixed(2))),
+                        ),
+                      ),
+                      const Text('120%', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  '${(appSettings.displayScale * 100).toInt()}%',
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.accent),
                 ),
               ],
             ),
@@ -828,12 +857,14 @@ class _SidebarItem extends StatelessWidget {
   final String label;
   final bool isSelected;
   final VoidCallback onTap;
+  final Widget? trailing;
 
   const _SidebarItem({
     required this.icon,
     required this.label,
     required this.isSelected,
     required this.onTap,
+    this.trailing,
   });
 
   @override
@@ -857,6 +888,7 @@ class _SidebarItem extends StatelessWidget {
             color: isSelected ? AppTheme.accent : AppTheme.textPrimary,
           ),
         ),
+        trailing: trailing,
       ),
     );
   }

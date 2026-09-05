@@ -50,7 +50,10 @@ class StoreSettings {
   final String invoiceDesign; 
   final String printMethod;   
   final String? invoicePrinterUrl; 
-  final String? labelPrinterUrl;   
+  final String? labelPrinterUrl;
+  
+  // NEW: Tracking for persistence logic
+  final bool isLoading;
 
   const StoreSettings({
     this.businessName = '',
@@ -75,6 +78,7 @@ class StoreSettings {
     this.printMethod = 'pdf',
     this.invoicePrinterUrl,
     this.labelPrinterUrl,
+    this.isLoading = false,
   });
 
   Map<String, dynamic> toMap() {
@@ -104,7 +108,7 @@ class StoreSettings {
     };
   }
 
-  factory StoreSettings.fromMap(Map<dynamic, dynamic> map) {
+  factory StoreSettings.fromMap(Map<dynamic, dynamic> map, {bool isLoading = false}) {
     return StoreSettings(
       businessName: map['business_name']?.toString() ?? map['businessName']?.toString() ?? '',
       ownerName: map['owner_name']?.toString() ?? map['ownerName']?.toString() ?? '',
@@ -131,6 +135,7 @@ class StoreSettings {
       printMethod: map['print_method']?.toString() ?? map['printMethod']?.toString() ?? 'pdf',
       invoicePrinterUrl: map['invoice_printer_url']?.toString() ?? map['invoicePrinterUrl']?.toString(),
       labelPrinterUrl: map['label_printer_url']?.toString() ?? map['labelPrinterUrl']?.toString(),
+      isLoading: isLoading,
     );
   }
 
@@ -161,6 +166,7 @@ class StoreSettings {
     String? printMethod,
     String? invoicePrinterUrl,
     String? labelPrinterUrl,
+    bool? isLoading,
   }) {
     return StoreSettings(
       businessName: businessName ?? this.businessName,
@@ -185,6 +191,7 @@ class StoreSettings {
       printMethod: printMethod ?? this.printMethod,
       invoicePrinterUrl: invoicePrinterUrl ?? this.invoicePrinterUrl,
       labelPrinterUrl: labelPrinterUrl ?? this.labelPrinterUrl,
+      isLoading: isLoading ?? this.isLoading,
     );
   }
 }

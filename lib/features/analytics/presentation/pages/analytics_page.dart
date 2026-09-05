@@ -13,6 +13,7 @@ import '../../../../shared/models/transaction.dart';
 import '../../../../shared/models/product.dart';
 import '../../../inventory/models/restock_record.dart';
 import '../../../../shared/widgets/security_gate.dart';
+import '../../../../shared/widgets/premium_guard.dart';
 
 class AnalyticsPage extends ConsumerStatefulWidget {
   const AnalyticsPage({super.key});
@@ -81,10 +82,12 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      body: PinGate(
-        manualTrigger: ref.watch(settingsProvider).lockAnalyticsPage,
-        child: Column(
-          children: [
+      body: PremiumGuard(
+        featureName: 'Laporan Analitik',
+        child: PinGate(
+          manualTrigger: ref.watch(settingsProvider).lockAnalyticsPage,
+          child: Column(
+            children: [
             // Header
             PageHeader(
             title: 'Analitik & Wawasan Bisnis',
@@ -223,11 +226,12 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               ),
             ),
           ),
-          ],
-        ),
+        ],
       ),
-    );
-  }
+    ),
+  ),
+);
+}
 
   Widget _periodChip(String label, AnalyticsPeriod period, AnalyticsPeriod current, WidgetRef ref) {
     final active = period == current;
