@@ -35,9 +35,6 @@ class _PaymentGatewayPageState extends ConsumerState<PaymentGatewayPage> {
       setState(() => _isProcessing = false);
 
       if (invoiceUrl != null) {
-        // The SubscriptionNotifier automatically updates the state to 'pending'
-        // which will trigger the SubscriptionPage to show the Pending UI.
-        // We just need to open the browser now.
         final uri = Uri.parse(invoiceUrl);
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -63,95 +60,84 @@ class _PaymentGatewayPageState extends ConsumerState<PaymentGatewayPage> {
     final settings = ref.watch(settingsProvider);
     final user = ref.watch(authStateProvider).value;
 
-    return Scaffold(
-      backgroundColor: AppTheme.bg,
-      appBar: AppBar(
-        title: const Text('KONFIRMASI PEMBAYARAN'),
-        backgroundColor: AppTheme.surface,
-        foregroundColor: AppTheme.textPrimary,
-        elevation: 0,
-        shape: const Border(bottom: BorderSide(color: AppTheme.border)),
-      ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 600),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              children: [
-                _buildSteps(),
-                const SizedBox(height: 32),
-                
-                // ── Account & Business Summary ──────────────────────────
-                AppCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      color: AppTheme.bg,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          children: [
+            _buildSteps(),
+            const SizedBox(height: 32),
+            
+            // ── Account & Business Summary ──────────────────────────
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
                     children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.business_rounded, size: 16, color: AppTheme.accent),
-                          SizedBox(width: 8),
-                          Text('RINGKASAN AKUN & BISNIS', 
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1),
-                          ),
-                        ],
+                      Icon(Icons.business_rounded, size: 16, color: AppTheme.accent),
+                      SizedBox(width: 8),
+                      Text('RINGKASAN AKUN & BISNIS', 
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1),
                       ),
-                      const SizedBox(height: 16),
-                      _summaryRow('Nama Bisnis', settings.businessName),
-                      _summaryRow('Email Akun', user?.email ?? '-'),
-                      _summaryRow('Paket', widget.plan.displayName),
-                      _summaryRow('Metode', widget.method == 'qris' ? 'QRIS (Gopay/OVO/Dana)' : 'Virtual Account'),
                     ],
                   ),
-                ),
-                const SizedBox(height: 16),
-
-                AppCard(
-                  child: Column(
-                    children: [
-                      const Text('TOTAL TAGIHAN', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
-                      Text(amount, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppTheme.accent)),
-                      const Divider(height: 32),
-                      
-                      const Icon(Icons.security_rounded, color: AppTheme.success, size: 48),
-                      const SizedBox(height: 16),
-                      const Text('Pembayaran Aman via Xendit', style: TextStyle(fontWeight: FontWeight.bold)),
-                      const Text('Anda akan diarahkan ke halaman pembayaran Xendit yang aman untuk menyelesaikan transaksi.', 
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-                      ),
-                      
-                      const SizedBox(height: 32),
-                      
-                      if (_isProcessing)
-                        const Column(
-                          children: [
-                            CircularProgressIndicator(),
-                            SizedBox(height: 16),
-                            Text('Sedang menyiapkan invoice...', style: TextStyle(fontStyle: FontStyle.italic)),
-                          ],
-                        )
-                      else
-                        ElevatedButton(
-                          onPressed: _initiatePayment,
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: const Size(double.infinity, 56),
-                            backgroundColor: AppTheme.accent,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: const Text('LANJUTKAN KE PEMBAYARAN', style: TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                TextButton(
-                  onPressed: widget.onBack,
-                  child: const Text('KEMBALI', style: TextStyle(color: AppTheme.textMuted)),
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  _summaryRow('Nama Bisnis', settings.businessName.isEmpty ? 'Belum Diatur' : settings.businessName),
+                  _summaryRow('Email Akun', user?.email ?? '-'),
+                  _summaryRow('Paket', widget.plan.displayName),
+                  _summaryRow('Metode', widget.method == 'qris' ? 'QRIS (Gopay/OVO/Dana)' : 'Virtual Account'),
+                  _summaryRow('Durasi', widget.plan == PlanType.yearly ? '1 Tahun (365 Hari)' : '1 Bulan (30 Hari)'),
+                ],
+              ),
             ),
-          ),
+            const SizedBox(height: 16),
+
+            AppCard(
+              child: Column(
+                children: [
+                  const Text('TOTAL TAGIHAN', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                  Text(amount, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppTheme.accent)),
+                  const Divider(height: 32),
+                  
+                  const Icon(Icons.security_rounded, color: AppTheme.success, size: 48),
+                  const SizedBox(height: 16),
+                  const Text('Pembayaran Aman via Xendit', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text('Anda akan diarahkan ke halaman pembayaran Xendit yang aman untuk menyelesaikan transaksi.', 
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                  ),
+                  
+                  const SizedBox(height: 32),
+                  
+                  if (_isProcessing)
+                    const Column(
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 16),
+                        Text('Sedang menyiapkan invoice...', style: TextStyle(fontStyle: FontStyle.italic)),
+                      ],
+                    )
+                  else
+                    ElevatedButton(
+                      onPressed: _initiatePayment,
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 56),
+                        backgroundColor: AppTheme.accent,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('LANJUTKAN KE PEMBAYARAN', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            TextButton(
+              onPressed: widget.onBack,
+              child: const Text('KEMBALI', style: TextStyle(color: AppTheme.textMuted)),
+            ),
+          ],
         ),
       ),
     );

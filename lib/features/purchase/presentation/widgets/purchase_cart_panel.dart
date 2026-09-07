@@ -46,7 +46,7 @@ class PurchaseCartPanel extends ConsumerWidget {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String?>(
-                      value: state.supplierId,
+                      initialValue: state.supplierId,
                       isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Pilih Supplier',
@@ -229,7 +229,7 @@ class PurchaseCartPanel extends ConsumerWidget {
 
 class _PurchaseCartTile extends ConsumerStatefulWidget {
   final PurchaseCartItem item;
-  const _PurchaseCartTile({super.key, required this.item});
+  const _PurchaseCartTile({required this.item});
 
   @override
   ConsumerState<_PurchaseCartTile> createState() => _PurchaseCartTileState();

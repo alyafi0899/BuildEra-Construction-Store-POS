@@ -23,6 +23,9 @@ import '../../../debts/models/debt_payment.dart';
 import '../../../settings/models/store_settings.dart';
 import 'package:printing/printing.dart';
 import 'package:uuid/uuid.dart';
+import '../../../subscription/providers/subscription_provider.dart';
+import '../../../subscription/models/subscription.dart';
+import '../../../../shared/widgets/premium_guard.dart';
 
 final _uuid = Uuid();
 
@@ -856,26 +859,67 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
         padding: const EdgeInsets.all(20),
         decoration: const BoxDecoration(
             border: Border(top: BorderSide(color: AppTheme.border))),
-        child: Row(children: [
-          OutlinedButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Batal')),
-          const Spacer(),
-          SizedBox(
-            width:  200,
-            height: 46,
-            child: ElevatedButton.icon(
-              onPressed: _processing ? null : _confirm,
-              icon: _processing
-                  ? const SizedBox(
-                      width: 16, height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.check_rounded),
-              label: Text(_processing ? 'Memproses...' : 'Konfirmasi Bayar'),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Consumer(
+              builder: (context, ref, child) {
+                final sub = ref.watch(subscriptionStateProvider).value;
+                if (sub != null && sub.isGracePeriod) {
+                  return Container(
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.warning.withValues(alpha: 0.1),
+                      border: Border.all(color: AppTheme.warning.withValues(alpha: 0.3)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 18),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'PERINGATAN: Masa langganan habis! Fitur akan terkunci dalam 3 hari. Segera perpanjang paket Anda.',
+                            style: TextStyle(color: AppTheme.warning, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            // Navigate to subscription page would go here
+                          },
+                          child: const Text('UPGRADE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return const SizedBox();
+              },
             ),
-          ),
-        ]),
+            Row(children: [
+              OutlinedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Batal')),
+              const Spacer(),
+              SizedBox(
+                width:  200,
+                height: 46,
+                child: ElevatedButton.icon(
+                  onPressed: _processing ? null : _confirm,
+                  icon: _processing
+                      ? const SizedBox(
+                          width: 16, height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.check_rounded),
+                  label: Text(_processing ? 'Memproses...' : 'Konfirmasi Bayar'),
+                ),
+              ),
+            ]),
+          ],
+        ),
       );
 
   Widget _row(BuildContext context, String label, String value,

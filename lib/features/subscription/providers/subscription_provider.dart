@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/subscription.dart';
+import '../models/subscription_history.dart';
 import '../repositories/subscription_repository.dart';
+import '../../payment/providers/transaction_provider.dart';
 
 final subscriptionRepositoryProvider = Provider<SubscriptionRepository>((ref) {
   return SubscriptionRepository(ref.watch(supabaseClientProvider));
@@ -58,7 +60,7 @@ class SubscriptionNotifier extends Notifier<AsyncValue<Subscription?>> {
       final result = await _repository.createPaymentInvoice(
         userId: user.uid,
         plan: plan,
-        email: user.email ?? '',
+        email: user.email,
         method: method,
       );
       
@@ -89,6 +91,12 @@ class SubscriptionNotifier extends Notifier<AsyncValue<Subscription?>> {
   }
 }
 
+final subscriptionHistoryProvider = FutureProvider<List<SubscriptionHistory>>((ref) async {
+  final user = ref.watch(authStateProvider).value;
+  if (user == null) return [];
+  return ref.read(subscriptionRepositoryProvider).getHistory(user.uid);
+});
+
 final isPremiumProvider = Provider<bool>((ref) {
   final subAsync = ref.watch(subscriptionStateProvider);
   return subAsync.maybeWhen(
@@ -111,3 +119,14 @@ class GatewayNotifier extends Notifier<GatewayState> {
 }
 
 final gatewayStateProvider = NotifierProvider<GatewayNotifier, GatewayState>(GatewayNotifier.new);
+
+final dailyTransactionCountProvider = FutureProvider<int>((ref) async {
+  final repo = ref.watch(transactionRepositoryProvider);
+  final all = await repo.getAllTransactions();
+  final now = DateTime.now();
+  return all.where((t) {
+    return t.createdAt.year == now.year && 
+           t.createdAt.month == now.month && 
+           t.createdAt.day == now.day;
+  }).length;
+});

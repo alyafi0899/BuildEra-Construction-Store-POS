@@ -9,6 +9,7 @@ import '../../providers/multi_cart_provider.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../providers/cart_focus_provider.dart';
 import 'payment_dialog.dart';
+import '../../../subscription/providers/subscription_provider.dart';
 
 class CartPanel extends StatelessWidget {
   const CartPanel({super.key});
@@ -547,20 +548,39 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
                   )),
         ]),
         const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          height: 54,
-          child: ElevatedButton.icon(
-            onPressed: isEmpty ? null : () => PaymentDialog.show(context),
-            icon: const Icon(Icons.payments_rounded),
-            label: const Text('BAYAR SEKARANG'),
-            style: ElevatedButton.styleFrom(
-              textStyle:
-                  const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-              backgroundColor: AppTheme.accent,
-              foregroundColor: Colors.white,
-            ),
-          ),
+        Consumer(
+          builder: (context, ref, child) {
+            final isPremium = ref.watch(isPremiumProvider);
+            final dailyCountAsync = ref.watch(dailyTransactionCountProvider);
+            final itemsCount = ref.watch(cartProvider.select((s) => s.items.length));
+
+            String? error;
+            if (!isPremium) {
+              if (itemsCount > 3) {
+                error = 'Maks 3 item (Mode Gratis)';
+              } else {
+                final count = dailyCountAsync.value ?? 0;
+                if (count >= 10) {
+                  error = 'Limit 10 Transaksi Hari Ini';
+                }
+              }
+            }
+
+            return SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: ElevatedButton.icon(
+                onPressed: (isEmpty || error != null) ? null : () => PaymentDialog.show(context),
+                icon: Icon(error != null ? Icons.lock_outline_rounded : Icons.payments_rounded),
+                label: Text(error ?? 'BAYAR SEKARANG'),
+                style: ElevatedButton.styleFrom(
+                  textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                  backgroundColor: error != null ? AppTheme.textMuted : AppTheme.accent,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            );
+          },
         ),
       ]),
     );

@@ -43,6 +43,7 @@ class Subscription {
   final DateTime updatedAt;
 
   final String? lastExternalId;
+  final DateTime? gracePeriodEndsAt;
 
   const Subscription({
     required this.userId,
@@ -52,13 +53,25 @@ class Subscription {
     required this.createdAt,
     required this.updatedAt,
     this.lastExternalId,
+    this.gracePeriodEndsAt,
   });
 
   bool get isPremium {
     if (planType == PlanType.free) return false;
     if (status != SubscriptionStatus.active && status != SubscriptionStatus.trial) return false;
-    if (expiresAt != null && expiresAt!.isBefore(DateTime.now())) return false;
+    
+    final now = DateTime.now();
+    // Use grace period for determining access
+    if (gracePeriodEndsAt != null && gracePeriodEndsAt!.isBefore(now)) return false;
+    if (gracePeriodEndsAt == null && expiresAt != null && expiresAt!.isBefore(now)) return false;
+    
     return true;
+  }
+
+  bool get isGracePeriod {
+    if (planType == PlanType.free || expiresAt == null) return false;
+    final now = DateTime.now();
+    return now.isAfter(expiresAt!) && (gracePeriodEndsAt == null || now.isBefore(gracePeriodEndsAt!));
   }
 
   int get daysRemaining {
@@ -97,6 +110,9 @@ class Subscription {
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
       lastExternalId: map['last_external_id'] as String?,
+      gracePeriodEndsAt: map['grace_period_ends_at'] != null 
+          ? DateTime.parse(map['grace_period_ends_at'] as String) 
+          : null,
     );
   }
 
@@ -108,6 +124,7 @@ class Subscription {
       'expires_at': expiresAt?.toIso8601String(),
       'updated_at': DateTime.now().toIso8601String(),
       'last_external_id': lastExternalId,
+      'grace_period_ends_at': gracePeriodEndsAt?.toIso8601String(),
     };
   }
 }

@@ -5,19 +5,24 @@ import '../../../../shared/widgets/common_widgets.dart';
 import '../../providers/subscription_provider.dart';
 import '../widgets/subscription_agreement_dialog.dart';
 import '../../models/subscription.dart';
+import '../../models/subscription_history.dart';
+import '../../../../core/utils/formatters.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'payment_gateway_page.dart';
 
 class SubscriptionPage extends ConsumerStatefulWidget {
-  final VoidCallback? onBackToSummary;
-  const SubscriptionPage({super.key, this.onBackToSummary});
+  const SubscriptionPage({super.key});
 
   @override
   ConsumerState<SubscriptionPage> createState() => _SubscriptionPageState();
 }
 
 class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
+  bool _isConfirming = false;
+  String? _tempMethod;
+  PlanType? _tempPlan;
+
   @override
   Widget build(BuildContext context) {
     final subAsync = ref.watch(subscriptionStateProvider);
@@ -47,6 +52,14 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
           ),
         ),
         data: (sub) {
+          if (_isConfirming && _tempMethod != null && _tempPlan != null) {
+            return PaymentGatewayPage(
+              method: _tempMethod!, 
+              plan: _tempPlan!, 
+              onBack: () => setState(() => _isConfirming = false)
+            );
+          }
+
           if (sub?.status == SubscriptionStatus.pending) {
             return _buildPendingUI(context, sub!.planType);
           }
@@ -62,14 +75,108 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
                 if (sub?.planType == PlanType.free || (sub?.expiresAt != null && sub!.expiresAt!.isBefore(DateTime.now())))
                   PricingSection(
                     onUpgrade: (plan) => _handleUpgrade(context, ref, plan),
+                    currentSub: sub,
                   )
                 else
                   _buildActivePlanInfo(context, sub!),
+
+                const SizedBox(height: 48),
+                const Divider(),
+                const SizedBox(height: 32),
+                _buildHistorySection(),
               ],
             ),
           );
         },
       ),
+    );
+  }
+
+  Widget _buildHistorySection() {
+    final historyAsync = ref.watch(subscriptionHistoryProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.history_rounded, size: 20, color: AppTheme.textMuted),
+            const SizedBox(width: 12),
+            Text('RIWAYAT LANGGANAN', 
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: AppTheme.textMuted, 
+                letterSpacing: 1, 
+                fontWeight: FontWeight.bold
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        historyAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (err, _) => Text('Gagal memuat riwayat: $err'),
+          data: (list) {
+            if (list.isEmpty) {
+              return Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceAlt.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Center(
+                  child: Text('Belum ada riwayat transaksi.', 
+                    style: TextStyle(color: AppTheme.textMuted, fontStyle: FontStyle.italic)),
+                ),
+              );
+            }
+
+            return ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: list.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, i) {
+                final item = list[i];
+                return AppCard(
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppTheme.success.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.receipt_long_rounded, color: AppTheme.success, size: 18),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Paket ${item.planType.displayName}', 
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                            Text('Dibayar via ${item.paymentMethod ?? "Gerbang Pembayaran"}', 
+                              style: const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(Formatters.currency(item.amount), 
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.accent)),
+                          Text(DateFormat('dd MMM yyyy').format(item.createdAt), 
+                            style: const TextStyle(color: AppTheme.textMuted, fontSize: 11)),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ],
     );
   }
 
@@ -151,6 +258,7 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
   }
 
   Widget _buildActivePlanInfo(BuildContext context, Subscription sub) {
+    print('DEBUG: Building ActivePlanInfo for plan: ${sub.planType}');
     return Center(
       child: Column(
         children: [
@@ -243,17 +351,20 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
             const SizedBox(height: 24),
             _methodTile(context, Icons.qr_code_scanner_rounded, 'QRIS', 'Bayar instan via GoPay, OVO, Dana, dll', () {
               Navigator.pop(context);
-              if (widget.onBackToSummary != null) {
-                // If we are in settings, we trigger a state change there
-                ref.read(gatewayStateProvider.notifier).set('qris', plan);
-              }
+              setState(() {
+                _tempMethod = 'qris';
+                _tempPlan = plan;
+                _isConfirming = true;
+              });
             }),
             const SizedBox(height: 12),
             _methodTile(context, Icons.account_balance_rounded, 'Virtual Account', 'Transfer via Bank / ATM', () {
               Navigator.pop(context);
-              if (widget.onBackToSummary != null) {
-                ref.read(gatewayStateProvider.notifier).set('va', plan);
-              }
+              setState(() {
+                _tempMethod = 'va';
+                _tempPlan = plan;
+                _isConfirming = true;
+              });
             }),
           ],
         ),
@@ -295,7 +406,8 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
 
 class PricingSection extends StatefulWidget {
   final Function(PlanType) onUpgrade;
-  const PricingSection({super.key, required this.onUpgrade});
+  final Subscription? currentSub;
+  const PricingSection({super.key, required this.onUpgrade, this.currentSub});
 
   @override
   State<PricingSection> createState() => _PricingSectionState();
@@ -306,6 +418,10 @@ class _PricingSectionState extends State<PricingSection> {
 
   @override
   Widget build(BuildContext context) {
+    // Lock yearly upgrade if already on yearly plan
+    final isAlreadyYearly = widget.currentSub?.planType == PlanType.yearly && 
+                            widget.currentSub?.isPremium == true;
+
     return Column(
       children: [
         Center(
@@ -371,23 +487,44 @@ class _PricingSectionState extends State<PricingSection> {
                     _buildFeatureItem('Struk Kustom dengan Logo Sendiri'),
                     _buildFeatureItem('Support Prioritas & Update Fitur'),
                     const SizedBox(height: 48),
-                    ElevatedButton(
-                      onPressed: () => widget.onUpgrade(_isYearly ? PlanType.yearly : PlanType.monthly),
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 64),
-                        backgroundColor: AppTheme.accent,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        elevation: 4,
+                    if (_isYearly && isAlreadyYearly)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surfaceAlt,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 20),
+                            SizedBox(width: 12),
+                            Text('PAKET TAHUNAN SEDANG AKTIF', 
+                              style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textMuted)),
+                          ],
+                        ),
+                      )
+                    else
+                      ElevatedButton(
+                        onPressed: () => widget.onUpgrade(_isYearly ? PlanType.yearly : PlanType.monthly),
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 64),
+                          backgroundColor: AppTheme.accent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          elevation: 4,
+                        ),
+                        child: Text(
+                          _isYearly && widget.currentSub?.planType == PlanType.monthly 
+                              ? 'UPGRADE KE TAHUNAN' 
+                              : 'BERLANGGANAN SEKARANG',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1),
+                        ),
                       ),
-                      child: const Text(
-                        'BERLANGGANAN SEKARANG',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1),
-                      ),
-                    ),
                     const SizedBox(height: 16),
                     const Text(
-                      '* Pembayaran aman via Xendit (Dummy Mode)',
+                      '* Pembayaran aman via Xendit',
                       style: TextStyle(fontSize: 11, color: AppTheme.textMuted, fontStyle: FontStyle.italic),
                     ),
                   ],

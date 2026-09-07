@@ -12,6 +12,7 @@ import '../../providers/entity_provider.dart';
 import '../../models/supplier.dart';
 import '../../models/shipping_service.dart';
 import '../../models/product_financials.dart';
+import '../../../../shared/widgets/premium_guard.dart';
 
 class ExcelImportDialog extends ConsumerStatefulWidget {
   const ExcelImportDialog({super.key});
@@ -47,8 +48,6 @@ class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
 
     try {
       final bytes = result.files.first.bytes!;
-      
-      // Use compute to parse Excel in background
       final parseResult = await compute(_parseExcelIsolate, bytes);
       
       final productsToImport = parseResult.products;
@@ -89,78 +88,81 @@ class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      child: Container(
-        width: 500,
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              const Icon(Icons.file_upload_outlined, color: AppTheme.accent),
-              const SizedBox(width: 12),
-              Text('Import Produk dari Excel', style: Theme.of(context).textTheme.headlineMedium),
-            ]),
-            const SizedBox(height: 20),
-            const Text('Gunakan format kolom berikut di Excel Anda:'),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceAlt,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.border),
-              ),
-              child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      child: PremiumGuard(
+        featureName: 'Import Excel (Premium)',
+        child: Container(
+          width: 500,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Text('A: Nama Produk (Wajib)', style: TextStyle(fontSize: 12)),
-                  Text('B: Barcode', style: TextStyle(fontSize: 12)),
-                  Text('C: Kategori', style: TextStyle(fontSize: 12)),
-                  Text('D: Satuan Dasar (e.g. kg, pcs)', style: TextStyle(fontSize: 12)),
-                  Text('E: Stok Awal', style: TextStyle(fontSize: 12)),
-                  Text('F: Harga Modal (Rp)', style: TextStyle(fontSize: 12, color: AppTheme.accent)),
-                  Text('G: Harga Jual Dasar (Rp)', style: TextStyle(fontSize: 12)),
-                  Text('H: Nama Supplier (Opsional)', style: TextStyle(fontSize: 12)),
-                  Text('I: No HP Supplier', style: TextStyle(fontSize: 12)),
-                  Text('J: Alamat Supplier', style: TextStyle(fontSize: 12)),
-                  Text('K: Nama Expedisi (Opsional)', style: TextStyle(fontSize: 12)),
-                  Text('L: No HP Expedisi', style: TextStyle(fontSize: 12)),
-                  Text('M: Alamat Expedisi', style: TextStyle(fontSize: 12)),
+                  const Icon(Icons.file_upload_outlined, color: AppTheme.accent),
+                  const SizedBox(width: 12),
+                  Text('Import Produk dari Excel', style: Theme.of(context).textTheme.headlineMedium),
                 ],
               ),
-            ),
-            const SizedBox(height: 24),
-            if (_status != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Text(_status!, style: TextStyle(color: _status!.startsWith('Error') ? AppTheme.danger : AppTheme.accent)),
+              const SizedBox(height: 20),
+              const Text('Gunakan format kolom berikut di Excel Anda:'),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceAlt,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.border),
+                ),
+                child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('A: Nama Produk (Wajib)', style: TextStyle(fontSize: 12)),
+                    Text('B: Barcode', style: TextStyle(fontSize: 12)),
+                    Text('C: Kategori', style: TextStyle(fontSize: 12)),
+                    Text('D: Satuan Dasar (e.g. kg, pcs)', style: TextStyle(fontSize: 12)),
+                    Text('E: Stok Awal', style: TextStyle(fontSize: 12)),
+                    Text('F: Harga Modal (Rp)', style: TextStyle(fontSize: 12, color: AppTheme.accent)),
+                    Text('G: Harga Jual Dasar (Rp)', style: TextStyle(fontSize: 12)),
+                    Text('H: Nama Supplier (Opsional)', style: TextStyle(fontSize: 12)),
+                    Text('I: No HP Supplier', style: TextStyle(fontSize: 12)),
+                    Text('J: Alamat Supplier', style: TextStyle(fontSize: 12)),
+                    Text('K: Nama Expedisi (Opsional)', style: TextStyle(fontSize: 12)),
+                    Text('L: No HP Expedisi', style: TextStyle(fontSize: 12)),
+                    Text('M: Alamat Expedisi', style: TextStyle(fontSize: 12)),
+                  ],
+                ),
               ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: _importing ? null : () => Navigator.pop(context),
-                  child: const Text('Batal'),
+              const SizedBox(height: 24),
+              if (_status != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Text(_status!, style: TextStyle(color: _status!.startsWith('Error') ? AppTheme.danger : AppTheme.accent)),
                 ),
-                const SizedBox(width: 12),
-                ElevatedButton.icon(
-                  onPressed: _importing ? null : _pickAndImport,
-                  icon: _importing 
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.upload_file_rounded, size: 18),
-                  label: Text(_importing ? 'Memproses...' : 'Pilih File & Import'),
-                ),
-              ],
-            ),
-          ],
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: _importing ? null : () => Navigator.pop(context),
+                    child: const Text('Batal'),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    onPressed: _importing ? null : _pickAndImport,
+                    icon: _importing 
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.upload_file_rounded, size: 18),
+                    label: Text(_importing ? 'Memproses...' : 'Pilih File & Import'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
-
-// ── Background Parser ───────────────────────────────────────────────────────
 
 class _ExcelParseResult {
   final List<Map<Product, List<ProductUnit>>> products;

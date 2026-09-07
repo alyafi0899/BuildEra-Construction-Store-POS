@@ -14,6 +14,7 @@ import '../../../products/models/supplier.dart';
 import '../../../products/models/shipping_service.dart';
 import '../../models/restock_record.dart';
 import '../../providers/restock_provider.dart';
+import '../../../../shared/widgets/premium_guard.dart';
 
 final _uuid = Uuid();
 
@@ -232,11 +233,13 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
         },
         child: Dialog(
           insetPadding: const EdgeInsets.all(40),
-          child: SizedBox(
-            width: 740,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+          child: PremiumGuard(
+            featureName: 'Restock Stok (Premium)',
+            child: SizedBox(
+              width: 740,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                 // ── Header ──────────────────────────────────────────────────
                 Container(
                   padding:
@@ -767,6 +770,7 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
           ],
         ),
       ),
+    ),
     ),
     ),
     );

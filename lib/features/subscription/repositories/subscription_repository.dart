@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/subscription.dart';
+import '../models/subscription_history.dart';
 
 class SubscriptionRepository {
   final SupabaseClient _client;
@@ -16,6 +17,16 @@ class SubscriptionRepository {
 
     if (response == null) return null;
     return Subscription.fromMap(response);
+  }
+
+  Future<List<SubscriptionHistory>> getHistory(String userId) async {
+    final response = await _client
+        .from('subscription_history')
+        .select()
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
+
+    return (response as List).map((m) => SubscriptionHistory.fromMap(m)).toList();
   }
 
   Future<void> upsertSubscription(Subscription subscription) async {

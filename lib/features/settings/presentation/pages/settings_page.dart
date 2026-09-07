@@ -221,21 +221,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           // Konten Utama
           Expanded(
             child: _activeTab == 5 
-                ? Consumer(
-                    builder: (context, ref, child) {
-                      final gateway = ref.watch(gatewayStateProvider);
-                      if (gateway.method != null && gateway.plan != null) {
-                        return PaymentGatewayPage(
-                          method: gateway.method!,
-                          plan: gateway.plan!,
-                          onBack: () => ref.read(gatewayStateProvider.notifier).reset(),
-                        );
-                      }
-                      return SubscriptionPage(
-                        onBackToSummary: () {}, // Simply mark as being in settings
-                      );
-                    },
-                  )
+                ? const SubscriptionPage()
                 : SingleChildScrollView(
                     padding: const EdgeInsets.all(40),
                     child: Form(
@@ -693,10 +679,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   await ref.read(authRepositoryProvider).verifyCredentials(email, passCtrl.text);
                   
                   if (!mounted) return;
-                  Navigator.pop(context); // Close loading
-                  Navigator.pop(context); // Close password dialog
+                  final navigator = Navigator.of(context);
+                  
+                  navigator.pop(); // Close loading
+                  navigator.pop(); // Close password dialog
                   _showPinDialog(false); // Open "Create PIN" flow
-                  showSuccess(context, 'Verifikasi sukses! Silakan buat PIN baru.');
+                  if (context.mounted) {
+                    showSuccess(context, 'Verifikasi sukses! Silakan buat PIN baru.');
+                  }
                 } catch (e) {
                   if (!mounted) return;
                   Navigator.pop(context); // Close loading
