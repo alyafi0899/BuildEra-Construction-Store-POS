@@ -50,44 +50,42 @@ class SubscriptionNotifier extends Notifier<AsyncValue<Subscription?>> {
     }
   }
 
-  Future<void> upgradeDummy(PlanType plan) async {
+  Future<String?> initiateRealPayment(PlanType plan, {String? method}) async {
     final user = ref.read(authStateProvider).value;
-    if (user == null) return;
-
-    // Set to pending first
-    final now = DateTime.now();
-    final pendingSub = Subscription(
-      userId: user.uid,
-      planType: plan,
-      status: SubscriptionStatus.pending,
-      createdAt: state.value?.createdAt ?? now,
-      updatedAt: now,
-    );
-    state = AsyncValue.data(pendingSub);
-    await _repository.upsertSubscription(pendingSub);
-  }
-
-  Future<void> confirmDummyPayment(PlanType plan) async {
-    final user = ref.read(authStateProvider).value;
-    if (user == null) return;
+    if (user == null) return null;
 
     try {
-      state = const AsyncValue.loading();
-      await _repository.simulatePaymentSuccess(user.uid, plan);
-      await refresh();
+      final result = await _repository.createPaymentInvoice(
+        userId: user.uid,
+        plan: plan,
+        email: user.email ?? '',
+        method: method,
+      );
+      
+      // Update local state to pending
+      final now = DateTime.now();
+      final invoiceUrl = result['invoice_url'] as String?;
+      
+      final pendingSub = Subscription(
+        userId: user.uid,
+        planType: plan,
+        status: SubscriptionStatus.pending,
+        createdAt: state.value?.createdAt ?? now,
+        updatedAt: now,
+        lastExternalId: invoiceUrl, // Temp store URL here to retrieve in UI
+      );
+      state = AsyncValue.data(pendingSub);
+      
+      return invoiceUrl;
     } catch (e, st) {
       state = AsyncValue.error(e, st);
+      rethrow;
     }
   }
 
   Future<void> cancelPending() async {
-    final user = ref.read(authStateProvider).value;
-    if (user == null) return;
-    
-    // Revert to free/none in dummy mode
-    final sub = Subscription.free(user.uid);
-    state = AsyncValue.data(sub);
-    await _repository.upsertSubscription(sub);
+    // In production, we might just refresh to see if it's still pending or paid
+    await refresh();
   }
 }
 
@@ -98,3 +96,18 @@ final isPremiumProvider = Provider<bool>((ref) {
     orElse: () => false,
   );
 });
+
+class GatewayState {
+  final String? method;
+  final PlanType? plan;
+  const GatewayState(this.method, this.plan);
+}
+
+class GatewayNotifier extends Notifier<GatewayState> {
+  @override
+  GatewayState build() => const GatewayState(null, null);
+  void set(String? m, PlanType? p) => state = GatewayState(m, p);
+  void reset() => state = const GatewayState(null, null);
+}
+
+final gatewayStateProvider = NotifierProvider<GatewayNotifier, GatewayState>(GatewayNotifier.new);

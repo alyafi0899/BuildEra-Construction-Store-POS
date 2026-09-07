@@ -42,6 +42,8 @@ class Subscription {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  final String? lastExternalId;
+
   const Subscription({
     required this.userId,
     required this.planType,
@@ -49,6 +51,7 @@ class Subscription {
     this.expiresAt,
     required this.createdAt,
     required this.updatedAt,
+    this.lastExternalId,
   });
 
   bool get isPremium {
@@ -93,6 +96,7 @@ class Subscription {
           : null,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
+      lastExternalId: map['last_external_id'] as String?,
     );
   }
 
@@ -103,6 +107,7 @@ class Subscription {
       'status': status.toString().split('.').last,
       'expires_at': expiresAt?.toIso8601String(),
       'updated_at': DateTime.now().toIso8601String(),
+      'last_external_id': lastExternalId,
     };
   }
 }

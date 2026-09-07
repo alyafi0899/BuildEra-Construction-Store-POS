@@ -320,8 +320,8 @@ class ProductRepository {
     await _ref.read(syncProvider.notifier).addToQueue(
       collection: 'products',
       documentId: productId,
-      action: SyncAction.increment,
-      data: {'stock': delta, 'updated_at': DateTime.now().toIso8601String()},
+      action: SyncAction.update,
+      data: updated.toMap(),
     );
   }
 

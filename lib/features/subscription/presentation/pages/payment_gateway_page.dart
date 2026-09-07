@@ -6,41 +6,59 @@ import '../../providers/subscription_provider.dart';
 import '../../models/subscription.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../auth/providers/auth_provider.dart';
-import 'dart:async';
+import 'package:url_launcher/url_launcher.dart';
 
-class PaymentSimulationPage extends ConsumerStatefulWidget {
+class PaymentGatewayPage extends ConsumerStatefulWidget {
   final String method; // 'qris' or 'va'
   final PlanType plan;
+  final VoidCallback onBack;
 
-  const PaymentSimulationPage({super.key, required this.method, required this.plan});
+  const PaymentGatewayPage({super.key, required this.method, required this.plan, required this.onBack});
 
   @override
-  ConsumerState<PaymentSimulationPage> createState() => _PaymentSimulationPageState();
+  ConsumerState<PaymentGatewayPage> createState() => _PaymentGatewayPageState();
 }
 
-class _PaymentSimulationPageState extends ConsumerState<PaymentSimulationPage> {
-  bool _isVerifying = false;
-  bool _isSuccess = false;
+class _PaymentGatewayPageState extends ConsumerState<PaymentGatewayPage> {
+  bool _isProcessing = false;
 
-  void _simulateVerification() {
-    setState(() => _isVerifying = true);
+  Future<void> _initiatePayment() async {
+    setState(() => _isProcessing = true);
     
-    // Simulate Xendit Webhook / Network delay
-    Timer(const Duration(seconds: 3), () async {
-      await ref.read(subscriptionStateProvider.notifier).confirmDummyPayment(widget.plan);
-      if (mounted) {
-        setState(() {
-          _isVerifying = false;
-          _isSuccess = true;
-        });
+    try {
+      final invoiceUrl = await ref.read(subscriptionStateProvider.notifier).initiateRealPayment(
+        widget.plan, 
+        method: widget.method,
+      );
+      
+      if (!mounted) return;
+      setState(() => _isProcessing = false);
+
+      if (invoiceUrl != null) {
+        // The SubscriptionNotifier automatically updates the state to 'pending'
+        // which will trigger the SubscriptionPage to show the Pending UI.
+        // We just need to open the browser now.
+        final uri = Uri.parse(invoiceUrl);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+        
+        if (mounted) {
+          widget.onBack(); 
+        }
       }
-    });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal: $e'), backgroundColor: AppTheme.danger),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isSuccess) return _buildSuccessUI();
-
     final amount = widget.plan == PlanType.yearly ? 'Rp 1.000.000' : 'Rp 100.000';
     final settings = ref.watch(settingsProvider);
     final user = ref.watch(authStateProvider).value;
@@ -48,7 +66,7 @@ class _PaymentSimulationPageState extends ConsumerState<PaymentSimulationPage> {
     return Scaffold(
       backgroundColor: AppTheme.bg,
       appBar: AppBar(
-        title: const Text('PEMBAYARAN'),
+        title: const Text('KONFIRMASI PEMBAYARAN'),
         backgroundColor: AppTheme.surface,
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
@@ -82,7 +100,7 @@ class _PaymentSimulationPageState extends ConsumerState<PaymentSimulationPage> {
                       _summaryRow('Nama Bisnis', settings.businessName),
                       _summaryRow('Email Akun', user?.email ?? '-'),
                       _summaryRow('Paket', widget.plan.displayName),
-                      _summaryRow('Metode', widget.method == 'qris' ? 'QRIS (Gopay/OVO/Dana)' : 'Virtual Account BCA'),
+                      _summaryRow('Metode', widget.method == 'qris' ? 'QRIS (Gopay/OVO/Dana)' : 'Virtual Account'),
                     ],
                   ),
                 ),
@@ -94,36 +112,42 @@ class _PaymentSimulationPageState extends ConsumerState<PaymentSimulationPage> {
                       const Text('TOTAL TAGIHAN', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
                       Text(amount, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppTheme.accent)),
                       const Divider(height: 32),
-                      if (widget.method == 'qris') _buildQRISUI() else _buildVAUI(),
-                      const SizedBox(height: 24),
-                      if (_isVerifying)
+                      
+                      const Icon(Icons.security_rounded, color: AppTheme.success, size: 48),
+                      const SizedBox(height: 16),
+                      const Text('Pembayaran Aman via Xendit', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const Text('Anda akan diarahkan ke halaman pembayaran Xendit yang aman untuk menyelesaikan transaksi.', 
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                      ),
+                      
+                      const SizedBox(height: 32),
+                      
+                      if (_isProcessing)
                         const Column(
                           children: [
                             CircularProgressIndicator(),
                             SizedBox(height: 16),
-                            Text('Menunggu konfirmasi pembayaran...', style: TextStyle(fontStyle: FontStyle.italic)),
+                            Text('Sedang menyiapkan invoice...', style: TextStyle(fontStyle: FontStyle.italic)),
                           ],
                         )
                       else
                         ElevatedButton(
-                          onPressed: _simulateVerification,
+                          onPressed: _initiatePayment,
                           style: ElevatedButton.styleFrom(
                             minimumSize: const Size(double.infinity, 56),
-                            backgroundColor: AppTheme.success,
+                            backgroundColor: AppTheme.accent,
                             foregroundColor: Colors.white,
                           ),
-                          child: const Text('SAYA SUDAH BAYAR', style: TextStyle(fontWeight: FontWeight.bold)),
+                          child: const Text('LANJUTKAN KE PEMBAYARAN', style: TextStyle(fontWeight: FontWeight.bold)),
                         ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 24),
                 TextButton(
-                  onPressed: () {
-                    ref.read(subscriptionStateProvider.notifier).cancelPending();
-                    Navigator.pop(context);
-                  },
-                  child: const Text('BATALKAN PEMBAYARAN', style: TextStyle(color: AppTheme.danger)),
+                  onPressed: widget.onBack,
+                  child: const Text('KEMBALI', style: TextStyle(color: AppTheme.textMuted)),
                 ),
               ],
             ),
@@ -151,9 +175,9 @@ class _PaymentSimulationPageState extends ConsumerState<PaymentSimulationPage> {
       children: [
         _stepCircle('1', 'Metode', true),
         _stepLine(true),
-        _stepCircle('2', 'Bayar', true),
+        _stepCircle('2', 'Konfirmasi', true),
         _stepLine(false),
-        _stepCircle('3', 'Selesai', false),
+        _stepCircle('3', 'Bayar', false),
       ],
     );
   }
@@ -178,88 +202,6 @@ class _PaymentSimulationPageState extends ConsumerState<PaymentSimulationPage> {
         height: 2,
         margin: const EdgeInsets.only(bottom: 16),
         color: active ? AppTheme.accent : AppTheme.border,
-      ),
-    );
-  }
-
-  Widget _buildQRISUI() {
-    return Column(
-      children: [
-        const Text('SCAN QRIS', style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 16),
-        Container(
-          width: 200,
-          height: 200,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: AppTheme.border),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Center(
-            child: Icon(Icons.qr_code_2_rounded, size: 150, color: Colors.black87),
-          ),
-        ),
-        const SizedBox(height: 16),
-        const Text('Dapat discan dengan Dana, OVO, GoPay, LinkAja, atau Mobile Banking.', 
-          textAlign: TextAlign.center, 
-          style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildVAUI() {
-    return Column(
-      children: [
-        const Text('VIRTUAL ACCOUNT BCA', style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          decoration: BoxDecoration(
-            color: AppTheme.bg,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.border),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const SelectableText('8877 0812 3456 7890', 
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 1),
-              ),
-              const SizedBox(width: 8),
-              IconButton(onPressed: () {}, icon: const Icon(Icons.copy_rounded, size: 18, color: AppTheme.accent)),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        const Text('Masukkan nomor di atas pada menu Transfer Virtual Account bank Anda.', 
-          textAlign: TextAlign.center, 
-          style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSuccessUI() {
-    return Scaffold(
-      backgroundColor: AppTheme.bg,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.check_circle_rounded, size: 100, color: AppTheme.success),
-            const SizedBox(height: 24),
-            const Text('Pembayaran Berhasil!', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            const Text('Akun Anda telah ditingkatkan ke Full Features.', style: TextStyle(color: AppTheme.textMuted)),
-            const SizedBox(height: 40),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              style: ElevatedButton.styleFrom(minimumSize: const Size(200, 50)),
-              child: const Text('KEMBALI KE DASHBOARD'),
-            ),
-          ],
-        ),
       ),
     );
   }

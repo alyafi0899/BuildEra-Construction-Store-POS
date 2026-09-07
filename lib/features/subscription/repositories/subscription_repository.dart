@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/subscription.dart';
 
@@ -21,21 +22,35 @@ class SubscriptionRepository {
     await _client.from('subscriptions').upsert(subscription.toMap());
   }
 
-  /// Dummy method to simulate payment success
-  Future<void> simulatePaymentSuccess(String userId, PlanType plan) async {
-    final now = DateTime.now();
-    final duration = plan == PlanType.yearly ? const Duration(days: 365) : const Duration(days: 30);
-    final expiry = now.add(duration);
-    
-    final subscription = Subscription(
-      userId: userId,
-      planType: plan,
-      status: SubscriptionStatus.active,
-      expiresAt: expiry,
-      createdAt: now,
-      updatedAt: now,
-    );
+  /// Calls the Supabase Edge Function to create a Xendit Invoice
+  Future<Map<String, dynamic>> createPaymentInvoice({
+    required String userId,
+    required PlanType plan,
+    required String email,
+    String? method,
+  }) async {
+    try {
+      final response = await _client.functions.invoke(
+        'create-payment',
+        body: {
+          'userId': userId,
+          'planType': plan.toString().split('.').last,
+          'email': email,
+          'method': method,
+        },
+      ).timeout(const Duration(seconds: 15));
 
-    await upsertSubscription(subscription);
+      if (response.status != 200) {
+        final errorMsg = response.data?['error'] ?? 'Gagal membuat invoice pembayaran';
+        throw Exception(errorMsg);
+      }
+
+      return response.data as Map<String, dynamic>;
+    } catch (e) {
+      if (e is TimeoutException) {
+        throw Exception('Koneksi server terputus (Timeout). Silakan coba lagi.');
+      }
+      rethrow;
+    }
   }
 }

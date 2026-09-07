@@ -11,6 +11,7 @@ import '../../providers/settings_provider.dart';
 import '../../providers/app_settings_provider.dart';
 import '../widgets/printing_settings_widget.dart';
 import '../../../subscription/presentation/pages/subscription_page.dart';
+import '../../../subscription/presentation/pages/payment_gateway_page.dart';
 import '../../../subscription/providers/subscription_provider.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
@@ -105,6 +106,27 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
+  void _handleLogout(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout Akun'),
+        content: const Text('Apakah Anda yakin ingin keluar dari aplikasi? Sesi Anda akan berakhir.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('BATAL')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog
+              ref.read(authRepositoryProvider).logout();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger, foregroundColor: Colors.white),
+            child: const Text('LOGOUT'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
@@ -171,6 +193,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       ? const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 16)
                       : null,
                 ),
+                const SizedBox(height: 12),
+                _SidebarItem(
+                  icon: Icons.logout_rounded,
+                  label: 'Keluar / Logout',
+                  isSelected: false,
+                  iconColor: AppTheme.danger,
+                  textColor: AppTheme.danger,
+                  onTap: () => _handleLogout(context),
+                ),
                 const Spacer(),
                 Padding(
                   padding: const EdgeInsets.all(24),
@@ -190,7 +221,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           // Konten Utama
           Expanded(
             child: _activeTab == 5 
-                ? const SubscriptionPage()
+                ? Consumer(
+                    builder: (context, ref, child) {
+                      final gateway = ref.watch(gatewayStateProvider);
+                      if (gateway.method != null && gateway.plan != null) {
+                        return PaymentGatewayPage(
+                          method: gateway.method!,
+                          plan: gateway.plan!,
+                          onBack: () => ref.read(gatewayStateProvider.notifier).reset(),
+                        );
+                      }
+                      return SubscriptionPage(
+                        onBackToSummary: () {}, // Simply mark as being in settings
+                      );
+                    },
+                  )
                 : SingleChildScrollView(
                     padding: const EdgeInsets.all(40),
                     child: Form(
@@ -858,6 +903,8 @@ class _SidebarItem extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
   final Widget? trailing;
+  final Color? iconColor;
+  final Color? textColor;
 
   const _SidebarItem({
     required this.icon,
@@ -865,6 +912,8 @@ class _SidebarItem extends StatelessWidget {
     required this.isSelected,
     required this.onTap,
     this.trailing,
+    this.iconColor,
+    this.textColor,
   });
 
   @override
@@ -878,14 +927,14 @@ class _SidebarItem extends StatelessWidget {
         onTap: onTap,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         leading: Icon(icon,
-            color: isSelected ? AppTheme.accent : AppTheme.textSecondary,
+            color: isSelected ? AppTheme.accent : (iconColor ?? AppTheme.textSecondary),
             size: 20),
         title: Text(
           label,
           style: TextStyle(
             fontSize: 13,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            color: isSelected ? AppTheme.accent : AppTheme.textPrimary,
+            color: isSelected ? AppTheme.accent : (textColor ?? AppTheme.textPrimary),
           ),
         ),
         trailing: trailing,

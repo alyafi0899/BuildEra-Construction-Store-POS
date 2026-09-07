@@ -281,20 +281,21 @@ class SyncNotifier extends Notifier<SyncState> {
 
             switch (task.action) {
               case SyncAction.create:
-              case SyncAction.update:
                 await client.from(table).upsert({
                   'user_id': _uid,
                   ...finalData,
                 });
+                break;
+              case SyncAction.update:
+              case SyncAction.increment:
+                // Use update() instead of upsert() for partial updates/increments
+                // to avoid NOT NULL constraint errors if the record doesn't exist yet.
+                await client.from(table).update({
+                  ...finalData,
+                }).eq('id', task.documentId).eq('user_id', _uid!);
                 break;
               case SyncAction.delete:
                 await client.from(table).delete().eq('id', task.documentId).eq('user_id', _uid!);
-                break;
-              case SyncAction.increment:
-                await client.from(table).upsert({
-                  'user_id': _uid,
-                  ...finalData,
-                });
                 break;
             }
             processedKeys.add(key);

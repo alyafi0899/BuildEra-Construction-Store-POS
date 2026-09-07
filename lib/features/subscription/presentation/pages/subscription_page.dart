@@ -6,10 +6,12 @@ import '../../providers/subscription_provider.dart';
 import '../widgets/subscription_agreement_dialog.dart';
 import '../../models/subscription.dart';
 import 'package:intl/intl.dart';
-import 'payment_simulation_page.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'payment_gateway_page.dart';
 
 class SubscriptionPage extends ConsumerStatefulWidget {
-  const SubscriptionPage({super.key});
+  final VoidCallback? onBackToSummary;
+  const SubscriptionPage({super.key, this.onBackToSummary});
 
   @override
   ConsumerState<SubscriptionPage> createState() => _SubscriptionPageState();
@@ -31,7 +33,19 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
       ),
       body: subAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text('Error: $err')),
+        error: (err, stack) => Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('Error: $err'),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => ref.read(subscriptionStateProvider.notifier).refresh(),
+                child: const Text('COBA LAGI'),
+              ),
+            ],
+          ),
+        ),
         data: (sub) {
           if (sub?.status == SubscriptionStatus.pending) {
             return _buildPendingUI(context, sub!.planType);
@@ -208,8 +222,8 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
       context: context,
       builder: (context) => SubscriptionAgreementDialog(
         onAccepted: () {
-          ref.read(subscriptionStateProvider.notifier).upgradeDummy(plan);
-          _showPaymentMethods(context, plan);
+          Navigator.pop(context); // Close agreement dialog
+          _showPaymentMethods(context, plan); // SHOW METHOD SELECTION FIRST
         },
       ),
     );
@@ -227,14 +241,19 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
           children: [
             const Text('Pilih Metode Pembayaran', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 24),
-            _methodTile(context, Icons.qr_code_scanner_rounded, 'QRIS', 'Scan via GoPay, OVO, Dana, ShopeePay', () {
+            _methodTile(context, Icons.qr_code_scanner_rounded, 'QRIS', 'Bayar instan via GoPay, OVO, Dana, dll', () {
               Navigator.pop(context);
-              _startPayment(context, 'qris', plan);
+              if (widget.onBackToSummary != null) {
+                // If we are in settings, we trigger a state change there
+                ref.read(gatewayStateProvider.notifier).set('qris', plan);
+              }
             }),
             const SizedBox(height: 12),
-            _methodTile(context, Icons.account_balance_rounded, 'Virtual Account', 'Transfer via M-Banking atau ATM', () {
+            _methodTile(context, Icons.account_balance_rounded, 'Virtual Account', 'Transfer via Bank / ATM', () {
               Navigator.pop(context);
-              _startPayment(context, 'va', plan);
+              if (widget.onBackToSummary != null) {
+                ref.read(gatewayStateProvider.notifier).set('va', plan);
+              }
             }),
           ],
         ),
@@ -257,11 +276,20 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
     );
   }
 
-  void _startPayment(BuildContext context, String method, PlanType plan) async {
-    Navigator.push(
-      context, 
-      MaterialPageRoute(builder: (context) => PaymentSimulationPage(method: method, plan: plan))
-    );
+  // NOTE: _processPayment is now handled inside PaymentGatewayPage
+
+  void _startPayment(BuildContext context, String invoiceUrl, PlanType plan) async {
+    final uri = Uri.parse(invoiceUrl);
+    
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tidak dapat membuka browser untuk pembayaran.')),
+        );
+      }
+    }
   }
 }
 
