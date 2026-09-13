@@ -25,7 +25,6 @@ import 'features/payment/providers/transaction_provider.dart';
 import 'features/debts/providers/debt_repository.dart';
 import 'features/auth/presentation/widgets/auth_gate.dart';
 import 'features/auth/providers/auth_provider.dart';
-import 'shared/widgets/security_gate.dart';
 import 'core/sync/services/local_database.dart';
 import 'core/providers/navigation_provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -50,20 +49,7 @@ Future<void> main(List<String> args) async {
   final isMultiWindow = args.any((a) => a.contains('multi_window'));
   
   if (isMultiWindow) {
-    // Extract UID if provided (e.g., uid=ABC123XYZ or multi_window=ABC123XYZ)
-    final uidArg = args.firstWhere((a) => a.contains('uid='), orElse: () => '');
-    if (uidArg.isNotEmpty) {
-      forcedUidForDisplay = uidArg.split('=')[1];
-    }
-
-    await LocalDatabase.init();
-    await Supabase.initialize(
-      url: 'https://xlkncjimgriwrxxpweue.supabase.co',
-      publishableKey: 'sb_publishable_RfxfRsQv2zm-Gt0rdTQP0w_23dkq2Zh',
-    );
-    await initializeDateFormatting('id_ID', null);
-
-    // Force show the window
+    // 1. Initialize window manager immediately so we can show errors if boot fails
     if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
       await windowManager.ensureInitialized();
       WindowOptions windowOptions = const WindowOptions(
@@ -78,6 +64,27 @@ Future<void> main(List<String> args) async {
         await windowManager.focus();
       });
     }
+
+    // Extract UID if provided (e.g., uid=ABC123XYZ or multi_window=ABC123XYZ)
+    final uidArg = args.firstWhere((a) => a.contains('uid='), orElse: () => '');
+    if (uidArg.isNotEmpty) {
+      forcedUidForDisplay = uidArg.split('=')[1];
+    }
+
+    // Try initialization but ignore Hive errors if already initialized by another process
+    // Actually, for secondary window, we DON'T need local database at all.
+    // It only needs Supabase to sync the cart.
+    // try {
+    //   await LocalDatabase.init();
+    // } catch (e) {
+    //   debugPrint('DEBUG: Multi-window database init warning: $e');
+    // }
+
+    await Supabase.initialize(
+      url: 'https://xlkncjimgriwrxxpweue.supabase.co',
+      publishableKey: 'sb_publishable_RfxfRsQv2zm-Gt0rdTQP0w_23dkq2Zh',
+    );
+    await initializeDateFormatting('id_ID', null);
 
     runApp(ProviderScope(
       child: Consumer(
@@ -150,6 +157,15 @@ Future<void> main(List<String> args) async {
     runApp(const ProviderScope(child: KonstruksiPosApp()));
   } catch (e, stack) {
     debugPrint('BOOT ERROR: $e\n$stack');
+    
+    // Ensure window is shown even on boot error
+    if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+      try {
+        await windowManager.ensureInitialized();
+        await windowManager.show();
+      } catch (_) {}
+    }
+
     runApp(MaterialApp(
       home: Scaffold(
         body: Center(
@@ -233,13 +249,6 @@ class _MainShellState extends ConsumerState<MainShell> {
   @override
   Widget build(BuildContext context) {
     final idx = ref.watch(navigationIndexProvider);
-    
-    // Auto-lock on navigation
-    ref.listen(navigationIndexProvider, (prev, next) {
-      if (prev != next) {
-        ref.read(pinUnlockProvider.notifier).lock();
-      }
-    });
     
     // Listen to cart changes for Customer Display Sync
     ref.listen(cartProvider, (prev, next) {

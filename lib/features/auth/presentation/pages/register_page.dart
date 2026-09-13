@@ -64,10 +64,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         settings: settings,
       );
 
-      if (mounted) {
-        Navigator.of(context).popUntil((route) => route.isFirst);
-      }
-
+      // AuthGate will automatically handle navigation to VerifyEmailPage 
+      // because registrationEmailProvider is set inside the repository.
     } catch (e) {
       if (mounted) showError(context, 'Gagal mendaftar: $e');
     } finally {
