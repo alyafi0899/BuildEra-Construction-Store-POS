@@ -22,13 +22,13 @@ class Customer {
   });
 
   factory Customer.fromMap(Map<String, dynamic> m) => Customer(
-        id:               m['id'] as String,
-        name:             m['name'] as String,
-        phone:            m['phone'] as String,
-        address:          m['address'] as String?,
-        notes:            m['notes'] as String?,
-        createdAt:        DateTime.parse(m['created_at'] as String),
-        updatedAt:        m['updated_at'] != null ? DateTime.parse(m['updated_at'] as String) : DateTime.parse(m['created_at'] as String),
+        id:               m['id']?.toString() ?? '',
+        name:             m['name']?.toString() ?? '',
+        phone:            m['phone']?.toString() ?? '',
+        address:          m['address']?.toString(),
+        notes:            m['notes']?.toString(),
+        createdAt:        DateTime.parse(m['created_at']?.toString() ?? DateTime.now().toIso8601String()),
+        updatedAt:        m['updated_at'] != null ? DateTime.parse(m['updated_at'].toString()) : DateTime.parse(m['created_at']?.toString() ?? DateTime.now().toIso8601String()),
         isActive:         m['is_active'] as bool? ?? true,
         totalOutstanding: (m['total_outstanding'] as num? ?? 0).toDouble(),
       );

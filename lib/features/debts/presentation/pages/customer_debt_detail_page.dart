@@ -221,7 +221,7 @@ class _DebtTileState extends ConsumerState<_DebtTile> {
               IconButton(
                 onPressed: () async {
                   final settings = ref.read(settingsProvider);
-                  final payments = ref.read(debtPaymentsProvider((customerId: d.customerId, debtId: d.id))).asData?.value ?? [];
+                  final payments = await ref.read(debtRepositoryProvider).getPayments(customerId: d.customerId, debtId: d.id);
                   final customers = ref.read(customersProvider).asData?.value ?? [];
                   final customer = customers.firstWhere((c) => c.id == d.customerId);
                   final transaction = await ref.read(transactionByIdProvider(d.transactionId).future);
@@ -233,7 +233,7 @@ class _DebtTileState extends ConsumerState<_DebtTile> {
               IconButton(
                 onPressed: () async {
                   final settings = ref.read(settingsProvider);
-                  final payments = ref.read(debtPaymentsProvider((customerId: d.customerId, debtId: d.id))).asData?.value ?? [];
+                  final payments = await ref.read(debtRepositoryProvider).getPayments(customerId: d.customerId, debtId: d.id);
                   final customers = ref.read(customersProvider).asData?.value ?? [];
                   final customer = customers.firstWhere((c) => c.id == d.customerId);
                   final transaction = await ref.read(transactionByIdProvider(d.transactionId).future);

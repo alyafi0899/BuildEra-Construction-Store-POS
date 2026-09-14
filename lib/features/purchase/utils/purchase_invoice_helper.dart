@@ -1,14 +1,14 @@
 import 'package:flutter/services.dart';
-import 'dart:typed_data';
+import 'dart:io';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'dart:io' show Platform;
 import '../../../core/utils/formatters.dart';
 import '../../../shared/models/purchase.dart';
 import '../../settings/models/store_settings.dart';
 import '../../../printing/printing.dart';
 import '../../../printing/services/windows_raw_spooler.dart';
+import '../../../core/utils/image_helper.dart';
 
 class PurchaseInvoiceHelper {
   static Future<Uint8List> generatePurchasePdf({
@@ -17,11 +17,24 @@ class PurchaseInvoiceHelper {
   }) async {
     final pdf = pw.Document();
 
-    // Load logo if exists
+    // Load logo
     pw.ImageProvider? logo;
     if (settings.logoUrl != null && settings.logoUrl!.isNotEmpty) {
       try {
-        logo = await networkImage(settings.logoUrl!);
+        final resolvedPath = await ImageHelper.resolveLocalPath(settings.logoUrl);
+        if (resolvedPath != null && await File(resolvedPath).exists()) {
+          final bytes = await File(resolvedPath).readAsBytes();
+          logo = pw.MemoryImage(bytes);
+        }
+      } catch (_) {}
+    }
+
+    // Fallback to default asset logo
+    if (logo == null) {
+      try {
+        final byteData = await rootBundle.load('assets/images/logo.png');
+        final bytes = byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes);
+        logo = pw.MemoryImage(bytes);
       } catch (_) {}
     }
 
@@ -39,12 +52,13 @@ class PurchaseInvoiceHelper {
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    if (logo != null)
-                      pw.Container(height: 60, child: pw.Image(logo))
-                    else
-                      pw.Text(settings.businessName.toUpperCase(),
-                          style: pw.TextStyle(
-                              fontSize: 20, fontWeight: pw.FontWeight.bold)),
+                    if (logo != null) ...[
+                      pw.Container(height: 60, child: pw.Image(logo)),
+                      pw.SizedBox(height: 6),
+                    ],
+                    pw.Text(settings.businessName.toUpperCase(),
+                        style: pw.TextStyle(
+                            fontSize: 20, fontWeight: pw.FontWeight.bold)),
                     pw.SizedBox(height: 4),
                     pw.Text(settings.address,
                         style: const pw.TextStyle(fontSize: 10)),

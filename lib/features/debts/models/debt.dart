@@ -32,19 +32,19 @@ class Debt {
   });
 
   factory Debt.fromMap(Map<String, dynamic> m) => Debt(
-        id:               m['id'] as String,
-        transactionId:    m['transaction_id'] as String,
-        customerId:       m['customer_id'] as String,
-        customerName:     m['customer_name'] as String,
-        invoiceNumber:    m['invoice_number'] as String,
-        totalAmount:      (m['total_amount'] as num).toDouble(),
-        paidAmount:       (m['paid_amount'] as num).toDouble(),
-        remainingBalance: (m['remaining_balance'] as num).toDouble(),
-        dueDate:          DateTime.parse(m['due_date'] as String),
-        createdAt:        DateTime.parse(m['created_at'] as String),
-        updatedAt:        m['updated_at'] != null ? DateTime.parse(m['updated_at'] as String) : DateTime.parse(m['created_at'] as String),
-        status:           DebtStatus.values.byName(m['status'] as String),
-        notes:            m['notes'] as String?,
+        id:               m['id']?.toString() ?? '',
+        transactionId:    m['transaction_id']?.toString() ?? '',
+        customerId:       m['customer_id']?.toString() ?? '',
+        customerName:     m['customer_name']?.toString() ?? 'Umum',
+        invoiceNumber:    m['invoice_number']?.toString() ?? '',
+        totalAmount:      (m['total_amount'] as num? ?? 0).toDouble(),
+        paidAmount:       (m['paid_amount'] as num? ?? 0).toDouble(),
+        remainingBalance: (m['remaining_balance'] as num? ?? 0).toDouble(),
+        dueDate:          DateTime.parse(m['due_date']?.toString() ?? DateTime.now().toIso8601String()),
+        createdAt:        DateTime.parse(m['created_at']?.toString() ?? DateTime.now().toIso8601String()),
+        updatedAt:        m['updated_at'] != null ? DateTime.parse(m['updated_at'].toString()) : DateTime.parse(m['created_at']?.toString() ?? DateTime.now().toIso8601String()),
+        status:           DebtStatus.values.byName(m['status']?.toString() ?? 'unpaid'),
+        notes:            m['notes']?.toString(),
       );
 
   Map<String, dynamic> toMap() => {

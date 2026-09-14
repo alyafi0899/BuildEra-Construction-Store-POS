@@ -397,43 +397,49 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Widget _buildLogoPicker(StoreSettings settings) {
-    return Column(
-      children: [
-        const Text('Logo Toko',
-            style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textSecondary)),
-        const SizedBox(height: 8),
-        InkWell(
-          onTap: _pickLogo,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceAlt,
+    return FutureBuilder<String?>(
+      future: ImageHelper.resolveLocalPath(settings.logoUrl),
+      builder: (context, snapshot) {
+        final localPath = snapshot.data;
+
+        return Column(
+          children: [
+            const Text('Logo Toko',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textSecondary)),
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: _pickLogo,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.border),
+              child: Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceAlt,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.border),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(11),
+                  child: localPath != null && File(localPath).existsSync()
+                      ? Image.file(File(localPath), fit: BoxFit.cover)
+                      : Image.asset('assets/images/logo.png', fit: BoxFit.cover),
+                ),
+              ),
             ),
-            child: settings.logoUrl != null
-                ? ClipRRect(
-                    borderRadius: BorderRadius.circular(11),
-                    child: Image.network(settings.logoUrl!, fit: BoxFit.cover),
-                  )
-                : const Icon(Icons.add_a_photo_rounded,
-                    color: AppTheme.textMuted),
-          ),
-        ),
-        if (settings.logoUrl != null)
-          TextButton(
-            onPressed: () => ref
-                .read(settingsProvider.notifier)
-                .updateSettings(settings.copyWith(logoUrl: null)),
-            child: const Text('HAPUS',
-                style: TextStyle(color: AppTheme.danger, fontSize: 10)),
-          ),
-      ],
+            if (settings.logoUrl != null)
+              TextButton(
+                onPressed: () => ref
+                    .read(settingsProvider.notifier)
+                    .updateSettings(settings.copyWith(logoUrl: null)),
+                child: const Text('HAPUS',
+                    style: TextStyle(color: AppTheme.danger, fontSize: 10)),
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -493,18 +499,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     if (bytes == null) return;
 
     final processed = await ImageHelper.processImage(bytes);
-    final uid = ref.read(authStateProvider).value?.uid;
-    if (uid == null) return;
+    final uid = ref.read(authStateProvider).value?.uid ?? 'local_user';
 
-    // Upload to Firebase Storage
-    final url = await ref
-        .read(productsActionProvider)
-        .uploadImage('store_logo_$uid', processed);
-    if (url != null) {
+    final localPath = await ImageHelper.saveLocally(
+        uid, 'store_logo_$uid.jpg', processed,
+        subFolder: 'settings');
+    if (localPath != null) {
       final current = ref.read(settingsProvider);
       ref
           .read(settingsProvider.notifier)
-          .updateSettings(current.copyWith(logoUrl: url));
+          .updateSettings(current.copyWith(logoUrl: localPath));
     }
   }
 
@@ -513,8 +517,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     if (bytes == null) return;
 
     final processed = await ImageHelper.processImage(bytes);
-    final uid = ref.read(authStateProvider).value?.uid;
-    if (uid == null) return;
+    final uid = ref.read(authStateProvider).value?.uid ?? 'local_user';
 
     final localPath = await ImageHelper.saveLocally(
         uid, 'qris_static_$uid.jpg', processed,

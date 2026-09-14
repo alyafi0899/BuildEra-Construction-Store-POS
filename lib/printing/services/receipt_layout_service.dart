@@ -1,7 +1,10 @@
 import 'dart:typed_data';
+import 'dart:io';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
 import '../../../core/constants/app_constants.dart';
 import '../models/print_document.dart';
 import '../models/printer_profile.dart';
@@ -12,6 +15,7 @@ import '../../features/debts/models/customer.dart';
 import '../../features/debts/models/debt_payment.dart';
 import '../../features/settings/models/store_settings.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/utils/image_helper.dart';
 
 class ReceiptLayoutService {
   Future<Uint8List> buildPdf(
@@ -29,6 +33,27 @@ class ReceiptLayoutService {
 
     if (settings == null) return Uint8List(0);
 
+    // Load logo
+    pw.ImageProvider? logo;
+    if (settings.logoUrl != null && settings.logoUrl!.isNotEmpty) {
+      try {
+        final resolvedPath = await ImageHelper.resolveLocalPath(settings.logoUrl);
+        if (resolvedPath != null && await File(resolvedPath).exists()) {
+          final bytes = await File(resolvedPath).readAsBytes();
+          logo = pw.MemoryImage(bytes);
+        }
+      } catch (_) {}
+    }
+
+    // Fallback to default asset logo
+    if (logo == null) {
+      try {
+        final byteData = await rootBundle.load('assets/images/logo.png');
+        final bytes = byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes);
+        logo = pw.MemoryImage(bytes);
+      } catch (_) {}
+    }
+
     final design = settings.invoiceDesign;
     final isFast = design == 'fast';
     final baseFontSize = isFast ? 7.0 : 8.0;
@@ -41,7 +66,7 @@ class ReceiptLayoutService {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               // 1. Header
-              _buildHeader(settings, design),
+              _buildHeader(settings, design, logo: logo),
               if (!isFast) pw.Divider(thickness: 0.5) else _rawDivider(profile.paperWidthMm),
 
               // 2. Info
@@ -105,11 +130,17 @@ class ReceiptLayoutService {
     return pw.Text('-' * count, style: const pw.TextStyle(fontSize: 7));
   }
 
-  pw.Widget _buildHeader(StoreSettings s, String design) {
+  pw.Widget _buildHeader(StoreSettings s, String design, {pw.ImageProvider? logo}) {
     final isModern = design == 'modern';
     return pw.Center(
       child: pw.Column(
         children: [
+          if (logo != null)
+            pw.Container(
+              height: 40,
+              margin: const pw.EdgeInsets.only(bottom: 6),
+              child: pw.Image(logo),
+            ),
           pw.Text(s.businessName.toUpperCase(),
               style: pw.TextStyle(
                   fontWeight: pw.FontWeight.bold, 
@@ -281,12 +312,24 @@ class ReceiptLayoutService {
   }
 
   pw.Widget _buildPaymentHistory(List<DebtPayment> payments, double fontSize) {
+    // Reverse payments to show newest at the bottom or keep in chronological order
+    final sortedPayments = List<DebtPayment>.from(payments).reversed.toList();
+    
+    double runningPaid = 0;
+    
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Center(child: pw.Text('RIWAYAT CICILAN', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fontSize))),
+        pw.Center(child: pw.Text('RIWAYAT CICILAN & SISA', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fontSize))),
         pw.SizedBox(height: 4),
-        ...payments.map((p) => _row(Formatters.date(p.createdAt), Formatters.currency(p.amount), fontSize: fontSize)),
+        ...sortedPayments.map((p) {
+          runningPaid += p.amount;
+          return _row(
+            '${Formatters.date(p.createdAt)} (Bayar)', 
+            '${Formatters.currency(p.amount)}', 
+            fontSize: fontSize
+          );
+        }),
       ],
     );
   }
