@@ -13,5 +13,11 @@ void main() {
       expect(ResponsiveBreakpoints.useCompactCashier(899), isTrue);
       expect(ResponsiveBreakpoints.useCompactCashier(900), isFalse);
     });
+
+    test('uses compact management pages below the desktop table width', () {
+      expect(ResponsiveBreakpoints.useCompactManagementLayout(800), isTrue);
+      expect(ResponsiveBreakpoints.useCompactManagementLayout(1199), isTrue);
+      expect(ResponsiveBreakpoints.useCompactManagementLayout(1200), isFalse);
+    });
   });
 }
