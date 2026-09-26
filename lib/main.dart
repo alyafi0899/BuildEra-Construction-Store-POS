@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
+import 'core/utils/responsive_breakpoints.dart';
 import 'shared/widgets/sidebar.dart';
 import 'features/cashier/presentation/pages/cashier_page.dart';
 import 'features/products/presentation/pages/products_page.dart';
@@ -31,26 +32,20 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/services.dart';
 
 import 'shared/widgets/splash_screen.dart';
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // 0. Force Landscape Orientation (Mobile)
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.landscapeLeft,
-    DeviceOrientation.landscapeRight,
-  ]);
-  
+
   // 1. Handle Secondary Windows (Customer Display) ASAP
   // Use more flexible check for arguments
   final isMultiWindow = args.any((a) => a.contains('multi_window'));
-  
+
   if (isMultiWindow) {
     // 1. Initialize window manager immediately so we can show errors if boot fails
-    if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+    if (!kIsWeb &&
+        (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
       await windowManager.ensureInitialized();
       WindowOptions windowOptions = const WindowOptions(
         size: Size(1060, 768),
@@ -104,12 +99,13 @@ Future<void> main(List<String> args) async {
   await LocalDatabase.init();
 
   // 1. Initialize Window Manager ASAP for Windows/Desktop
-  final isDesktop = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+  final isDesktop =
+      !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
   if (isDesktop) {
     await windowManager.ensureInitialized();
     WindowOptions windowOptions = const WindowOptions(
       size: Size(1500, 800),
-      minimumSize: Size(1500, 700), // Enforce landscape minimum
+      minimumSize: Size(360, 600),
       center: true,
       backgroundColor: Color(0xFF0F1117),
       skipTaskbar: false,
@@ -119,11 +115,6 @@ Future<void> main(List<String> args) async {
     await windowManager.waitUntilReadyToShow(windowOptions);
     await windowManager.show();
     await windowManager.focus();
-    
-    // Ensure it's not starting in portrait-like dimensions if maximized
-    if (Platform.isWindows) {
-      await windowManager.setAspectRatio(1.6); // Lock aspect ratio to landscape (16:10 or 16:9)
-    }
   }
 
   // 2. Start initialization timer for Brand Identity (Min 3.0s)
@@ -157,9 +148,10 @@ Future<void> main(List<String> args) async {
     runApp(const ProviderScope(child: KonstruksiPosApp()));
   } catch (e, stack) {
     debugPrint('BOOT ERROR: $e\n$stack');
-    
+
     // Ensure window is shown even on boot error
-    if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+    if (!kIsWeb &&
+        (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
       try {
         await windowManager.ensureInitialized();
         await windowManager.show();
@@ -184,12 +176,6 @@ class KonstruksiPosApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Re-enforce orientation lock on app build
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
-
     final mode = ref.watch(themeProvider);
     final appSettings = ref.watch(appSettingsProvider);
 
@@ -249,7 +235,11 @@ class _MainShellState extends ConsumerState<MainShell> {
   @override
   Widget build(BuildContext context) {
     final idx = ref.watch(navigationIndexProvider);
-    
+    final width = MediaQuery.sizeOf(context).width;
+    final responsiveSize = ResponsiveBreakpoints.classify(width);
+    final isPhone = responsiveSize == ResponsiveSize.phone;
+    final isTablet = responsiveSize == ResponsiveSize.tablet;
+
     // Listen to cart changes for Customer Display Sync
     ref.listen(cartProvider, (prev, next) {
       final user = ref.read(authStateProvider).value;
@@ -265,24 +255,103 @@ class _MainShellState extends ConsumerState<MainShell> {
     ref.watch(transactionsProvider);
     ref.watch(customersProvider);
 
-    final shell = Row(children: [
-      AppSidebar(
-        selectedIndex: idx,
-        onItemSelected: (i) => ref.read(navigationIndexProvider.notifier).setIndex(i),
-      ),
-      Expanded(
-        child: Listener(
-          behavior: HitTestBehavior.translucent,
-          onPointerDown: (_) => ref.read(sidebarCollapsedProvider.notifier).collapse(),
-          child: IndexedStack(index: idx, children: _pages),
-        ),
-      ),
-    ]);
+    final pageStack = Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) =>
+          ref.read(sidebarCollapsedProvider.notifier).collapse(),
+      child: IndexedStack(index: idx, children: _pages),
+    );
+
+    final shell = isPhone
+        ? pageStack
+        : Row(
+            children: [
+              AppSidebar(
+                selectedIndex: idx,
+                compactMode: isTablet,
+                onItemSelected: (i) =>
+                    ref.read(navigationIndexProvider.notifier).setIndex(i),
+              ),
+              Expanded(child: pageStack),
+            ],
+          );
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      resizeToAvoidBottomInset: false, // Prevent UI jumping on keyboard
+      resizeToAvoidBottomInset: isPhone,
       body: shell,
+      bottomNavigationBar: isPhone
+          ? NavigationBar(
+              selectedIndex: _phoneDestinationIndex(idx),
+              onDestinationSelected: (destination) {
+                if (destination == 4) {
+                  _showMoreDestinations(context, ref, idx);
+                  return;
+                }
+                const destinations = [0, 1, 2, 3];
+                ref
+                    .read(navigationIndexProvider.notifier)
+                    .setIndex(destinations[destination]);
+              },
+              destinations: const [
+                NavigationDestination(
+                    icon: Icon(Icons.point_of_sale_rounded), label: 'Kasir'),
+                NavigationDestination(
+                    icon: Icon(Icons.inventory_2_rounded), label: 'Produk'),
+                NavigationDestination(
+                    icon: Icon(Icons.receipt_long_rounded), label: 'Transaksi'),
+                NavigationDestination(
+                    icon: Icon(Icons.account_balance_wallet_rounded),
+                    label: 'Piutang'),
+                NavigationDestination(
+                    icon: Icon(Icons.more_horiz_rounded), label: 'Lainnya'),
+              ],
+            )
+          : null,
+    );
+  }
+
+  int _phoneDestinationIndex(int pageIndex) {
+    const destinations = [0, 1, 2, 3];
+    final index = destinations.indexOf(pageIndex);
+    return index < 0 ? 4 : index;
+  }
+
+  void _showMoreDestinations(
+      BuildContext context, WidgetRef ref, int selectedIndex) {
+    const destinations = <(int, String, IconData)>[
+      (10, 'Pembelian', Icons.local_shipping_rounded),
+      (11, 'Riwayat Beli', Icons.history_edu_rounded),
+      (4, 'Pelanggan', Icons.people_rounded),
+      (6, 'Label Barcode', Icons.qr_code_2_rounded),
+      (5, 'Analitik', Icons.bar_chart_rounded),
+      (8, 'Tagihan', Icons.receipt_rounded),
+      (7, 'Pengaturan', Icons.settings_rounded),
+      (9, 'Tampilan Pelanggan', Icons.display_settings_rounded),
+    ];
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            for (final destination in destinations)
+              ListTile(
+                leading: Icon(destination.$3),
+                title: Text(destination.$2),
+                selected: selectedIndex == destination.$1,
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  ref
+                      .read(navigationIndexProvider.notifier)
+                      .setIndex(destination.$1);
+                },
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

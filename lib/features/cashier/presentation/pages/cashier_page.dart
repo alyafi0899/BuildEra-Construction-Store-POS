@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../core/utils/responsive_breakpoints.dart';
 import '../../../../shared/models/product.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../../../shared/widgets/product_image.dart';
@@ -31,6 +32,7 @@ class _CashierPageState extends ConsumerState<CashierPage> {
   final _searchCtrl = TextEditingController();
   final _searchFocusNode = FocusNode(debugLabel: 'CashierSearchFocus');
   Timer? _unfocusTimer;
+  bool _showCartOnCompact = false;
 
   @override
   void initState() {
@@ -51,17 +53,17 @@ class _CashierPageState extends ConsumerState<CashierPage> {
 
   void _reclaimFocus() {
     if (!mounted) return;
-    
+
     // Rule 3: Do NOT reclaim if a modal dialog is open
     if (ModalRoute.of(context)?.isCurrent == false) return;
 
     final primaryFocus = FocusManager.instance.primaryFocus;
-    
+
     // Rule 2: Absolute Protection for Cart fields
     // We check if the focus is on an EditableText (input field).
     // If it is, we NEVER pull back.
-    bool isInAnyInputField = primaryFocus != null && 
-                            primaryFocus.context?.widget is EditableText;
+    bool isInAnyInputField =
+        primaryFocus != null && primaryFocus.context?.widget is EditableText;
 
     if (isInAnyInputField) return;
 
@@ -71,7 +73,7 @@ class _CashierPageState extends ConsumerState<CashierPage> {
 
   void _resetUnfocusTimer() {
     _unfocusTimer?.cancel();
-    
+
     if (ModalRoute.of(context)?.isCurrent == false) return;
 
     // Rule 2: If we are in an input field, DO NOT start the timer.
@@ -90,11 +92,72 @@ class _CashierPageState extends ConsumerState<CashierPage> {
   @override
   Widget build(BuildContext context) {
     final category = ref.watch(productCategoryFilterProvider);
+    final cart = ref.watch(cartProvider);
+
+    Widget buildProductPanel({required bool compact}) => Column(
+          children: [
+            PageHeader(
+              title: 'Kasir',
+              icon: Icons.point_of_sale_rounded,
+              actions: compact
+                  ? const []
+                  : [
+                      const SizedBox(width: 16),
+                      Text(Formatters.date(DateTime.now()),
+                          style: Theme.of(context).textTheme.bodyMedium),
+                    ],
+            ),
+            Container(
+              padding: EdgeInsets.symmetric(
+                  horizontal: compact ? 12 : 24, vertical: compact ? 8 : 16),
+              color: AppTheme.surface,
+              child: AppSearchField(
+                controller: _searchCtrl,
+                focusNode: _searchFocusNode,
+                hintText: 'Cari produk atau scan barcode...',
+                onChanged: (v) {
+                  ref.read(productSearchQueryProvider.notifier).set(v);
+                  _resetUnfocusTimer();
+                },
+                onClear: () {
+                  _searchCtrl.clear();
+                  ref.read(productSearchQueryProvider.notifier).set('');
+                  _searchFocusNode.requestFocus();
+                },
+                onSubmitted: (v) {
+                  ref.read(productSearchQueryProvider.notifier).set(v);
+                  ref.read(barcodeScannerProvider.notifier).clearBuffer();
+                  _searchFocusNode.requestFocus();
+                  _unfocusTimer?.cancel();
+                },
+              ),
+            ),
+            _CategoryFilter(
+              selected: category,
+              onSelected: (c) =>
+                  ref.read(productCategoryFilterProvider.notifier).set(c),
+            ),
+            Expanded(
+              child:
+                  _ProductGrid(onAction: () => _searchFocusNode.requestFocus()),
+            ),
+          ],
+        );
+
+    Widget buildCartPanel({required bool compact}) => Container(
+          decoration: BoxDecoration(
+            color: AppTheme.surface,
+            border: compact
+                ? null
+                : const Border(left: BorderSide(color: AppTheme.border)),
+          ),
+          child: const CartPanel(),
+        );
 
     // Listen to global barcode events
     ref.listen<BarcodeEvent?>(barcodeEventProvider, (prev, next) {
       if (next == null) return;
-      
+
       _unfocusTimer?.cancel();
 
       if (!next.wasFocused) {
@@ -123,7 +186,8 @@ class _CashierPageState extends ConsumerState<CashierPage> {
           SingleActivator(LogicalKeyboardKey.f5): const FocusCustomerIntent(),
           LogicalKeySet(LogicalKeyboardKey.altLeft): const ToggleTaxIntent(),
           LogicalKeySet(LogicalKeyboardKey.altRight): const ToggleTaxIntent(),
-          LogicalKeySet(LogicalKeyboardKey.shiftRight): const OpenPaymentIntent(),
+          LogicalKeySet(LogicalKeyboardKey.shiftRight):
+              const OpenPaymentIntent(),
         },
         child: Actions(
           actions: {
@@ -139,7 +203,10 @@ class _CashierPageState extends ConsumerState<CashierPage> {
                 final items = ref.read(cartProvider).items;
                 if (items.isNotEmpty) {
                   final lastId = items.last.id;
-                  ref.read(cartFocusRegistryProvider)[lastId]?.qtyFocus.requestFocus();
+                  ref
+                      .read(cartFocusRegistryProvider)[lastId]
+                      ?.qtyFocus
+                      .requestFocus();
                 }
                 return null;
               },
@@ -149,7 +216,10 @@ class _CashierPageState extends ConsumerState<CashierPage> {
                 final items = ref.read(cartProvider).items;
                 if (items.isNotEmpty) {
                   final lastId = items.last.id;
-                  ref.read(cartFocusRegistryProvider)[lastId]?.priceFocus.requestFocus();
+                  ref
+                      .read(cartFocusRegistryProvider)[lastId]
+                      ?.priceFocus
+                      .requestFocus();
                 }
                 return null;
               },
@@ -159,14 +229,20 @@ class _CashierPageState extends ConsumerState<CashierPage> {
                 final items = ref.read(cartProvider).items;
                 if (items.isNotEmpty) {
                   final lastId = items.last.id;
-                  ref.read(cartFocusRegistryProvider)[lastId]?.discountFocus.requestFocus();
+                  ref
+                      .read(cartFocusRegistryProvider)[lastId]
+                      ?.discountFocus
+                      .requestFocus();
                 }
                 return null;
               },
             ),
             FocusTransDiscIntent: CallbackAction<FocusTransDiscIntent>(
               onInvoke: (_) {
-                ref.read(cartTotalsFocusProvider).transDiscountFocus.requestFocus();
+                ref
+                    .read(cartTotalsFocusProvider)
+                    .transDiscountFocus
+                    .requestFocus();
                 return null;
               },
             ),
@@ -199,73 +275,69 @@ class _CashierPageState extends ConsumerState<CashierPage> {
               // Short delay to let the click focus the target field first
               Future.delayed(const Duration(milliseconds: 150), _reclaimFocus);
             },
-            child: Row(children: [
-              // ── Left: Product Search & Grid ──────────────────────────────────
-              Expanded(
-                flex: 1,
-                child: Column(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final compact = ResponsiveBreakpoints.useCompactCashier(
+                    constraints.maxWidth);
+                if (!compact) {
+                  return Row(
                     children: [
-                      // Header
-                      PageHeader(
-                        title: 'Kasir',
-                        icon: Icons.point_of_sale_rounded,
-                        actions: [
-                          const SizedBox(width: 16),
-                          Text(Formatters.date(DateTime.now()),
-                              style: Theme.of(context).textTheme.bodyMedium),
-                        ],
-                      ),
+                      Expanded(child: buildProductPanel(compact: false)),
+                      Expanded(child: buildCartPanel(compact: false)),
+                    ],
+                  );
+                }
 
-                      // Search Field
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                        color: AppTheme.surface,
-                        child: AppSearchField(
-                          controller: _searchCtrl,
-                          focusNode: _searchFocusNode,
-                          hintText: 'Cari produk atau scan barcode...',
-                          onChanged: (v) {
-                            ref.read(productSearchQueryProvider.notifier).set(v);
-                            _resetUnfocusTimer();
-                          },
-                          onClear: () {
-                            _searchCtrl.clear();
-                            ref.read(productSearchQueryProvider.notifier).set('');
+                return Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                      child: SegmentedButton<bool>(
+                        showSelectedIcon: false,
+                        segments: [
+                          const ButtonSegment<bool>(
+                            value: false,
+                            icon: Icon(Icons.search_rounded),
+                            label: Text('Produk'),
+                          ),
+                          ButtonSegment<bool>(
+                            value: true,
+                            icon: const Icon(Icons.shopping_cart_outlined),
+                            label: Text('Keranjang (${cart.itemCount})'),
+                          ),
+                        ],
+                        selected: {_showCartOnCompact},
+                        onSelectionChanged: (selection) {
+                          setState(() => _showCartOnCompact = selection.first);
+                          if (!selection.first) {
                             _searchFocusNode.requestFocus();
-                          },
-                          onSubmitted: (v) {
-                            ref.read(productSearchQueryProvider.notifier).set(v);
-                            ref.read(barcodeScannerProvider.notifier).clearBuffer();
-                            _searchFocusNode.requestFocus();
-                            _unfocusTimer?.cancel();
-                          },
+                          } else {
+                            FocusManager.instance.primaryFocus?.unfocus();
+                          }
+                        },
+                      ),
+                    ),
+                    if (_showCartOnCompact)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 4),
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            'Total ${Formatters.currency(cart.total)}',
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
                         ),
                       ),
-
-                      // Category filter chips
-                      _CategoryFilter(
-                        selected: category,
-                        onSelected: (c) => ref.read(productCategoryFilterProvider.notifier).set(c),
-                      ),
-
-                      // Product grid
                     Expanded(
-                        child: _ProductGrid(onAction: () => _searchFocusNode.requestFocus())),
-                  ]),
-              ),
-
-              // ── Right: Cart Panel ────────────────────────────────────────────
-              Expanded(
-                flex: 1,
-                child: Container(
-                  decoration: const BoxDecoration(
-                    color: AppTheme.surface,
-                    border: Border(left: BorderSide(color: AppTheme.border)),
-                  ),
-                  child: const CartPanel(),
-                ),
-              ),
-            ]),
+                      child: _showCartOnCompact
+                          ? buildCartPanel(compact: true)
+                          : buildProductPanel(compact: true),
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -330,7 +402,7 @@ class _Chip extends StatelessWidget {
             color: selected ? AppTheme.accent : AppTheme.surfaceAlt,
             borderRadius: BorderRadius.circular(20),
             border:
-            Border.all(color: selected ? AppTheme.accent : AppTheme.border),
+                Border.all(color: selected ? AppTheme.accent : AppTheme.border),
           ),
           child: Text(
             label,
@@ -378,30 +450,40 @@ class _ProductGridState extends ConsumerState<_ProductGrid> {
       );
     }
 
-    return Scrollbar(
-      controller: _scrollController,
-      thumbVisibility: true,
-      child: ListView.separated(
-        controller: _scrollController,
-        padding: const EdgeInsets.all(20),
-        itemCount: products.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
-        itemBuilder: (_, i) => RepaintBoundary(
-          child: _ProductListTile(
-            key: ValueKey('cashier_prod_${products[i].id}'),
-            product: products[i],
-            onTap: widget.onAction,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 500;
+        return Scrollbar(
+          controller: _scrollController,
+          thumbVisibility: true,
+          child: GridView.builder(
+            controller: _scrollController,
+            padding: EdgeInsets.all(compact ? 12 : 20),
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: compact ? 220 : 250,
+              mainAxisSpacing: compact ? 10 : 14,
+              crossAxisSpacing: compact ? 10 : 14,
+              mainAxisExtent: compact ? 238 : 270,
+            ),
+            itemCount: products.length,
+            itemBuilder: (_, i) => RepaintBoundary(
+              child: _ProductCard(
+                key: ValueKey('cashier_prod_${products[i].id}'),
+                product: products[i],
+                onAction: widget.onAction,
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
 
-class _ProductListTile extends ConsumerWidget {
+class _ProductCard extends ConsumerWidget {
   final Product product;
-  final VoidCallback? onTap;
-  const _ProductListTile({super.key, required this.product, this.onTap});
+  final VoidCallback? onAction;
+  const _ProductCard({super.key, required this.product, this.onAction});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -414,103 +496,104 @@ class _ProductListTile extends ConsumerWidget {
       child: InkWell(
         onTap: () {
           ref.read(cartProvider.notifier).addProduct(product);
-          // Rule 1: Instant Pull back to search after manual add
           ref.read(barcodeScannerProvider.notifier).clearBuffer();
-          if (onTap != null) onTap!();
+          onAction?.call();
         },
         onLongPress: () => ProductDetailDialog.show(context, product),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             border: Border.all(
-                color: isLow
-                    ? AppTheme.warning.withValues(alpha: 0.4)
-                    : AppTheme.border),
+              color: isLow
+                  ? AppTheme.warning.withValues(alpha: 0.4)
+                  : AppTheme.border,
+            ),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 1. Image
-              GestureDetector(
-                onTap: () => ProductDetailDialog.show(context, product),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: SizedBox(
-                    width: 64,
-                    height: 64,
-                    child: ProductImage(imagePath: product.imagePath),
-                  ),
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ProductImage(imagePath: product.imagePath),
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: IconButton.filledTonal(
+                        tooltip: 'Detail produk',
+                        onPressed: () =>
+                            ProductDetailDialog.show(context, product),
+                        icon: const Icon(Icons.info_outline_rounded, size: 18),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                    Positioned(
+                      left: 8,
+                      top: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppTheme.bg.withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '${Formatters.decimal(product.stock)} ${product.baseUnit}',
+                          style: TextStyle(
+                            color:
+                                isLow ? AppTheme.warning : AppTheme.textPrimary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 16),
-
-              // 2. Product Name & Info
-              Expanded(
-                flex: 4,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       product.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 12),
                     ),
-                    if (product.barcode != null)
-                      Text(product.barcode!, style: const TextStyle(fontSize: 12, color: Colors.white70)),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppTheme.bg,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        product.category,
-                        style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // 3. Stock Info
-              Expanded(
-                flex: 2,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('STOK', style: TextStyle(fontSize: 9, color: AppTheme.textMuted, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 3),
                     Text(
-                      '${Formatters.decimal(product.stock)} ${product.baseUnit}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: isLow ? AppTheme.warning : AppTheme.textPrimary,
-                      ),
+                      product.category,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: AppTheme.textMuted, fontSize: 10),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            Formatters.currency(product.basePrice),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppTheme.accent,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        const Icon(Icons.add_circle_outline_rounded,
+                            color: AppTheme.accent, size: 20),
+                      ],
                     ),
                   ],
                 ),
               ),
-
-              // 4. Sell Prices
-              Expanded(
-                flex: 4,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text('HARGA JUAL', style: TextStyle(fontSize: 9, color: AppTheme.textMuted, fontWeight: FontWeight.bold)),
-                    Text(
-                      Formatters.currency(product.basePrice),
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: AppTheme.accent),
-                    ),
-                    if (product.units.isNotEmpty)
-                      Text('+${product.units.length} Satuan', style: const TextStyle(fontSize: 9, color: AppTheme.accent)),
-                  ],
-                ),
-              ),
-
-              const SizedBox(width: 16),
-              const Icon(Icons.add_circle_outline_rounded, color: AppTheme.accent, size: 24),
             ],
           ),
         ),

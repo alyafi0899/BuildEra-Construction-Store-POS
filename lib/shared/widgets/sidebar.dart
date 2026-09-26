@@ -7,48 +7,52 @@ import '../../core/providers/navigation_provider.dart';
 
 class _NavItem {
   final IconData icon;
-  final String   label;
-  final int      index;
-  final String?  category;
+  final String label;
+  final int index;
+  final String? category;
   const _NavItem(this.icon, this.label, this.index, [this.category]);
 }
 
 const _navItems = [
   // OPERASIONAL
-  _NavItem(Icons.point_of_sale_rounded,       'Kasir',       0, 'OPERASIONAL'),
-  _NavItem(Icons.local_shipping_rounded,      'Pembelian',   10, 'OPERASIONAL'),
-  _NavItem(Icons.history_edu_rounded,         'Riwayat Beli', 11, 'OPERASIONAL'),
-  _NavItem(Icons.receipt_long_rounded,        'Transaksi',   2, 'OPERASIONAL'),
-  _NavItem(Icons.account_balance_wallet_rounded, 'Piutang',   3, 'OPERASIONAL'),
-  _NavItem(Icons.people_rounded,               'Pelanggan',   4, 'OPERASIONAL'),
+  _NavItem(Icons.point_of_sale_rounded, 'Kasir', 0, 'OPERASIONAL'),
+  _NavItem(Icons.local_shipping_rounded, 'Pembelian', 10, 'OPERASIONAL'),
+  _NavItem(Icons.history_edu_rounded, 'Riwayat Beli', 11, 'OPERASIONAL'),
+  _NavItem(Icons.receipt_long_rounded, 'Transaksi', 2, 'OPERASIONAL'),
+  _NavItem(Icons.account_balance_wallet_rounded, 'Piutang', 3, 'OPERASIONAL'),
+  _NavItem(Icons.people_rounded, 'Pelanggan', 4, 'OPERASIONAL'),
 
   // INVENTORI
-  _NavItem(Icons.inventory_2_rounded,         'Produk / Stok', 1, 'INVENTORI'),
-  _NavItem(Icons.qr_code_2_rounded,           'Label Barcode', 6, 'INVENTORI'),
+  _NavItem(Icons.inventory_2_rounded, 'Produk / Stok', 1, 'INVENTORI'),
+  _NavItem(Icons.qr_code_2_rounded, 'Label Barcode', 6, 'INVENTORI'),
 
   // FINANSIAL
-  _NavItem(Icons.bar_chart_rounded,           'Analitik',    5, 'FINANSIAL'),
-  _NavItem(Icons.receipt_rounded,              'Tagihan',     8, 'FINANSIAL'),
+  _NavItem(Icons.bar_chart_rounded, 'Analitik', 5, 'FINANSIAL'),
+  _NavItem(Icons.receipt_rounded, 'Tagihan', 8, 'FINANSIAL'),
 
   // SISTEM
-  _NavItem(Icons.settings_rounded,            'Pengaturan',  7, 'SISTEM'),
+  _NavItem(Icons.settings_rounded, 'Pengaturan', 7, 'SISTEM'),
 ];
 
 class AppSidebar extends ConsumerWidget {
-  final int      selectedIndex;
+  final int selectedIndex;
   final ValueChanged<int> onItemSelected;
+  final bool compactMode;
 
   const AppSidebar({
     super.key,
     required this.selectedIndex,
     required this.onItemSelected,
+    this.compactMode = false,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
-    final isCollapsed = ref.watch(sidebarCollapsedProvider);
-    final businessName = settings.businessName.isEmpty ? 'KONST.POS' : settings.businessName.toUpperCase();
+    final isCollapsed = compactMode || ref.watch(sidebarCollapsedProvider);
+    final businessName = settings.businessName.isEmpty
+        ? 'KONST.POS'
+        : settings.businessName.toUpperCase();
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
@@ -59,16 +63,20 @@ class AppSidebar extends ConsumerWidget {
         GestureDetector(
           onTap: () => ref.read(sidebarCollapsedProvider.notifier).expand(),
           child: Container(
-            padding: EdgeInsets.symmetric(vertical: 28, horizontal: isCollapsed ? 17 : 20),
+            padding: EdgeInsets.symmetric(
+                vertical: 28, horizontal: isCollapsed ? 17 : 20),
             decoration: const BoxDecoration(
               border: Border(bottom: BorderSide(color: AppTheme.border)),
             ),
             child: Row(
-              mainAxisAlignment: isCollapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
+              mainAxisAlignment: isCollapsed
+                  ? MainAxisAlignment.center
+                  : MainAxisAlignment.start,
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: Image.asset('assets/images/logo.png', width: 36, height: 36, fit: BoxFit.cover),
+                  child: Image.asset('assets/images/logo.png',
+                      width: 36, height: 36, fit: BoxFit.cover),
                 ),
                 if (!isCollapsed) ...[
                   const SizedBox(width: 10),
@@ -111,9 +119,12 @@ class AppSidebar extends ConsumerWidget {
         // Nav items
         Expanded(
           child: SingleChildScrollView(
-            padding: EdgeInsets.symmetric(vertical: 12, horizontal: isCollapsed ? 8 : 10),
+            padding: EdgeInsets.symmetric(
+                vertical: 12, horizontal: isCollapsed ? 8 : 10),
             child: Column(
-              crossAxisAlignment: isCollapsed ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+              crossAxisAlignment: isCollapsed
+                  ? CrossAxisAlignment.center
+                  : CrossAxisAlignment.start,
               children: [
                 ..._buildCategorizedNav(context, ref, isCollapsed),
                 const SizedBox(height: 32),
@@ -127,14 +138,17 @@ class AppSidebar extends ConsumerWidget {
           ),
         ),
 
-        // Toggle Button
-        IconButton(
-          onPressed: () => ref.read(sidebarCollapsedProvider.notifier).toggle(),
-          icon: Icon(
-            isCollapsed ? Icons.chevron_right_rounded : Icons.chevron_left_rounded,
-            color: AppTheme.textMuted,
+        if (!compactMode)
+          IconButton(
+            onPressed: () =>
+                ref.read(sidebarCollapsedProvider.notifier).toggle(),
+            icon: Icon(
+              isCollapsed
+                  ? Icons.chevron_right_rounded
+                  : Icons.chevron_left_rounded,
+              color: AppTheme.textMuted,
+            ),
           ),
-        ),
 
         // Bottom
         Container(
@@ -143,7 +157,9 @@ class AppSidebar extends ConsumerWidget {
             border: Border(top: BorderSide(color: AppTheme.border)),
           ),
           child: Row(
-            mainAxisAlignment: isCollapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
+            mainAxisAlignment: isCollapsed
+                ? MainAxisAlignment.center
+                : MainAxisAlignment.start,
             children: [
               const CircleAvatar(
                 radius: 16,
@@ -158,12 +174,15 @@ class AppSidebar extends ConsumerWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        settings.ownerName.isEmpty ? 'Admin' : settings.ownerName,
+                        settings.ownerName.isEmpty
+                            ? 'Admin'
+                            : settings.ownerName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
-                      Text('Owner', style: Theme.of(context).textTheme.bodySmall),
+                      Text('Owner',
+                          style: Theme.of(context).textTheme.bodySmall),
                     ],
                   ),
                 ),
@@ -175,7 +194,8 @@ class AppSidebar extends ConsumerWidget {
     );
   }
 
-  List<Widget> _buildCategorizedNav(BuildContext context, WidgetRef ref, bool isCollapsed) {
+  List<Widget> _buildCategorizedNav(
+      BuildContext context, WidgetRef ref, bool isCollapsed) {
     final Map<String, List<_NavItem>> categories = {};
     for (final item in _navItems) {
       final cat = item.category ?? 'LAINNYA';
@@ -230,16 +250,21 @@ class _NavTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Material(
-        color: selected ? AppTheme.accent.withValues(alpha: 0.15) : Colors.transparent,
+        color: selected
+            ? AppTheme.accent.withValues(alpha: 0.15)
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(8),
           child: Container(
-            padding: EdgeInsets.symmetric(horizontal: isCollapsed ? 10 : 12, vertical: 11),
+            padding: EdgeInsets.symmetric(
+                horizontal: isCollapsed ? 10 : 12, vertical: 11),
             width: double.infinity,
             child: Row(
-              mainAxisAlignment: isCollapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
+              mainAxisAlignment: isCollapsed
+                  ? MainAxisAlignment.center
+                  : MainAxisAlignment.start,
               children: [
                 Tooltip(
                   message: isCollapsed ? item.label : '',
@@ -257,8 +282,10 @@ class _NavTile extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: selected ? AppTheme.accent : AppTheme.textSecondary,
-                        fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                        color:
+                            selected ? AppTheme.accent : AppTheme.textSecondary,
+                        fontWeight:
+                            selected ? FontWeight.w600 : FontWeight.w400,
                         fontSize: 13,
                       ),
                     ),
