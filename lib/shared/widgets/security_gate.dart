@@ -2,15 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
+import '../../features/auth/providers/auth_provider.dart';
 import '../../features/settings/providers/settings_provider.dart';
 
 /// A provider that tracks the global PIN unlock state.
 /// This allows once-per-session (or until manual lock) unlocking.
-final pinUnlockProvider = NotifierProvider<PinUnlockNotifier, bool>(PinUnlockNotifier.new);
+final pinUnlockProvider =
+    NotifierProvider<PinUnlockNotifier, bool>(PinUnlockNotifier.new);
 
 class PinUnlockNotifier extends Notifier<bool> {
   @override
-  bool build() => false;
+  bool build() {
+    ref.listen(authStateProvider, (previous, next) {
+      if (previous?.value?.uid != next.value?.uid) {
+        state = false;
+      }
+    });
+    return false;
+  }
+
   void unlock() => state = true;
   void lock() => state = false;
 }
@@ -19,7 +29,8 @@ class PinUnlockNotifier extends Notifier<bool> {
 void requirePin(BuildContext context, WidgetRef ref, VoidCallback onSuccess) {
   final isUnlocked = ref.read(pinUnlockProvider);
   final settings = ref.read(settingsProvider);
-  final hasPin = settings.securityPin != null && settings.securityPin!.isNotEmpty;
+  final hasPin =
+      settings.securityPin != null && settings.securityPin!.isNotEmpty;
 
   // Always require PIN for specific actions if PIN is set, regardless of enforcePageLock
   if (isUnlocked || !hasPin) {
@@ -62,9 +73,10 @@ class PinGate extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isUnlocked = ref.watch(pinUnlockProvider);
     final settings = ref.watch(settingsProvider);
-    final hasPin = settings.securityPin != null && settings.securityPin!.isNotEmpty;
+    final hasPin =
+        settings.securityPin != null && settings.securityPin!.isNotEmpty;
 
-    // Logic: 
+    // Logic:
     // 1. If no PIN set, never lock
     // 2. If already unlocked in this session, don't lock
     if (!hasPin || isUnlocked) {
@@ -95,7 +107,8 @@ class BlurGate extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isUnlocked = ref.watch(pinUnlockProvider);
     final settings = ref.watch(settingsProvider);
-    final hasPin = settings.securityPin != null && settings.securityPin!.isNotEmpty;
+    final hasPin =
+        settings.securityPin != null && settings.securityPin!.isNotEmpty;
 
     if (isUnlocked || !hasPin) {
       return child;
@@ -106,23 +119,28 @@ class BlurGate extends ConsumerWidget {
         child,
         Positioned.fill(
           child: Container(
-            color: AppTheme.surface.withValues(alpha: 0.98), // Solid cover is 100x faster than blur
+            color: AppTheme.surface.withValues(
+                alpha: 0.98), // Solid cover is 100x faster than blur
             child: Center(
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.lock_rounded, color: AppTheme.accent, size: 14),
+                    const Icon(Icons.lock_rounded,
+                        color: AppTheme.accent, size: 14),
                     const SizedBox(height: 2),
                     TextButton(
                       onPressed: () => _showPinDialog(context, ref),
                       style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 0),
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      child: const Text('Unlock', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+                      child: const Text('Unlock',
+                          style: TextStyle(
+                              fontSize: 9, fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
@@ -161,7 +179,8 @@ class _PinPromptOverlay extends ConsumerStatefulWidget {
 }
 
 class _PinPromptOverlayState extends ConsumerState<_PinPromptOverlay> {
-  final List<TextEditingController> _controllers = List.generate(6, (_) => TextEditingController());
+  final List<TextEditingController> _controllers =
+      List.generate(6, (_) => TextEditingController());
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
   String _error = '';
 
@@ -223,7 +242,8 @@ class _PinPromptOverlayState extends ConsumerState<_PinPromptOverlay> {
     final pinLength = settings.securityPin?.length ?? 4;
 
     return Container(
-      constraints: const BoxConstraints(minHeight: 400), // Ensure it has a height
+      constraints:
+          const BoxConstraints(minHeight: 400), // Ensure it has a height
       width: widget.isDialog ? 360 : double.infinity,
       height: widget.isDialog ? null : double.infinity,
       color: widget.isDialog ? AppTheme.surface : AppTheme.bg,
@@ -233,11 +253,15 @@ class _PinPromptOverlayState extends ConsumerState<_PinPromptOverlay> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.lock_outline_rounded, size: 64, color: AppTheme.accent),
+              const Icon(Icons.lock_outline_rounded,
+                  size: 64, color: AppTheme.accent),
               const SizedBox(height: 24),
               Text(
                 'Akses Terbatas',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               const Text(
@@ -277,7 +301,8 @@ class _PinPromptOverlayState extends ConsumerState<_PinPromptOverlay> {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppTheme.accent, width: 2),
+                          borderSide: const BorderSide(
+                              color: AppTheme.accent, width: 2),
                         ),
                       ),
                       onChanged: (v) => _onChanged(v, index),
@@ -288,7 +313,9 @@ class _PinPromptOverlayState extends ConsumerState<_PinPromptOverlay> {
               ),
               if (_error.isNotEmpty) ...[
                 const SizedBox(height: 16),
-                Text(_error, style: const TextStyle(color: AppTheme.danger, fontWeight: FontWeight.bold)),
+                Text(_error,
+                    style: const TextStyle(
+                        color: AppTheme.danger, fontWeight: FontWeight.bold)),
               ],
               const SizedBox(height: 40),
               if (widget.isDialog)

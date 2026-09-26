@@ -1,30 +1,43 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../models/subscription.dart';
 import '../../../shared/presentation/pages/legal_document_page.dart';
 
 class SubscriptionAgreementDialog extends StatefulWidget {
+  final PlanType plan;
   final VoidCallback onAccepted;
 
-  const SubscriptionAgreementDialog({super.key, required this.onAccepted});
+  const SubscriptionAgreementDialog(
+      {super.key, required this.plan, required this.onAccepted});
 
   @override
-  State<SubscriptionAgreementDialog> createState() => _SubscriptionAgreementDialogState();
+  State<SubscriptionAgreementDialog> createState() =>
+      _SubscriptionAgreementDialogState();
 }
 
-class _SubscriptionAgreementDialogState extends State<SubscriptionAgreementDialog> {
+class _SubscriptionAgreementDialogState
+    extends State<SubscriptionAgreementDialog> {
   bool _agreed = false;
 
   @override
   Widget build(BuildContext context) {
+    final amount = widget.plan == PlanType.yearly
+        ? 'Rp 1.000.000 / tahun'
+        : 'Rp 100.000 / bulan';
     return AlertDialog(
       title: const Text('Konfirmasi Langganan'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Anda akan berlangganan Paket Full Features seharga Rp 100.000 / bulan.',
+          Text(
+            'Anda akan memilih Paket Full Features seharga $amount.',
             style: TextStyle(color: AppTheme.textPrimary),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Pembayaran pada aplikasi saat ini hanya simulasi. Tidak ada tagihan atau transaksi nyata yang dibuat.',
+            style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
           ),
           const SizedBox(height: 20),
           Row(
@@ -39,18 +52,24 @@ class _SubscriptionAgreementDialogState extends State<SubscriptionAgreementDialo
                   children: [
                     const Text('Saya setuju dengan '),
                     GestureDetector(
-                      onTap: () => _showLegal(context, 'Syarat & Ketentuan', _tosText),
+                      onTap: () =>
+                          _showLegal(context, 'Syarat & Ketentuan', _tosText),
                       child: const Text(
                         'Syarat & Ketentuan',
-                        style: TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            color: AppTheme.accent,
+                            fontWeight: FontWeight.bold),
                       ),
                     ),
                     const Text(' serta '),
                     GestureDetector(
-                      onTap: () => _showLegal(context, 'Kebijakan Privasi', _privacyText),
+                      onTap: () => _showLegal(
+                          context, 'Kebijakan Privasi', _privacyText),
                       child: const Text(
                         'Kebijakan Privasi',
-                        style: TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            color: AppTheme.accent,
+                            fontWeight: FontWeight.bold),
                       ),
                     ),
                     const Text(' yang berlaku.'),
@@ -64,7 +83,8 @@ class _SubscriptionAgreementDialogState extends State<SubscriptionAgreementDialo
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('BATAL', style: TextStyle(color: AppTheme.textMuted)),
+          child:
+              const Text('BATAL', style: TextStyle(color: AppTheme.textMuted)),
         ),
         ElevatedButton(
           onPressed: _agreed
@@ -96,12 +116,12 @@ class _SubscriptionAgreementDialogState extends State<SubscriptionAgreementDialo
 SYARAT & KETENTUAN LAYANAN POS CONSTRUCTION
 
 1. Layanan Langganan:
-   - Paket Full Features memberikan akses ke seluruh fitur premium selama 30 hari.
+  - Paket Full Features memberikan akses ke seluruh fitur premium sesuai durasi paket yang dipilih.
    - Pembayaran dilakukan di muka (prepaid).
 
 2. Pembayaran:
-   - Pembayaran diproses melalui gerbang pembayaran Xendit.
-   - Kami tidak menyimpan informasi kartu kredit atau detail perbankan Anda.
+  - Alur pembayaran yang tersedia saat ini merupakan simulasi.
+  - Tidak ada tagihan atau transaksi nyata yang dibuat dari alur simulasi ini.
 
 3. Kebijakan Pengembalian Dana:
    - Pembayaran yang sudah dilakukan tidak dapat dikembalikan (non-refundable).

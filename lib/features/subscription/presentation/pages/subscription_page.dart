@@ -5,10 +5,8 @@ import '../../../../shared/widgets/common_widgets.dart';
 import '../../providers/subscription_provider.dart';
 import '../widgets/subscription_agreement_dialog.dart';
 import '../../models/subscription.dart';
-import '../../models/subscription_history.dart';
 import '../../../../core/utils/formatters.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'payment_gateway_page.dart';
 
 class SubscriptionPage extends ConsumerStatefulWidget {
@@ -45,7 +43,8 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
               Text('Error: $err'),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: () => ref.read(subscriptionStateProvider.notifier).refresh(),
+                onPressed: () =>
+                    ref.read(subscriptionStateProvider.notifier).refresh(),
                 child: const Text('COBA LAGI'),
               ),
             ],
@@ -54,16 +53,15 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
         data: (sub) {
           if (_isConfirming && _tempMethod != null && _tempPlan != null) {
             return PaymentGatewayPage(
-              method: _tempMethod!, 
-              plan: _tempPlan!, 
-              onBack: () => setState(() => _isConfirming = false)
-            );
+                method: _tempMethod!,
+                plan: _tempPlan!,
+                onBack: () => setState(() => _isConfirming = false));
           }
 
           if (sub?.status == SubscriptionStatus.pending) {
             return _buildPendingUI(context, sub!.planType);
           }
-          
+
           return SingleChildScrollView(
             padding: const EdgeInsets.all(40),
             child: Column(
@@ -72,14 +70,15 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
                 if (sub != null && sub.isNearExpiry) _buildExpiryWarning(sub),
                 _buildStatusCard(context, sub),
                 const SizedBox(height: 40),
-                if (sub?.planType == PlanType.free || (sub?.expiresAt != null && sub!.expiresAt!.isBefore(DateTime.now())))
+                if (sub?.planType == PlanType.free ||
+                    (sub?.expiresAt != null &&
+                        sub!.expiresAt!.isBefore(DateTime.now())))
                   PricingSection(
                     onUpgrade: (plan) => _handleUpgrade(context, ref, plan),
                     currentSub: sub,
                   )
                 else
                   _buildActivePlanInfo(context, sub!),
-
                 const SizedBox(height: 48),
                 const Divider(),
                 const SizedBox(height: 32),
@@ -100,14 +99,15 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
       children: [
         Row(
           children: [
-            const Icon(Icons.history_rounded, size: 20, color: AppTheme.textMuted),
+            const Icon(Icons.history_rounded,
+                size: 20, color: AppTheme.textMuted),
             const SizedBox(width: 12),
-            Text('RIWAYAT LANGGANAN', 
+            Text(
+              'RIWAYAT LANGGANAN',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: AppTheme.textMuted, 
-                letterSpacing: 1, 
-                fontWeight: FontWeight.bold
-              ),
+                  color: AppTheme.textMuted,
+                  letterSpacing: 1,
+                  fontWeight: FontWeight.bold),
             ),
           ],
         ),
@@ -124,8 +124,10 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Center(
-                  child: Text('Belum ada riwayat transaksi.', 
-                    style: TextStyle(color: AppTheme.textMuted, fontStyle: FontStyle.italic)),
+                  child: Text('Belum ada riwayat transaksi.',
+                      style: TextStyle(
+                          color: AppTheme.textMuted,
+                          fontStyle: FontStyle.italic)),
                 ),
               );
             }
@@ -146,27 +148,34 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
                           color: AppTheme.success.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.receipt_long_rounded, color: AppTheme.success, size: 18),
+                        child: const Icon(Icons.receipt_long_rounded,
+                            color: AppTheme.success, size: 18),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Paket ${item.planType.displayName}', 
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                            Text('Dibayar via ${item.paymentMethod ?? "Gerbang Pembayaran"}', 
-                              style: const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                            Text('Paket ${item.planType.displayName}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 14)),
+                            Text(
+                                'Dibayar via ${item.paymentMethod ?? "Gerbang Pembayaran"}',
+                                style: const TextStyle(
+                                    color: AppTheme.textMuted, fontSize: 12)),
                           ],
                         ),
                       ),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text(Formatters.currency(item.amount), 
-                            style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.accent)),
-                          Text(DateFormat('dd MMM yyyy').format(item.createdAt), 
-                            style: const TextStyle(color: AppTheme.textMuted, fontSize: 11)),
+                          Text(Formatters.currency(item.amount),
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.accent)),
+                          Text(DateFormat('dd MMM yyyy').format(item.createdAt),
+                              style: const TextStyle(
+                                  color: AppTheme.textMuted, fontSize: 11)),
                         ],
                       ),
                     ],
@@ -197,7 +206,8 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
           Expanded(
             child: Text(
               'Peringatan: Masa langganan Anda akan habis dalam ${sub.daysRemaining} hari. Segera perpanjang paket Anda.',
-              style: const TextStyle(color: AppTheme.warning, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                  color: AppTheme.warning, fontWeight: FontWeight.bold),
             ),
           ),
         ],
@@ -207,7 +217,9 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
 
   Widget _buildStatusCard(BuildContext context, dynamic sub) {
     final isPremium = sub?.isPremium ?? false;
-    final statusText = isPremium ? 'AKTIF' : (sub?.status.toString().split('.').last.toUpperCase() ?? 'FREE');
+    final statusText = isPremium
+        ? 'AKTIF'
+        : (sub?.status.toString().split('.').last.toUpperCase() ?? 'FREE');
     final color = isPremium ? AppTheme.success : AppTheme.textMuted;
 
     return AppCard(
@@ -219,7 +231,9 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
               color: color.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
-            child: Icon(isPremium ? Icons.verified_rounded : Icons.info_outline_rounded, color: color),
+            child: Icon(
+                isPremium ? Icons.verified_rounded : Icons.info_outline_rounded,
+                color: color),
           ),
           const SizedBox(width: 20),
           Expanded(
@@ -227,17 +241,24 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isPremium ? 'Paket ${sub?.planType.displayName}' : 'Paket Gratis',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  isPremium
+                      ? 'Paket ${sub?.planType.displayName}'
+                      : 'Paket Gratis',
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 if (isPremium && sub != null)
                   Text(
-                    'Anda telah menggunakan layanan selama ${sub.daysActive} hari. Berlaku hingga: ${DateFormat('dd MMMM yyyy').format(sub.expiresAt!)}',
-                    style: const TextStyle(color: AppTheme.textMuted, fontSize: 13),
+                    sub.expiresAt == null
+                        ? 'Anda telah menggunakan layanan selama ${sub.daysActive} hari. Akses premium aktif tanpa tanggal kedaluwarsa.'
+                        : 'Anda telah menggunakan layanan selama ${sub.daysActive} hari. Berlaku hingga: ${DateFormat('dd MMMM yyyy').format(sub.expiresAt!)}',
+                    style: const TextStyle(
+                        color: AppTheme.textMuted, fontSize: 13),
                   )
                 else
                   const Text('Gunakan fitur premium untuk hasil maksimal',
-                      style: TextStyle(color: AppTheme.textMuted, fontSize: 13)),
+                      style:
+                          TextStyle(color: AppTheme.textMuted, fontSize: 13)),
               ],
             ),
           ),
@@ -249,7 +270,8 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
             ),
             child: Text(
               statusText,
-              style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12),
+              style: TextStyle(
+                  color: color, fontWeight: FontWeight.bold, fontSize: 12),
             ),
           ),
         ],
@@ -281,7 +303,9 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
                 context: context,
                 isScrollControlled: true,
                 backgroundColor: AppTheme.bg,
-                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
+                shape: const RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(32))),
                 builder: (context) => DraggableScrollableSheet(
                   initialChildSize: 0.9,
                   expand: false,
@@ -310,11 +334,14 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.hourglass_empty_rounded, size: 64, color: AppTheme.accent),
+          const Icon(Icons.hourglass_empty_rounded,
+              size: 64, color: AppTheme.accent),
           const SizedBox(height: 24),
-          const Text('Menunggu Pembayaran', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const Text('Menunggu Pembayaran',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
-          Text('Selesaikan pembayaran ${plan.displayName} Anda untuk membuka fitur premium.'),
+          Text(
+              'Selesaikan pembayaran ${plan.displayName} Anda untuk membuka fitur premium.'),
           const SizedBox(height: 32),
           ElevatedButton(
             onPressed: () => _showPaymentMethods(context, plan),
@@ -329,6 +356,7 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
     showDialog(
       context: context,
       builder: (context) => SubscriptionAgreementDialog(
+        plan: plan,
         onAccepted: () {
           Navigator.pop(context); // Close agreement dialog
           _showPaymentMethods(context, plan); // SHOW METHOD SELECTION FIRST
@@ -340,16 +368,19 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
   void _showPaymentMethods(BuildContext context, PlanType plan) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (context) => Container(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Pilih Metode Pembayaran', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text('Pilih Metode Pembayaran',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 24),
-            _methodTile(context, Icons.qr_code_scanner_rounded, 'QRIS', 'Bayar instan via GoPay, OVO, Dana, dll', () {
+            _methodTile(context, Icons.qr_code_scanner_rounded, 'QRIS',
+                'Bayar instan via GoPay, OVO, Dana, dll', () {
               Navigator.pop(context);
               setState(() {
                 _tempMethod = 'qris';
@@ -358,7 +389,8 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
               });
             }),
             const SizedBox(height: 12),
-            _methodTile(context, Icons.account_balance_rounded, 'Virtual Account', 'Transfer via Bank / ATM', () {
+            _methodTile(context, Icons.account_balance_rounded,
+                'Virtual Account', 'Transfer via Bank / ATM', () {
               Navigator.pop(context);
               setState(() {
                 _tempMethod = 'va';
@@ -372,35 +404,24 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
     );
   }
 
-  Widget _methodTile(BuildContext context, IconData icon, String title, String subtitle, VoidCallback onTap) {
+  Widget _methodTile(BuildContext context, IconData icon, String title,
+      String subtitle, VoidCallback onTap) {
     return ListTile(
       onTap: onTap,
       leading: Container(
         padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(color: AppTheme.accent.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+        decoration: BoxDecoration(
+            color: AppTheme.accent.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8)),
         child: Icon(icon, color: AppTheme.accent),
       ),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
       subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
       trailing: const Icon(Icons.chevron_right_rounded),
-      shape: RoundedRectangleBorder(side: const BorderSide(color: AppTheme.border), borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(
+          side: const BorderSide(color: AppTheme.border),
+          borderRadius: BorderRadius.circular(12)),
     );
-  }
-
-  // NOTE: _processPayment is now handled inside PaymentGatewayPage
-
-  void _startPayment(BuildContext context, String invoiceUrl, PlanType plan) async {
-    final uri = Uri.parse(invoiceUrl);
-    
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tidak dapat membuka browser untuk pembayaran.')),
-        );
-      }
-    }
   }
 }
 
@@ -419,8 +440,8 @@ class _PricingSectionState extends State<PricingSection> {
   @override
   Widget build(BuildContext context) {
     // Lock yearly upgrade if already on yearly plan
-    final isAlreadyYearly = widget.currentSub?.planType == PlanType.yearly && 
-                            widget.currentSub?.isPremium == true;
+    final isAlreadyYearly = widget.currentSub?.planType == PlanType.yearly &&
+        widget.currentSub?.isPremium == true;
 
     return Column(
       children: [
@@ -434,8 +455,10 @@ class _PricingSectionState extends State<PricingSection> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _toggleButton('BULANAN', !_isYearly, () => setState(() => _isYearly = false)),
-                _toggleButton('TAHUNAN', _isYearly, () => setState(() => _isYearly = true)),
+                _toggleButton('BULANAN', !_isYearly,
+                    () => setState(() => _isYearly = false)),
+                _toggleButton('TAHUNAN', _isYearly,
+                    () => setState(() => _isYearly = true)),
               ],
             ),
           ),
@@ -457,25 +480,40 @@ class _PricingSectionState extends State<PricingSection> {
                   children: [
                     if (_isYearly)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 4),
                         margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(color: AppTheme.success, borderRadius: BorderRadius.circular(20)),
-                        child: const Text('HEMAT 20%', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                        decoration: BoxDecoration(
+                            color: AppTheme.success,
+                            borderRadius: BorderRadius.circular(20)),
+                        child: const Text('HEMAT 20%',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold)),
                       ),
                     Text(
                       _isYearly ? 'Paket Tahunan' : 'Paket Bulanan',
-                      style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                          fontSize: 32, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        const Text('Rp', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.textSecondary)),
+                        const Text('Rp',
+                            style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.textSecondary)),
                         const SizedBox(width: 4),
-                        Text(_isYearly ? '1.000.000' : '100.000', style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w900)),
+                        Text(_isYearly ? '1.000.000' : '100.000',
+                            style: const TextStyle(
+                                fontSize: 48, fontWeight: FontWeight.w900)),
                         const SizedBox(width: 4),
-                        Text(_isYearly ? '/ tahun' : '/ bulan', style: const TextStyle(color: AppTheme.textMuted)),
+                        Text(_isYearly ? '/ tahun' : '/ bulan',
+                            style: const TextStyle(color: AppTheme.textMuted)),
                       ],
                     ),
                     const SizedBox(height: 40),
@@ -498,34 +536,47 @@ class _PricingSectionState extends State<PricingSection> {
                         child: const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 20),
+                            Icon(Icons.check_circle_rounded,
+                                color: AppTheme.success, size: 20),
                             SizedBox(width: 12),
-                            Text('PAKET TAHUNAN SEDANG AKTIF', 
-                              style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textMuted)),
+                            Text('PAKET TAHUNAN SEDANG AKTIF',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.textMuted)),
                           ],
                         ),
                       )
                     else
                       ElevatedButton(
-                        onPressed: () => widget.onUpgrade(_isYearly ? PlanType.yearly : PlanType.monthly),
+                        onPressed: () => widget.onUpgrade(
+                            _isYearly ? PlanType.yearly : PlanType.monthly),
                         style: ElevatedButton.styleFrom(
                           minimumSize: const Size(double.infinity, 64),
                           backgroundColor: AppTheme.accent,
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20)),
                           elevation: 4,
                         ),
                         child: Text(
-                          _isYearly && widget.currentSub?.planType == PlanType.monthly 
-                              ? 'UPGRADE KE TAHUNAN' 
+                          _isYearly &&
+                                  widget.currentSub?.planType ==
+                                      PlanType.monthly
+                              ? 'UPGRADE KE TAHUNAN'
                               : 'BERLANGGANAN SEKARANG',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1),
+                          style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1),
                         ),
                       ),
                     const SizedBox(height: 16),
                     const Text(
-                      '* Pembayaran aman via Xendit',
-                      style: TextStyle(fontSize: 11, color: AppTheme.textMuted, fontStyle: FontStyle.italic),
+                      '* Alur pembayaran saat ini berupa simulasi; belum ada transaksi nyata.',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textMuted,
+                          fontStyle: FontStyle.italic),
                     ),
                   ],
                 ),
@@ -564,7 +615,8 @@ class _PricingSectionState extends State<PricingSection> {
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
         children: [
-          const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 20),
+          const Icon(Icons.check_circle_rounded,
+              color: AppTheme.success, size: 20),
           const SizedBox(width: 12),
           Expanded(child: Text(text, style: const TextStyle(fontSize: 14))),
         ],

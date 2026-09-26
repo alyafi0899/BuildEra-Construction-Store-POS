@@ -64,8 +64,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         settings: settings,
       );
 
-      // AuthGate will automatically handle navigation to VerifyEmailPage 
-      // because registrationEmailProvider is set inside the repository.
+      if (mounted) {
+        showSuccess(context, 'Pendaftaran berhasil! Email verifikasi telah dikirim ke ${_emailCtrl.text.trim()}. Silakan cek inbox Anda.');
+        Navigator.pop(context);
+      }
     } catch (e) {
       if (mounted) showError(context, 'Gagal mendaftar: $e');
     } finally {

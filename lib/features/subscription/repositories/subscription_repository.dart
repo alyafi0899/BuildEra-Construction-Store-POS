@@ -26,11 +26,27 @@ class SubscriptionRepository {
         .eq('user_id', userId)
         .order('created_at', ascending: false);
 
-    return (response as List).map((m) => SubscriptionHistory.fromMap(m)).toList();
+    return (response as List)
+        .map((m) => SubscriptionHistory.fromMap(m))
+        .toList();
   }
 
   Future<void> upsertSubscription(Subscription subscription) async {
-    await _client.from('subscriptions').upsert(subscription.toMap());
+    await _client
+        .from('subscriptions')
+        .upsert(subscription.toMap(), onConflict: 'user_id');
+  }
+
+  Future<void> setBypassStatus(String userId, bool isBypassed) async {
+    final existing = await getSubscription(userId) ?? Subscription.free(userId);
+    final updated = existing.copyWith(
+      isBypassed: isBypassed,
+      updatedAt: DateTime.now(),
+    );
+
+    await _client
+        .from('subscriptions')
+        .upsert(updated.toMap(), onConflict: 'user_id');
   }
 
   /// Calls the Supabase Edge Function to create a Xendit Invoice
@@ -52,14 +68,16 @@ class SubscriptionRepository {
       ).timeout(const Duration(seconds: 15));
 
       if (response.status != 200) {
-        final errorMsg = response.data?['error'] ?? 'Gagal membuat invoice pembayaran';
+        final errorMsg =
+            response.data?['error'] ?? 'Gagal membuat invoice pembayaran';
         throw Exception(errorMsg);
       }
 
       return response.data as Map<String, dynamic>;
     } catch (e) {
       if (e is TimeoutException) {
-        throw Exception('Koneksi server terputus (Timeout). Silakan coba lagi.');
+        throw Exception(
+            'Koneksi server terputus (Timeout). Silakan coba lagi.');
       }
       rethrow;
     }

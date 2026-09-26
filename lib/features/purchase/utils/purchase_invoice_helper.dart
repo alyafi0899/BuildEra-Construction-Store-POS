@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/services.dart';
 import 'dart:typed_data';
+import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -17,11 +19,14 @@ class PurchaseInvoiceHelper {
   }) async {
     final pdf = pw.Document();
 
-    // Load logo if exists
+    // Load logo if exists from local storage
     pw.ImageProvider? logo;
     if (settings.logoUrl != null && settings.logoUrl!.isNotEmpty) {
       try {
-        logo = await networkImage(settings.logoUrl!);
+        final resolved = await _resolveLocalLogo(settings.logoUrl!);
+        if (resolved != null) {
+          logo = pw.MemoryImage(resolved);
+        }
       } catch (_) {}
     }
 
@@ -63,8 +68,10 @@ class PurchaseInvoiceHelper {
                           color: PdfColors.blue900)),
                   pw.SizedBox(height: 4),
                   pw.Container(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                    padding: const pw.EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration:
+                        const pw.BoxDecoration(color: PdfColors.grey200),
                     child: pw.Text('No. Nota: ${purchase.invoiceNumber}',
                         style: pw.TextStyle(
                             fontSize: 12, fontWeight: pw.FontWeight.bold)),
@@ -117,8 +124,10 @@ class PurchaseInvoiceHelper {
 
           // ── Table Items ───────────────────────────────────────────────────
           pw.TableHelper.fromTextArray(
-            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-            headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey900),
+            headerStyle: pw.TextStyle(
+                fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+            headerDecoration:
+                const pw.BoxDecoration(color: PdfColors.blueGrey900),
             cellHeight: 30,
             cellAlignments: {
               0: pw.Alignment.centerLeft,
@@ -149,13 +158,22 @@ class PurchaseInvoiceHelper {
                 width: 250,
                 child: pw.Column(
                   children: [
-                    _summaryRow('Subtotal', Formatters.currency(purchase.subtotal)),
-                    _summaryRow('Biaya Kirim', Formatters.currency(purchase.shippingFee)),
+                    _summaryRow(
+                        'Subtotal', Formatters.currency(purchase.subtotal)),
+                    _summaryRow('Biaya Kirim',
+                        Formatters.currency(purchase.shippingFee)),
                     pw.Divider(thickness: 1, color: PdfColors.grey400),
-                    _summaryRow('TOTAL AKHIR', Formatters.currency(purchase.total), isBold: true, fontSize: 14),
-                    _summaryRow('Dibayar', Formatters.currency(purchase.amountPaid)),
+                    _summaryRow(
+                        'TOTAL AKHIR', Formatters.currency(purchase.total),
+                        isBold: true, fontSize: 14),
+                    _summaryRow(
+                        'Dibayar', Formatters.currency(purchase.amountPaid)),
                     if (purchase.total > purchase.amountPaid)
-                      _summaryRow('Sisa Hutang', Formatters.currency(purchase.total - purchase.amountPaid), color: PdfColors.red900),
+                      _summaryRow(
+                          'Sisa Hutang',
+                          Formatters.currency(
+                              purchase.total - purchase.amountPaid),
+                          color: PdfColors.red900),
                   ],
                 ),
               ),
@@ -170,10 +188,14 @@ class PurchaseInvoiceHelper {
             children: [
               pw.Column(
                 children: [
-                  pw.Text('Hormat Kami,', style: const pw.TextStyle(fontSize: 10)),
+                  pw.Text('Hormat Kami,',
+                      style: const pw.TextStyle(fontSize: 10)),
                   pw.SizedBox(height: 60),
-                  pw.Text('( ____________________ )', style: const pw.TextStyle(fontSize: 10)),
-                  pw.Text('Supplier', style: pw.TextStyle(fontSize: 10, fontStyle: pw.FontStyle.italic)),
+                  pw.Text('( ____________________ )',
+                      style: const pw.TextStyle(fontSize: 10)),
+                  pw.Text('Supplier',
+                      style: pw.TextStyle(
+                          fontSize: 10, fontStyle: pw.FontStyle.italic)),
                 ],
               ),
               pw.Column(
@@ -181,23 +203,49 @@ class PurchaseInvoiceHelper {
                   pw.Text('Penerima,', style: const pw.TextStyle(fontSize: 10)),
                   pw.SizedBox(height: 60),
                   pw.Text('( ${purchase.staffName ?? "Admin"} )',
-                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                  pw.Text('Staff Gudang', style: pw.TextStyle(fontSize: 10, fontStyle: pw.FontStyle.italic)),
+                      style: pw.TextStyle(
+                          fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                  pw.Text('Staff Gudang',
+                      style: pw.TextStyle(
+                          fontSize: 10, fontStyle: pw.FontStyle.italic)),
                 ],
               ),
             ],
           ),
-          
+
           pw.SizedBox(height: 40),
           pw.Center(
-            child: pw.Text('Terima kasih atas kerjasama Anda.', 
-              style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic, color: PdfColors.grey600)),
+            child: pw.Text('Terima kasih atas kerjasama Anda.',
+                style: pw.TextStyle(
+                    fontSize: 9,
+                    fontStyle: pw.FontStyle.italic,
+                    color: PdfColors.grey600)),
           ),
         ],
       ),
     );
 
     return pdf.save();
+  }
+
+  static Future<Uint8List?> _resolveLocalLogo(String storedPath) async {
+    try {
+      final file = File(storedPath);
+      if (await file.exists()) return await file.readAsBytes();
+    } catch (_) {}
+
+    try {
+      final supportDir = await getApplicationSupportDirectory();
+      final candidate = storedPath.replaceAll('\\', '/');
+      final normalized = candidate.contains('BuildEra_Offline')
+          ? candidate.substring(candidate.indexOf('BuildEra_Offline'))
+          : candidate;
+      final supportPath = '${supportDir.path}/$normalized';
+      final supportFile = File(supportPath);
+      if (await supportFile.exists()) return await supportFile.readAsBytes();
+    } catch (_) {}
+
+    return null;
   }
 
   static pw.Widget _summaryRow(String label, String value,
@@ -211,7 +259,8 @@ class PurchaseInvoiceHelper {
           pw.Text(value,
               style: pw.TextStyle(
                   fontSize: fontSize,
-                  fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
+                  fontWeight:
+                      isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
                   color: color)),
         ],
       ),
@@ -236,7 +285,9 @@ class PurchaseInvoiceHelper {
       marginMm: s.receiptMargin,
     );
 
-    if (s.printMethod == 'raw' && Platform.isWindows && s.invoicePrinterUrl != null) {
+    if (s.printMethod == 'raw' &&
+        Platform.isWindows &&
+        s.invoicePrinterUrl != null) {
       final result = await PrintOrchestrator().printReceipt(receipt, profile);
       if (result.success && result.bytes != null) {
         await WindowsRawSpooler.printRaw(s.invoicePrinterUrl!, result.bytes!);
@@ -244,7 +295,8 @@ class PurchaseInvoiceHelper {
       }
     }
 
-    final pdfBytes = await PrintOrchestrator().buildReceiptPdf(receipt, profile);
+    final pdfBytes =
+        await PrintOrchestrator().buildReceiptPdf(receipt, profile);
     await Printing.layoutPdf(
       onLayout: (_) => Uint8List.fromList(pdfBytes.bytes!),
       name: 'Struk-Beli-${p.invoiceNumber}',
@@ -299,10 +351,14 @@ class PurchaseInvoiceHelper {
 
   static PrinterTransport _mapTransport(String t) {
     switch (t) {
-      case 'usb':       return PrinterTransport.escposUsb;
-      case 'bluetooth': return PrinterTransport.escposBluetooth;
-      case 'tcp':       return PrinterTransport.escposTcpIp;
-      default:          return PrinterTransport.officePdf;
+      case 'usb':
+        return PrinterTransport.escposUsb;
+      case 'bluetooth':
+        return PrinterTransport.escposBluetooth;
+      case 'tcp':
+        return PrinterTransport.escposTcpIp;
+      default:
+        return PrinterTransport.officePdf;
     }
   }
 }

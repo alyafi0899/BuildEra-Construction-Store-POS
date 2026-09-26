@@ -98,9 +98,18 @@ final subscriptionHistoryProvider = FutureProvider<List<SubscriptionHistory>>((r
 });
 
 final isPremiumProvider = Provider<bool>((ref) {
+  final user = ref.watch(authStateProvider).value;
+  // Allow developer / bypass account email check
+  if (user?.email != null) {
+    final emailLower = user!.email.toLowerCase();
+    if (emailLower == 'admin@buildera.com' || emailLower.endsWith('@admin.buildera.com')) {
+      return true;
+    }
+  }
+
   final subAsync = ref.watch(subscriptionStateProvider);
   return subAsync.maybeWhen(
-    data: (sub) => sub?.isPremium ?? false,
+    data: (sub) => (sub?.isPremium ?? false) || (sub?.isBypassed ?? false),
     orElse: () => false,
   );
 });

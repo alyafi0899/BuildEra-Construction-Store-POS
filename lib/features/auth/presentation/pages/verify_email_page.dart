@@ -21,8 +21,8 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
   @override
   void initState() {
     super.initState();
-    // Auto check verification status every 5 seconds
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
+    // Poll slowly to avoid repeatedly hitting the auth endpoint while waiting.
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
       _checkVerificationSilently();
     });
   }
@@ -34,24 +34,26 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
   }
 
   Future<void> _checkVerificationSilently() async {
-    // Only check if user is actually signed in partially
-    final user = ref.read(authStateProvider).value;
-    if (user != null) {
-      await ref.read(authRepositoryProvider).reloadUser();
+    if (!ref.read(isOnlineProvider) || _isChecking) return;
+    _isChecking = true;
+    try {
+      await ref.read(authRepositoryProvider).completeVerifiedRegistration();
+    } finally {
+      _isChecking = false;
     }
   }
 
   Future<void> _checkVerification() async {
     setState(() => _isChecking = true);
     try {
-      await ref.read(authRepositoryProvider).reloadUser();
-      
-      final user = ref.read(authStateProvider).value;
+      final isVerified =
+          await ref.read(authRepositoryProvider).completeVerifiedRegistration();
       if (mounted) {
-        if (user?.isEmailVerified ?? false) {
+        if (isVerified) {
           showSuccess(context, 'Email berhasil diverifikasi!');
         } else {
-          showError(context, 'Email belum terverifikasi. Silakan cek inbox Anda.');
+          showError(
+              context, 'Email belum terverifikasi. Silakan cek inbox Anda.');
         }
       }
     } catch (e) {
@@ -66,7 +68,9 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
     try {
       await ref.read(authRepositoryProvider).sendVerificationEmail();
       setState(() => _canResend = false);
-      if (mounted) showSuccess(context, 'Email verifikasi telah dikirim ulang.');
+      if (mounted) {
+        showSuccess(context, 'Email verifikasi telah dikirim ulang.');
+      }
       Future.delayed(const Duration(seconds: 60), () {
         if (mounted) setState(() => _canResend = true);
       });
@@ -98,32 +102,43 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
-                  color: isOnline ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
+                  color: isOnline
+                      ? Colors.green.withValues(alpha: 0.1)
+                      : Colors.red.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: isOnline ? Colors.green : Colors.red, width: 0.5),
+                  border: Border.all(
+                      color: isOnline ? Colors.green : Colors.red, width: 0.5),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(isOnline ? Icons.wifi : Icons.wifi_off, size: 14, color: isOnline ? Colors.green : Colors.red),
+                    Icon(isOnline ? Icons.wifi : Icons.wifi_off,
+                        size: 14, color: isOnline ? Colors.green : Colors.red),
                     const SizedBox(width: 8),
                     Text(
                       isOnline ? 'ONLINE' : 'OFFLINE',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isOnline ? Colors.green : Colors.red),
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: isOnline ? Colors.green : Colors.red),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 24),
-              const Icon(Icons.mark_email_read_outlined, size: 80, color: AppTheme.accent),
+              const Icon(Icons.mark_email_read_outlined,
+                  size: 80, color: AppTheme.accent),
               const SizedBox(height: 24),
-              Text('Verifikasi Email Anda', style: Theme.of(context).textTheme.headlineMedium),
+              Text('Verifikasi Email Anda',
+                  style: Theme.of(context).textTheme.headlineMedium),
               const SizedBox(height: 16),
               Text(
                 displayEmail,
-                style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                    color: AppTheme.accent, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               const Text(
@@ -131,20 +146,33 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppTheme.textSecondary),
               ),
+              const SizedBox(height: 8),
+              const Text(
+                'Halaman ini akan memeriksa status setiap 30 detik dan masuk otomatis setelah email terverifikasi.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+              ),
               const SizedBox(height: 40),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _isChecking || !isOnline ? null : _checkVerification,
-                  child: _isChecking 
-                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('SAYA SUDAH VERIFIKASI'),
+                  onPressed:
+                      _isChecking || !isOnline ? null : _checkVerification,
+                  child: _isChecking
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Text('SAYA SUDAH VERIFIKASI'),
                 ),
               ),
               const SizedBox(height: 16),
               TextButton(
                 onPressed: _canResend && isOnline ? _resendEmail : null,
-                child: Text(_canResend ? 'Kirim Ulang Email' : 'Tunggu 1 menit untuk kirim ulang'),
+                child: Text(_canResend
+                    ? 'Kirim Ulang Email'
+                    : 'Tunggu 1 menit untuk kirim ulang'),
               ),
               const Divider(height: 48),
               TextButton.icon(

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,13 +6,11 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/image_helper.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../../auth/providers/auth_provider.dart';
-import '../../../products/providers/product_provider.dart';
 import '../../models/store_settings.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/app_settings_provider.dart';
 import '../widgets/printing_settings_widget.dart';
 import '../../../subscription/presentation/pages/subscription_page.dart';
-import '../../../subscription/presentation/pages/payment_gateway_page.dart';
 import '../../../subscription/providers/subscription_provider.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
@@ -34,6 +33,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   final _descCtrl = TextEditingController();
   final _receiptWidthCtrl = TextEditingController();
   final _receiptMarginCtrl = TextEditingController();
+  final _adminBypassCtrl = TextEditingController();
 
   // State for non-text settings
   List<BankAccount> _bankAccounts = [];
@@ -53,6 +53,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     _emailCtrl.dispose();
     _addressCtrl.dispose();
     _descCtrl.dispose();
+    _adminBypassCtrl.dispose();
     _receiptWidthCtrl.dispose();
     _receiptMarginCtrl.dispose();
     super.dispose();
@@ -111,15 +112,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Logout Akun'),
-        content: const Text('Apakah Anda yakin ingin keluar dari aplikasi? Sesi Anda akan berakhir.'),
+        content: const Text(
+            'Apakah Anda yakin ingin keluar dari aplikasi? Sesi Anda akan berakhir.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('BATAL')),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('BATAL')),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context); // Close dialog
               ref.read(authRepositoryProvider).logout();
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.danger,
+                foregroundColor: Colors.white),
             child: const Text('LOGOUT'),
           ),
         ],
@@ -190,7 +196,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   isSelected: _activeTab == 5,
                   onTap: () => setState(() => _activeTab = 5),
                   trailing: ref.watch(isPremiumProvider)
-                      ? const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 16)
+                      ? const Icon(Icons.check_circle_rounded,
+                          color: AppTheme.success, size: 16)
                       : null,
                 ),
                 const SizedBox(height: 12),
@@ -220,7 +227,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
           // Konten Utama
           Expanded(
-            child: _activeTab == 5 
+            child: _activeTab == 5
                 ? const SubscriptionPage()
                 : SingleChildScrollView(
                     padding: const EdgeInsets.all(40),
@@ -317,22 +324,34 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final settings = ref.watch(settingsProvider);
     return Column(
       children: [
-        Container(
-          width: 120,
-          height: 120,
-          decoration: BoxDecoration(
-            color: AppTheme.surfaceAlt,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.border),
-            image: settings.logoUrl != null
-                ? DecorationImage(
-                    image: NetworkImage(settings.logoUrl!), fit: BoxFit.cover)
-                : null,
-          ),
-          child: settings.logoUrl == null
-              ? const Icon(Icons.add_a_photo_rounded,
-                  size: 40, color: AppTheme.textMuted)
-              : null,
+        FutureBuilder<String?>(
+          future: ImageHelper.resolveLocalPath(settings.logoUrl),
+          builder: (context, snapshot) {
+            final resolved = snapshot.data;
+            final hasLogo = resolved != null && resolved.isNotEmpty;
+
+            return Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceAlt,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.border),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: hasLogo
+                  ? Image.file(
+                      File(resolved),
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                          Icons.broken_image_rounded,
+                          size: 40,
+                          color: AppTheme.textMuted),
+                    )
+                  : const Icon(Icons.add_a_photo_rounded,
+                      size: 40, color: AppTheme.textMuted),
+            );
+          },
         ),
         const SizedBox(height: 12),
         TextButton(
@@ -346,22 +365,106 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Future<void> _pickLogo() async {
     final bytes = await ImageHelper.pickAndCropImage(context);
     if (bytes == null) return;
-    final processed = await ImageHelper.processImage(bytes);
+
+    final processed =
+        await ImageHelper.processImage(bytes, maxDimension: 1200, quality: 90);
     final uid = ref.read(authStateProvider).value?.uid;
     if (uid == null) return;
 
-    final url = await ref
-        .read(productsActionProvider)
-        .uploadImage('store_logo_$uid', processed);
-    if (url != null) {
-      final current = ref.read(settingsProvider);
+    final localPath = await ImageHelper.saveLocally(
+        uid, 'store_logo_$uid.jpg', processed,
+        subFolder: 'brand_assets');
+    if (localPath == null) {
+      if (mounted) showError(context, 'Gagal menyimpan logo lokal.');
+      return;
+    }
+
+    final current = ref.read(settingsProvider);
+    try {
       await ref
           .read(settingsProvider.notifier)
-          .updateSettings(current.copyWith(logoUrl: url));
+          .updateSettings(current.copyWith(logoUrl: localPath));
+      if (mounted) showSuccess(context, 'Logo berhasil disimpan secara lokal.');
+    } catch (e) {
+      if (mounted) {
+        showSuccess(context,
+            'Logo tersimpan di perangkat. Sinkronisasi pengaturan cloud gagal.');
+      }
+    }
+  }
+
+  Future<void> _pickQrisImage() async {
+    final bytes = await ImageHelper.pickAndCropImage(context);
+    if (bytes == null) return;
+
+    final processed =
+        await ImageHelper.processImage(bytes, maxDimension: 1400, quality: 92);
+    final uid = ref.read(authStateProvider).value?.uid;
+    if (uid == null) return;
+
+    final localPath = await ImageHelper.saveLocally(
+        uid, 'qris_image_$uid.jpg', processed,
+        subFolder: 'brand_assets');
+    if (localPath == null) {
+      if (mounted) showError(context, 'Gagal menyimpan foto QRIS lokal.');
+      return;
+    }
+
+    final current = ref.read(settingsProvider);
+    try {
+      await ref
+          .read(settingsProvider.notifier)
+          .updateSettings(current.copyWith(qrisImagePath: localPath));
+      if (mounted) showSuccess(context, 'Foto QRIS berhasil disimpan.');
+    } catch (e) {
+      if (mounted) {
+        showSuccess(context,
+            'Foto QRIS tersimpan di perangkat. Sinkronisasi pengaturan cloud gagal.');
+      }
+    }
+  }
+
+  bool _isAdminUser() {
+    final email =
+        (ref.read(authStateProvider).value?.email ?? '').toLowerCase();
+    return email == 'admin@buildera.com' ||
+        email.endsWith('@admin.buildera.com') ||
+        email.endsWith('@buildera.com');
+  }
+
+  Future<void> _setAdminBypass({required bool enabled}) async {
+    final rawValue = _adminBypassCtrl.text.trim();
+    if (rawValue.isEmpty) {
+      showError(context, 'Masukkan user ID atau email akun tujuan.');
+      return;
+    }
+
+    try {
+      final client = ref.read(supabaseClientProvider);
+      final lookup = await client
+          .from('users')
+          .select('id')
+          .or('id.eq.$rawValue,login_email.ilike.$rawValue')
+          .maybeSingle();
+
+      final targetUserId = lookup?['id']?.toString() ?? rawValue;
+      await ref
+          .read(subscriptionRepositoryProvider)
+          .setBypassStatus(targetUserId, enabled);
+      if (mounted) {
+        showSuccess(
+            context,
+            enabled
+                ? 'Bypass langganan diaktifkan untuk akun target.'
+                : 'Bypass langganan dinonaktifkan untuk akun target.');
+      }
+    } catch (e) {
+      if (mounted) showError(context, 'Gagal mengubah bypass langganan: $e');
     }
   }
 
   Widget _buildPaymentSection() {
+    final settings = ref.watch(settingsProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -383,6 +486,68 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   style: TextStyle(color: AppTheme.textSecondary)))
         else
           for (int i = 0; i < _bankAccounts.length; i++) _buildBankCard(i),
+        const SizedBox(height: 30),
+        const _SectionTitle(title: 'Foto QRIS Pembayaran'),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceAlt,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppTheme.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Gambar QRIS akan tampil pada metode pembayaran QRIS saat transaksi.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _pickQrisImage,
+                    icon: const Icon(Icons.qr_code_rounded, size: 18),
+                    label: const Text('UPLOAD QRIS'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              FutureBuilder<String?>(
+                future: ImageHelper.resolveLocalPath(settings.qrisImagePath),
+                builder: (context, snapshot) {
+                  final resolved = snapshot.data;
+                  final hasImage = resolved != null && resolved.isNotEmpty;
+
+                  return Center(
+                    child: Container(
+                      width: 230,
+                      height: 290,
+                      decoration: BoxDecoration(
+                        color: AppTheme.bg,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppTheme.border),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: hasImage
+                          ? Image.file(
+                              File(resolved),
+                              fit: BoxFit.contain,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const Icon(Icons.broken_image_rounded,
+                                      size: 80, color: AppTheme.textSecondary),
+                            )
+                          : const Icon(Icons.qr_code_rounded,
+                              size: 80, color: AppTheme.textSecondary),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -398,7 +563,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final account = _bankAccounts[index];
     return AppCard(
       child: Padding(
-        padding: const EdgeInsets.all(4), // Inner padding since AppCard already has padding
+        padding: const EdgeInsets.all(
+            4), // Inner padding since AppCard already has padding
         child: Row(
           children: [
             Expanded(
@@ -413,7 +579,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             const SizedBox(width: 12),
             Expanded(
               flex: 3,
-              child: _buildSmallInput('No. Rekening', account.accountNumber, (v) {
+              child:
+                  _buildSmallInput('No. Rekening', account.accountNumber, (v) {
                 _bankAccounts[index] = BankAccount(
                     bankName: account.bankName,
                     accountNumber: v,
@@ -470,10 +637,80 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionTitle(title: 'Keamanan Data'),
+        const _SectionTitle(title: 'Keamanan Data & Akun'),
         const SizedBox(height: 24),
         _buildPinSetting(ref),
+        const SizedBox(height: 24),
+        _buildPasswordSetting(),
+        if (_isAdminUser()) ...[
+          const SizedBox(height: 24),
+          _buildAdminBypassSection(),
+        ],
       ],
+    );
+  }
+
+  Widget _buildAdminBypassSection() {
+    return AppCard(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Admin: Bypass Langganan',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            const Text(
+                'Masukkan user ID atau email akun yang ingin diaktifkan bypass langganannya.',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _adminBypassCtrl,
+              decoration: const InputDecoration(
+                labelText: 'User ID / Email',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _setAdminBypass(enabled: true),
+                    icon: const Icon(Icons.check_circle_rounded),
+                    label: const Text('AKTIFKAN BYPASS'),
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.success),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _setAdminBypass(enabled: false),
+                    icon: const Icon(Icons.block_rounded),
+                    label: const Text('NONAKTIFKAN'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPasswordSetting() {
+    final email = ref.watch(authStateProvider).value?.email ?? 'Email Akun';
+    return AppCard(
+      child: ListTile(
+        leading: const Icon(Icons.key_rounded, color: AppTheme.accent),
+        title: const Text('Password Akun'),
+        subtitle: Text('Email login: $email'),
+        trailing: ElevatedButton(
+          onPressed: _showChangePasswordDialog,
+          child: const Text('UBAH PASSWORD'),
+        ),
+      ),
     );
   }
 
@@ -486,10 +723,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       child: Column(
         children: [
           ListTile(
-            leading: Icon(
-                hasPin ? Icons.lock_rounded : Icons.lock_open_rounded,
+            leading: Icon(hasPin ? Icons.lock_rounded : Icons.lock_open_rounded,
                 color: hasPin ? AppTheme.success : AppTheme.warning),
-            title: Text(hasPin ? 'PIN Keamanan Aktif' : 'PIN Keamanan Belum Diatur'),
+            title: Text(
+                hasPin ? 'PIN Keamanan Aktif' : 'PIN Keamanan Belum Diatur'),
             subtitle: Text(hasPin
                 ? 'Gunakan PIN untuk membatasi akses fitur sensitif'
                 : 'Atur PIN agar data toko lebih aman'),
@@ -499,7 +736,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 if (hasPin)
                   TextButton(
                     onPressed: _showForgotPinDialog,
-                    child: const Text('LUPA PIN?', style: TextStyle(color: AppTheme.danger, fontSize: 12)),
+                    child: const Text('LUPA PIN?',
+                        style: TextStyle(color: AppTheme.danger, fontSize: 12)),
                   ),
                 const SizedBox(width: 8),
                 ElevatedButton(
@@ -547,24 +785,86 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-  void _updatePageLock(StoreSettings Function() updater) {
-    final updated = updater();
-    ref.read(settingsProvider.notifier).updateSettings(updated);
+  Future<void> _updatePageLock(StoreSettings Function() updater) async {
+    final current = ref.read(settingsProvider);
+    final expectedPin = current.securityPin;
+    if (expectedPin == null || expectedPin.length < 4) {
+      showError(
+          context, 'Atur PIN keamanan sebelum mengubah proteksi halaman.');
+      return;
+    }
+
+    final pinController = TextEditingController();
+    final enteredPin = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Verifikasi PIN Keamanan'),
+        content: TextField(
+          controller: pinController,
+          autofocus: true,
+          obscureText: true,
+          keyboardType: TextInputType.number,
+          maxLength: 6,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: const InputDecoration(
+            labelText: 'Masukkan PIN',
+            counterText: '',
+            border: OutlineInputBorder(),
+          ),
+          onSubmitted: (value) => Navigator.pop(dialogContext, value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('BATAL'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, pinController.text),
+            child: const Text('VERIFIKASI'),
+          ),
+        ],
+      ),
+    );
+    pinController.dispose();
+
+    if (!mounted || enteredPin == null) return;
+    if (enteredPin != expectedPin) {
+      showError(context, 'PIN keamanan salah. Pengaturan tidak diubah.');
+      return;
+    }
+
+    try {
+      await ref.read(settingsProvider.notifier).updateSettings(updater());
+    } catch (e) {
+      if (mounted) showError(context, 'Gagal menyimpan proteksi halaman: $e');
+    }
   }
 
-  Widget _buildPageLockToggle({required String label, required String subtitle, required bool value, required ValueChanged<bool> onChanged}) {
+  Widget _buildPageLockToggle(
+      {required String label,
+      required String subtitle,
+      required bool value,
+      required ValueChanged<bool> onChanged}) {
     return Row(
       children: [
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              Text(subtitle, style: const TextStyle(color: AppTheme.textMuted, fontSize: 11)),
+              Text(label,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 13)),
+              Text(subtitle,
+                  style:
+                      const TextStyle(color: AppTheme.textMuted, fontSize: 11)),
             ],
           ),
         ),
-        Switch.adaptive(value: value, onChanged: onChanged, activeTrackColor: AppTheme.accent),
+        Switch.adaptive(
+            value: value,
+            onChanged: onChanged,
+            activeTrackColor: AppTheme.accent),
       ],
     );
   }
@@ -579,7 +879,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
+        builder: (dialogContext, setDialogState) => AlertDialog(
           title: Text(isUpdate ? 'Ubah PIN Keamanan' : 'Buat PIN Keamanan'),
           content: Form(
             key: formKey,
@@ -587,15 +887,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (step == 0) ...[
-                  const Text('Masukkan PIN Lama Anda', style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
+                  const Text('Masukkan PIN Lama Anda',
+                      style: TextStyle(
+                          fontSize: 13, color: AppTheme.textSecondary)),
                   const SizedBox(height: 16),
                   _buildPinField(oldPinCtrl),
                 ] else if (step == 1) ...[
-                  const Text('Masukkan PIN Baru (4-6 Digit)', style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
+                  const Text('Masukkan PIN Baru (4-6 Digit)',
+                      style: TextStyle(
+                          fontSize: 13, color: AppTheme.textSecondary)),
                   const SizedBox(height: 16),
                   _buildPinField(newPinCtrl),
                 ] else ...[
-                  const Text('Konfirmasi PIN Baru Anda', style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
+                  const Text('Konfirmasi PIN Baru Anda',
+                      style: TextStyle(
+                          fontSize: 13, color: AppTheme.textSecondary)),
                   const SizedBox(height: 16),
                   _buildPinField(confirmPinCtrl),
                 ],
@@ -603,11 +909,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('BATAL')),
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('BATAL')),
             ElevatedButton(
               onPressed: () {
                 if (!formKey.currentState!.validate()) return;
-                
+
                 if (step == 0) {
                   final currentPin = ref.read(settingsProvider).securityPin;
                   if (oldPinCtrl.text != currentPin) {
@@ -622,7 +930,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     showError(context, 'Konfirmasi PIN tidak cocok!');
                     return;
                   }
-                  final settings = ref.read(settingsProvider).copyWith(securityPin: newPinCtrl.text);
+                  final settings = ref
+                      .read(settingsProvider)
+                      .copyWith(securityPin: newPinCtrl.text);
                   ref.read(settingsProvider.notifier).updateSettings(settings);
                   Navigator.pop(context);
                   showSuccess(context, 'PIN berhasil diperbarui');
@@ -643,7 +953,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
+        builder: (dialogContext, setDialogState) => AlertDialog(
           title: const Text('Reset PIN via Password'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -660,7 +970,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   labelText: 'Password Akun',
                   prefixIcon: const Icon(Icons.lock_outline),
                   suffixIcon: IconButton(
-                    icon: Icon(obscure ? Icons.visibility_off : Icons.visibility),
+                    icon:
+                        Icon(obscure ? Icons.visibility_off : Icons.visibility),
                     onPressed: () => setDialogState(() => obscure = !obscure),
                   ),
                 ),
@@ -668,32 +979,152 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('BATAL')),
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('BATAL')),
             ElevatedButton(
               onPressed: () async {
                 final email = ref.read(authStateProvider).value?.email;
                 if (email == null) return;
-                
+                final navigator = Navigator.of(dialogContext);
+
                 try {
                   _showLocalLoadingDialog('Memverifikasi...');
-                  await ref.read(authRepositoryProvider).verifyCredentials(email, passCtrl.text);
-                  
-                  if (!mounted) return;
-                  final navigator = Navigator.of(context);
-                  
+                  await ref
+                      .read(authRepositoryProvider)
+                      .verifyCredentials(email, passCtrl.text);
+
+                  if (!mounted || !dialogContext.mounted) return;
+
                   navigator.pop(); // Close loading
                   navigator.pop(); // Close password dialog
                   _showPinDialog(false); // Open "Create PIN" flow
-                  if (context.mounted) {
-                    showSuccess(context, 'Verifikasi sukses! Silakan buat PIN baru.');
-                  }
+                  showSuccess(this.context,
+                      'Verifikasi sukses! Silakan buat PIN baru.');
                 } catch (e) {
-                  if (!mounted) return;
-                  Navigator.pop(context); // Close loading
-                  showError(context, e.toString());
+                  if (!mounted || !dialogContext.mounted) return;
+                  navigator.pop(); // Close loading
+                  showError(this.context, e.toString());
                 }
               },
               child: const Text('VERIFIKASI'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showChangePasswordDialog() {
+    final oldPassCtrl = TextEditingController();
+    final newPassCtrl = TextEditingController();
+    final confirmPassCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    bool obscureOld = true;
+    bool obscureNew = true;
+    bool loading = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Ubah Password Akun'),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: oldPassCtrl,
+                  obscureText: obscureOld,
+                  decoration: InputDecoration(
+                    labelText: 'Password Saat Ini',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                          obscureOld ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () =>
+                          setDialogState(() => obscureOld = !obscureOld),
+                    ),
+                  ),
+                  validator: (v) => (v?.isEmpty ?? true)
+                      ? 'Password saat ini wajib diisi'
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: newPassCtrl,
+                  obscureText: obscureNew,
+                  decoration: InputDecoration(
+                    labelText: 'Password Baru (min 8 karakter)',
+                    prefixIcon: const Icon(Icons.lock_reset_rounded),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                          obscureNew ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () =>
+                          setDialogState(() => obscureNew = !obscureNew),
+                    ),
+                  ),
+                  validator: (v) =>
+                      (v?.length ?? 0) < 8 ? 'Minimal 8 karakter' : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: confirmPassCtrl,
+                  obscureText: obscureNew,
+                  decoration: const InputDecoration(
+                    labelText: 'Konfirmasi Password Baru',
+                    prefixIcon: Icon(Icons.lock_reset_rounded),
+                  ),
+                  validator: (v) => v != newPassCtrl.text
+                      ? 'Password baru tidak cocok'
+                      : null,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: loading ? null : () => Navigator.pop(context),
+              child: const Text('BATAL'),
+            ),
+            ElevatedButton(
+              onPressed: loading
+                  ? null
+                  : () async {
+                      if (!formKey.currentState!.validate()) return;
+                      final email = ref.read(authStateProvider).value?.email;
+                      if (email == null) return;
+
+                      setDialogState(() => loading = true);
+                      try {
+                        // 1. Verify old password credentials
+                        await ref
+                            .read(authRepositoryProvider)
+                            .verifyCredentials(email, oldPassCtrl.text);
+
+                        // 2. Update to new password
+                        await ref
+                            .read(authRepositoryProvider)
+                            .updatePassword(newPassCtrl.text);
+
+                        if (!context.mounted) return;
+                        Navigator.pop(context);
+                        showSuccess(
+                            context, 'Password akun Anda berhasil diperbarui!');
+                      } catch (e) {
+                        if (!context.mounted) return;
+                        setDialogState(() => loading = false);
+                        showError(context, e.toString());
+                      }
+                    },
+              child: loading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('SIMPAN'),
             ),
           ],
         ),
@@ -724,9 +1155,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       maxLength: 6,
       obscureText: true,
       textAlign: TextAlign.center,
-      style: const TextStyle(fontSize: 24, letterSpacing: 12, fontWeight: FontWeight.bold),
+      style: const TextStyle(
+          fontSize: 24, letterSpacing: 12, fontWeight: FontWeight.bold),
       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-      decoration: const InputDecoration(counterText: '', contentPadding: EdgeInsets.zero),
+      decoration: const InputDecoration(
+          counterText: '', contentPadding: EdgeInsets.zero),
       validator: (v) => (v?.length ?? 0) < 4 ? 'Minimal 4 digit' : null,
     );
   }
@@ -782,7 +1215,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                           style: TextStyle(
                               fontWeight: FontWeight.bold, fontSize: 14)),
                       Text('Sesuaikan ukuran elemen antarmuka',
-                          style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+                          style: TextStyle(
+                              fontSize: 12, color: AppTheme.textMuted)),
                     ],
                   ),
                 ),
@@ -790,26 +1224,33 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   width: 250,
                   child: Row(
                     children: [
-                      const Text('80%', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                      const Text('80%',
+                          style: TextStyle(
+                              fontSize: 10, color: AppTheme.textMuted)),
                       Expanded(
                         child: Slider(
                           value: appSettings.displayScale,
                           min: 0.8,
                           max: 1.2,
-                          divisions: 8, // 0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2
+                          divisions:
+                              8, // 0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2
                           label: '${(appSettings.displayScale * 100).toInt()}%',
                           activeColor: AppTheme.accent,
-                          onChanged: (v) => notifier.setDisplayScale(double.parse(v.toStringAsFixed(2))),
+                          onChanged: (v) => notifier.setDisplayScale(
+                              double.parse(v.toStringAsFixed(2))),
                         ),
                       ),
-                      const Text('120%', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                      const Text('120%',
+                          style: TextStyle(
+                              fontSize: 10, color: AppTheme.textMuted)),
                     ],
                   ),
                 ),
                 const SizedBox(width: 12),
                 Text(
                   '${(appSettings.displayScale * 100).toInt()}%',
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.accent),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, color: AppTheme.accent),
                 ),
               ],
             ),
@@ -825,7 +1266,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            style:
+                const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
         const SizedBox(height: 4),
         TextFormField(
           initialValue: initial,
@@ -917,14 +1359,18 @@ class _SidebarItem extends StatelessWidget {
         onTap: onTap,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         leading: Icon(icon,
-            color: isSelected ? AppTheme.accent : (iconColor ?? AppTheme.textSecondary),
+            color: isSelected
+                ? AppTheme.accent
+                : (iconColor ?? AppTheme.textSecondary),
             size: 20),
         title: Text(
           label,
           style: TextStyle(
             fontSize: 13,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            color: isSelected ? AppTheme.accent : (textColor ?? AppTheme.textPrimary),
+            color: isSelected
+                ? AppTheme.accent
+                : (textColor ?? AppTheme.textPrimary),
           ),
         ),
         trailing: trailing,

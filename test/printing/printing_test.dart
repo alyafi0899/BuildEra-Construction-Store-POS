@@ -1,7 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:buildera/printing/printing.dart';
+import 'package:buildera/features/settings/models/store_settings.dart';
 
 void main() {
+  setUpAll(() async {
+    await initializeDateFormatting('id_ID', null);
+  });
+
   test('receipt layout service builds a printable PDF payload', () async {
     final receipt = ReceiptDocument(
       title: 'BuildEra POS',
@@ -9,6 +15,9 @@ void main() {
         ReceiptLine(text: 'Kasir: Admin'),
         ReceiptLine(text: 'Total: 100.000'),
       ],
+      metadata: const {
+        'settings': StoreSettings(businessName: 'BuildEra Store'),
+      },
     );
 
     final result = await PrintOrchestrator().buildReceiptPdf(
@@ -52,7 +61,7 @@ void main() {
     final label = LabelDocument(
       title: 'LABEL',
       lines: const [LabelLine(text: 'SKU-001')],
-      metadata: {
+      metadata: const {
         'businessName': 'BuildEra',
         'productName': 'Test Product',
         'barcode': '123456789',
