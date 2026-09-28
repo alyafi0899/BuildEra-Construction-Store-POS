@@ -1,7 +1,7 @@
 name: buildera
 description: "Material and Construction POS - Bangun. Kelola. Kembangkan."
 publish_to: 'none'
-version: 1.2.0
+version: 1.2.0+4
 
 environment:
   sdk: '>=3.1.0 <4.0.0'
@@ -59,11 +59,25 @@ msix_config:
   install_certificate: true
 
 flutter_launcher_icons:
+  android: true
+  ios: false
   image_path: "assets/images/logo.png"
+  adaptive_icon_background: "#1B1D29"
+  adaptive_icon_foreground: "assets/images/logo.png"
+  adaptive_icon_foreground_inset: 16
+  remove_alpha_ios: true
+  web:
+    generate: true
+    image_path: "assets/images/logo.png"
+    background_color: "#1B1D29"
+    theme_color: "#1B1D29"
   windows:
     generate: true
     image_path: "assets/images/logo.png"
     icon_size: 256
+  macos:
+    generate: true
+    image_path: "assets/images/logo.png"
 
 flutter:
   uses-material-design: true

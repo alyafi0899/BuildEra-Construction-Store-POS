@@ -39,6 +39,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
   bool _selectionMode = false;
   bool _showSupplierColumn = true;
   bool _showCostColumn = true;
+  bool _showStats = false;
 
   @override
   void dispose() {
@@ -280,6 +281,19 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                   icon: Icons.inventory_2_rounded,
                   actions: compactLayout
                       ? [
+                          IconButton(
+                            onPressed: () =>
+                                setState(() => _showStats = !_showStats),
+                            icon: Icon(_showStats
+                                ? Icons.analytics
+                                : Icons.analytics_outlined),
+                            color: _showStats
+                                ? AppTheme.accent
+                                : AppTheme.textMuted,
+                            tooltip: _showStats
+                                ? 'Sembunyikan Ringkasan Stok'
+                                : 'Tampilkan Ringkasan Stok',
+                          ),
                           PopupMenuButton<String>(
                             tooltip: 'Aksi lainnya',
                             onSelected: (value) {
@@ -347,6 +361,25 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                               ],
                             ),
                           OutlinedButton.icon(
+                            onPressed: () =>
+                                setState(() => _showStats = !_showStats),
+                            icon: Icon(
+                                _showStats
+                                    ? Icons.analytics_outlined
+                                    : Icons.analytics_rounded,
+                                size: 18),
+                            label: Text(_showStats
+                                ? 'Sembunyikan Ringkasan'
+                                : 'Ringkasan SKU'),
+                            style: _showStats
+                                ? OutlinedButton.styleFrom(
+                                    foregroundColor: AppTheme.accent,
+                                    side: const BorderSide(
+                                        color: AppTheme.accent),
+                                  )
+                                : null,
+                          ),
+                          OutlinedButton.icon(
                             onPressed: _isGenerating
                                 ? null
                                 : () => productsAsync.whenData(
@@ -378,8 +411,9 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                 ),
 
                 // Stats row
-                productsAsync.when(
-                  loading: () => const SizedBox(height: 100),
+                if (_showStats)
+                  productsAsync.when(
+                    loading: () => const SizedBox(height: 100),
                   error: (_, __) => const SizedBox(),
                   data: (products) {
                     final lowStock = products.where((p) => p.isLowStock).length;
