@@ -54,30 +54,30 @@ msix_config:
   identity_name: com.solutivo.buildera
   publisher: CN=Solutivo Studio
   msix_version: 1.0.0.0
-  logo_path: assets/images/logo.png
+  logo_path: assets/images/logo_thumb.png
   capabilities: internetClient, location, privateNetworkClientServer, broadFileSystemAccess
   install_certificate: true
 
 flutter_launcher_icons:
   android: true
   ios: false
-  image_path: "assets/images/logo.png"
+  image_path: "assets/images/logo_thumb.png"
   adaptive_icon_background: "#1B1D29"
-  adaptive_icon_foreground: "assets/images/logo.png"
+  adaptive_icon_foreground: "assets/images/logo_thumb.png"
   adaptive_icon_foreground_inset: 16
   remove_alpha_ios: true
   web:
     generate: true
-    image_path: "assets/images/logo.png"
+    image_path: "assets/images/logo_thumb.png"
     background_color: "#1B1D29"
     theme_color: "#1B1D29"
   windows:
     generate: true
-    image_path: "assets/images/logo.png"
+    image_path: "assets/images/logo_thumb.png"
     icon_size: 256
   macos:
     generate: true
-    image_path: "assets/images/logo.png"
+    image_path: "assets/images/logo_thumb.png"
 
 flutter:
   uses-material-design: true
