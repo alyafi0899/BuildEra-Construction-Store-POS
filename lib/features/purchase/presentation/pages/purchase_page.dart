@@ -19,6 +19,7 @@ class PurchasePage extends ConsumerStatefulWidget {
 
 class _PurchasePageState extends ConsumerState<PurchasePage> {
   final _searchCtrl = TextEditingController();
+  bool _showCartOnCompact = false;
 
   @override
   void dispose() {
@@ -28,65 +29,108 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        // ── Left: Product Search & List ──────────────────────────────────────
-        Expanded(
-          flex: 1,
-          child: Column(
-            children: [
-              PageHeader(
-                title: 'Pembelian Stok',
-                subtitle: 'Catat barang masuk dari supplier',
-                icon: Icons.local_shipping_rounded,
-                actions: [
-                  ElevatedButton.icon(
-                    onPressed: () => ProductFormDialog.show(context),
-                    icon: const Icon(Icons.add_rounded, size: 18),
-                    label: const Text('PRODUK BARU'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.info,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                    ),
-                  ),
-                ],
-              ),
+    final cart = ref.watch(purchaseCartProvider);
 
-              // Search Field
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                color: AppTheme.surface,
-                child: AppSearchField(
-                  controller: _searchCtrl,
-                  hintText: 'Cari produk untuk dibeli...',
-                  onChanged: (v) => ref.read(productSearchQueryProvider.notifier).set(v),
-                  onClear: () {
-                    _searchCtrl.clear();
-                    ref.read(productSearchQueryProvider.notifier).set('');
+    Widget buildProductList({required bool compact}) => Column(
+          children: [
+            PageHeader(
+              title: 'Pembelian Stok',
+              subtitle: 'Catat barang masuk dari supplier',
+              icon: Icons.local_shipping_rounded,
+              actions: [
+                ElevatedButton.icon(
+                  onPressed: () => ProductFormDialog.show(context),
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: Text(compact ? 'Tambah' : 'PRODUK BARU'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.info,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                  ),
+                ),
+              ],
+            ),
+
+            // Search Field
+            Container(
+              padding: EdgeInsets.symmetric(
+                  horizontal: compact ? 12 : 24, vertical: compact ? 8 : 16),
+              color: AppTheme.surface,
+              child: AppSearchField(
+                controller: _searchCtrl,
+                hintText: 'Cari produk untuk dibeli...',
+                onChanged: (v) =>
+                    ref.read(productSearchQueryProvider.notifier).set(v),
+                onClear: () {
+                  _searchCtrl.clear();
+                  ref.read(productSearchQueryProvider.notifier).set('');
+                },
+              ),
+            ),
+
+            // Product List
+            Expanded(
+              child: _ProductPurchaseList(),
+            ),
+          ],
+        );
+
+    Widget buildCartPanel({required bool compact}) => Container(
+          decoration: BoxDecoration(
+            color: AppTheme.surface,
+            border: compact
+                ? null
+                : const Border(left: BorderSide(color: AppTheme.border)),
+          ),
+          child: const PurchaseCartPanel(),
+        );
+
+    return Scaffold(
+      backgroundColor: AppTheme.bg,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 900;
+          if (!compact) {
+            return Row(
+              children: [
+                Expanded(flex: 1, child: buildProductList(compact: false)),
+                Expanded(flex: 1, child: buildCartPanel(compact: false)),
+              ],
+            );
+          }
+
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                child: SegmentedButton<bool>(
+                  showSelectedIcon: false,
+                  segments: [
+                    const ButtonSegment<bool>(
+                      value: false,
+                      icon: Icon(Icons.search_rounded),
+                      label: Text('Produk Pembelian'),
+                    ),
+                    ButtonSegment<bool>(
+                      value: true,
+                      icon: const Icon(Icons.shopping_cart_outlined),
+                      label: Text('Keranjang Stok (${cart.items.length})'),
+                    ),
+                  ],
+                  selected: {_showCartOnCompact},
+                  onSelectionChanged: (selection) {
+                    setState(() => _showCartOnCompact = selection.first);
                   },
                 ),
               ),
-
-              // Product List
               Expanded(
-                child: _ProductPurchaseList(),
+                child: _showCartOnCompact
+                    ? buildCartPanel(compact: true)
+                    : buildProductList(compact: true),
               ),
             ],
-          ),
-        ),
-
-        // ── Right: Purchase Cart ─────────────────────────────────────────────
-        Expanded(
-          flex: 1,
-          child: Container(
-            decoration: const BoxDecoration(
-              color: AppTheme.surface,
-              border: Border(left: BorderSide(color: AppTheme.border)),
-            ),
-            child: const PurchaseCartPanel(),
-          ),
-        ),
-      ],
+          );
+        },
+      ),
     );
   }
 }
@@ -98,7 +142,7 @@ class _ProductPurchaseList extends ConsumerWidget {
     final isLoading = ref.watch(productsProvider).isLoading;
 
     if (isLoading) return const AppLoading();
-    
+
     if (products.isEmpty) {
       return const EmptyState(
         icon: Icons.search_off_rounded,
@@ -126,7 +170,8 @@ class _PurchaseProductTile extends ConsumerWidget {
       borderRadius: BorderRadius.circular(12),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => ref.read(purchaseCartProvider.notifier).addProduct(product),
+        onTap: () =>
+            ref.read(purchaseCartProvider.notifier).addProduct(product),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
@@ -148,22 +193,34 @@ class _PurchaseProductTile extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    Text('Stok: ${Formatters.decimal(product.stock)} ${product.baseUnit}', 
-                      style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                    Text(product.name,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 14)),
+                    Text(
+                        'Stok: ${Formatters.decimal(product.stock)} ${product.baseUnit}',
+                        style: const TextStyle(
+                            fontSize: 12, color: AppTheme.textSecondary)),
                   ],
                 ),
               ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  const Text('MODAL SAAT INI', style: TextStyle(fontSize: 9, color: AppTheme.textMuted, fontWeight: FontWeight.bold)),
-                  Text(Formatters.currency(product.costPrice), 
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.info)),
+                  const Text('MODAL SAAT INI',
+                      style: TextStyle(
+                          fontSize: 9,
+                          color: AppTheme.textMuted,
+                          fontWeight: FontWeight.bold)),
+                  Text(Formatters.currency(product.costPrice),
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.info)),
                 ],
               ),
               const SizedBox(width: 16),
-              const Icon(Icons.add_shopping_cart_rounded, color: AppTheme.accent, size: 20),
+              const Icon(Icons.add_shopping_cart_rounded,
+                  color: AppTheme.accent, size: 20),
             ],
           ),
         ),

@@ -24,7 +24,8 @@ class BarcodeManagementPage extends ConsumerStatefulWidget {
       _BarcodeManagementPageState();
 }
 
-class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
+class _BarcodeManagementPageState
+    extends ConsumerState<BarcodeManagementPage> {
   final _searchCtrl = TextEditingController();
   String _search = '';
   String _sortBy = 'name';
@@ -32,6 +33,7 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
   String? _selectedProfileId;
   bool _isRollMode = true;
   String? _labelPrinterUrl;
+  bool _showSettingsOnCompact = false;
 
   final Map<String, int> _selectedQuantities = {};
 
@@ -120,7 +122,6 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
 
   void _updateQty(String id, int next) {
     setState(() {
-      // Ensure minimum qty is 1 for selected items
       final finalQty = next < 1 ? 1 : next;
       _selectedQuantities[id] = finalQty;
     });
@@ -215,7 +216,6 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
     for (final id in _selectedQuantities.keys) {
       try {
         final qty = _selectedQuantities[id]!;
-        // With minimum 1 logic, qty will be at least 1, but we keep the safety check
         if (qty <= 0) continue;
 
         final p = allProducts.firstWhere((element) => element.id == id);
@@ -305,7 +305,6 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
       final rollWidth =
           (_labelWidthMm * _columnCount) + (_labelMarginMm * (_columnCount - 1));
 
-      // Define the exact format to prevent OS scaling
       final format = PdfPageFormat(
         rollWidth * mmToPt,
         _labelHeightMm * mmToPt,
@@ -316,7 +315,6 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
           ? Printer(url: _labelPrinterUrl!)
           : const Printer(url: 'default');
 
-      // We use layoutPdf but with a forced format constraint to hint the printer driver
       await Printing.directPrintPdf(
         printer: printer,
         onLayout: (f) async => Uint8List.fromList(result.bytes!),
@@ -396,249 +394,283 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsProvider);
 
+    Widget buildProductListPanel({required bool compact}) => Column(
+          children: [
+            Container(
+              padding: EdgeInsets.symmetric(
+                  horizontal: compact ? 12 : 24, vertical: compact ? 8 : 16),
+              color: AppTheme.surface,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: AppSearchField(
+                      controller: _searchCtrl,
+                      hintText: 'Cari produk...',
+                      onChanged: (v) => setState(() => _search = v),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (_selectedQuantities.isNotEmpty)
+                    IconButton(
+                      onPressed: () =>
+                          setState(() => _selectedQuantities.clear()),
+                      icon: const Icon(Icons.clear_all_rounded, size: 20),
+                      tooltip: 'Hapus Pilihan',
+                      color: AppTheme.danger,
+                    ),
+                  const SizedBox(width: 4),
+                  _sortDropdown(compact: compact),
+                  IconButton(
+                    onPressed: () => setState(() => _sortAsc = !_sortAsc),
+                    icon: Icon(
+                      _sortAsc ? Icons.south_rounded : Icons.north_rounded,
+                      color: AppTheme.accent,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: productsAsync.when(
+                data: (products) {
+                  var filtered = products.where((p) {
+                    final q = _search.toLowerCase();
+                    return p.name.toLowerCase().contains(q) ||
+                        (p.barcode?.contains(q) ?? false);
+                  }).toList();
+
+                  filtered.sort((a, b) {
+                    final aSel = _selectedQuantities.containsKey(a.id);
+                    final bSel = _selectedQuantities.containsKey(b.id);
+                    if (aSel != bSel) return aSel ? -1 : 1;
+
+                    int cmp;
+                    switch (_sortBy) {
+                      case 'stock':
+                        cmp = a.stock.compareTo(b.stock);
+                        break;
+                      case 'created':
+                        cmp = a.createdAt.compareTo(b.createdAt);
+                        break;
+                      case 'updated':
+                        cmp = a.updatedAt.compareTo(b.updatedAt);
+                        break;
+                      default:
+                        cmp = a.name
+                            .toLowerCase()
+                            .compareTo(b.name.toLowerCase());
+                    }
+                    return _sortAsc ? cmp : -cmp;
+                  });
+
+                  return ListView.separated(
+                    padding: EdgeInsets.all(compact ? 12 : 24),
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (context, i) => _ProductSelectionTile(
+                      product: filtered[i],
+                      isSelected:
+                          _selectedQuantities.containsKey(filtered[i].id),
+                      qty: _selectedQuantities[filtered[i].id] ?? 0,
+                      onToggle: () => _toggleSelect(filtered[i]),
+                      onQtyChanged: (v) => _updateQty(filtered[i].id, v),
+                    ),
+                  );
+                },
+                loading: () => const AppLoading(),
+                error: (e, _) => Center(child: Text('Error: $e')),
+              ),
+            ),
+          ],
+        );
+
+    Widget buildSettingsPanel({required bool compact}) => Container(
+          width: compact ? double.infinity : 400,
+          decoration: BoxDecoration(
+            color: AppTheme.surface,
+            border: compact
+                ? null
+                : const Border(left: BorderSide(color: AppTheme.border)),
+          ),
+          child: Column(
+            children: [
+              _settingsHeader(),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.all(compact ? 16 : 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildModeIllustration(),
+                      const SizedBox(height: 24),
+                      _buildModeSwitch(),
+                      const Divider(height: 40),
+                      if (!_isRollMode) ...[
+                        _section('Kertas (mm)', [
+                          _field('Lebar', _ctrlPaperW,
+                              (v) => _paperWidthMm = v),
+                          _field('Tinggi', _ctrlPaperH,
+                              (v) => _paperHeightMm = v),
+                          _field('Margin', _ctrlPaperM,
+                              (v) => _paperMarginMm = v),
+                        ]),
+                        const Divider(height: 40),
+                      ],
+                      _section('Label & Barcode (mm)', [
+                        _field('Lebar Label', _ctrlLabelW,
+                            (v) => _labelWidthMm = v),
+                        _field('Tinggi Label', _ctrlLabelH,
+                            (v) => _labelHeightMm = v),
+                        _field('Lebar Barcode', _ctrlBarW,
+                            (v) => _barcodeWidthMm = v),
+                        _field('Tinggi Barcode', _ctrlBarH,
+                            (v) => _barcodeHeightMm = v),
+                        _field(_isRollMode ? 'Jarak (Gap)' : 'Jarak Label',
+                            _ctrlLabelM, (v) => _labelMarginMm = v),
+                        _field('Padding Label', _ctrlLabelP,
+                            (v) => _labelPaddingMm = v),
+                        _field('Jumlah Kolom', _ctrlCols,
+                            (v) => _columnCount = v.toInt()),
+                      ]),
+                      const Divider(height: 40),
+                      _section('Ukuran Font (pt)', [
+                        _field('Nama Toko', _ctrlFntStore,
+                            (v) => _fontSizeStore = v),
+                        _field('Nama Produk', _ctrlFntName,
+                            (v) => _fontSizeName = v),
+                        _field('Nomor Barcode', _ctrlFntBar,
+                            (v) => _fontSizeBarcode = v),
+                        _field('Harga Produk', _ctrlFntPrice,
+                            (v) => _fontSizePrice = v),
+                      ]),
+                      const Divider(height: 40),
+                      _section('Printer Label', [
+                        ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Target Printer',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppTheme.textSecondary)),
+                          subtitle: Text(_labelPrinterUrl ??
+                              'Belum dipilih (Gunakan Default)'),
+                          trailing: TextButton(
+                            onPressed: () async {
+                              final printer = await Printing.pickPrinter(
+                                  context: context);
+                              if (printer != null) {
+                                setState(() =>
+                                    _labelPrinterUrl = printer.url);
+                                final current = ref.read(settingsProvider);
+                                ref
+                                    .read(settingsProvider.notifier)
+                                    .updateSettings(current.copyWith(
+                                        labelPrinterUrl: printer.url));
+                              }
+                            },
+                            child: const Text('UBAH'),
+                          ),
+                        ),
+                      ]),
+                      const Divider(height: 40),
+                    ],
+                  ),
+                ),
+              ),
+              Container(
+                padding: EdgeInsets.all(compact ? 16 : 24),
+                decoration: const BoxDecoration(
+                    border: Border(top: BorderSide(color: AppTheme.border))),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: () => productsAsync
+                            .whenData((p) => _printDirectly(p)),
+                        icon: const Icon(Icons.print_rounded),
+                        label: const Text('CETAK LANGSUNG'),
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.accent),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 45,
+                      child: OutlinedButton.icon(
+                        onPressed: () => productsAsync
+                            .whenData((p) => _openExternalPdf(p)),
+                        icon: const Icon(Icons.picture_as_pdf_rounded),
+                        label: const Text('BUKA PDF'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+
     return Scaffold(
       backgroundColor: AppTheme.bg,
       body: Column(
         children: [
           const PageHeader(
-              title: 'Label Barcode',
+              title: 'Label Barcode & QR',
               subtitle: 'Pilih produk dan atur tata letak cetak',
               icon: Icons.qr_code_2_rounded),
           Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: Column(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final compact = constraints.maxWidth < 900;
+                if (!compact) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 24, vertical: 16),
-                        color: AppTheme.surface,
-                        child: Row(children: [
-                          Expanded(
-                              child: AppSearchField(
-                                  controller: _searchCtrl,
-                                  hintText: 'Cari produk...',
-                                  onChanged: (v) =>
-                                      setState(() => _search = v))),
-                          const SizedBox(width: 16),
-                          if (_selectedQuantities.isNotEmpty)
-                            TextButton.icon(
-                              onPressed: () =>
-                                  setState(() => _selectedQuantities.clear()),
-                              icon:
-                                  const Icon(Icons.clear_all_rounded, size: 18),
-                              label: const Text('Hapus Pilihan'),
-                              style: TextButton.styleFrom(
-                                  foregroundColor: AppTheme.danger),
-                            ),
-                          const SizedBox(width: 16),
-                          _sortDropdown(),
-                          IconButton(
-                              onPressed: () =>
-                                  setState(() => _sortAsc = !_sortAsc),
-                              icon: Icon(
-                                  _sortAsc
-                                      ? Icons.south_rounded
-                                      : Icons.north_rounded,
-                                  color: AppTheme.accent)),
-                        ]),
-                      ),
                       Expanded(
-                        child: productsAsync.when(
-                          data: (products) {
-                            var filtered = products.where((p) {
-                              final q = _search.toLowerCase();
-                              return p.name.toLowerCase().contains(q) ||
-                                  (p.barcode?.contains(q) ?? false);
-                            }).toList();
-
-                            // Priority 1: Selected items first
-                            // Priority 2: Sort criteria
-                            filtered.sort((a, b) {
-                              final aSel =
-                                  _selectedQuantities.containsKey(a.id);
-                              final bSel =
-                                  _selectedQuantities.containsKey(b.id);
-                              if (aSel != bSel) return aSel ? -1 : 1;
-
-                              int cmp;
-                              switch (_sortBy) {
-                                case 'stock':
-                                  cmp = a.stock.compareTo(b.stock);
-                                  break;
-                                case 'created':
-                                  cmp = a.createdAt.compareTo(b.createdAt);
-                                  break;
-                                case 'updated':
-                                  cmp = a.updatedAt.compareTo(b.updatedAt);
-                                  break;
-                                default:
-                                  cmp = a.name
-                                      .toLowerCase()
-                                      .compareTo(b.name.toLowerCase());
-                              }
-                              return _sortAsc ? cmp : -cmp;
-                            });
-
-                            return ListView.separated(
-                              padding: const EdgeInsets.all(24),
-                              itemCount: filtered.length,
-                              separatorBuilder: (_, __) =>
-                                  const SizedBox(height: 8),
-                              itemBuilder: (context, i) =>
-                                  _ProductSelectionTile(
-                                product: filtered[i],
-                                isSelected: _selectedQuantities
-                                    .containsKey(filtered[i].id),
-                                qty: _selectedQuantities[filtered[i].id] ?? 0,
-                                onToggle: () => _toggleSelect(filtered[i]),
-                                onQtyChanged: (v) =>
-                                    _updateQty(filtered[i].id, v),
-                              ),
-                            );
-                          },
-                          loading: () => const AppLoading(),
-                          error: (e, _) => Center(child: Text('Error: $e')),
-                        ),
+                        child: buildProductListPanel(compact: false),
                       ),
+                      buildSettingsPanel(compact: false),
                     ],
-                  ),
-                ),
-                Container(
-                  width: 400,
-                  decoration: const BoxDecoration(
-                      color: AppTheme.surface,
-                      border: Border(left: BorderSide(color: AppTheme.border))),
-                  child: Column(
-                    children: [
-                      _settingsHeader(),
-                      Expanded(
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildModeIllustration(),
-                              const SizedBox(height: 24),
-                              _buildModeSwitch(),
-                              const Divider(height: 40),
-                              if (!_isRollMode) ...[
-                                _section('Kertas (mm)', [
-                                  _field('Lebar', _ctrlPaperW,
-                                      (v) => _paperWidthMm = v),
-                                  _field('Tinggi', _ctrlPaperH,
-                                      (v) => _paperHeightMm = v),
-                                  _field('Margin', _ctrlPaperM,
-                                      (v) => _paperMarginMm = v),
-                                ]),
-                                const Divider(height: 40),
-                              ],
-                              _section('Label & Barcode (mm)', [
-                                _field('Lebar Label', _ctrlLabelW,
-                                    (v) => _labelWidthMm = v),
-                                _field('Tinggi Label', _ctrlLabelH,
-                                    (v) => _labelHeightMm = v),
-                                _field('Lebar Barcode', _ctrlBarW,
-                                    (v) => _barcodeWidthMm = v),
-                                _field('Tinggi Barcode', _ctrlBarH,
-                                    (v) => _barcodeHeightMm = v),
-                                _field(
-                                    _isRollMode ? 'Jarak (Gap)' : 'Jarak Label',
-                                    _ctrlLabelM,
-                                    (v) => _labelMarginMm = v),
-                                _field('Padding Label', _ctrlLabelP,
-                                    (v) => _labelPaddingMm = v),
-                                _field('Jumlah Kolom', _ctrlCols,
-                                    (v) => _columnCount = v.toInt()),
-                              ]),
-                              const Divider(height: 40),
-                              _section('Ukuran Font (pt)', [
-                                _field('Nama Toko', _ctrlFntStore,
-                                    (v) => _fontSizeStore = v),
-                                _field('Nama Produk', _ctrlFntName,
-                                    (v) => _fontSizeName = v),
-                                _field('Nomor Barcode', _ctrlFntBar,
-                                    (v) => _fontSizeBarcode = v),
-                                _field('Harga Produk', _ctrlFntPrice,
-                                    (v) => _fontSizePrice = v),
-                              ]),
-                              const Divider(height: 40),
-                              _section('Printer Label', [
-                                ListTile(
-                                  dense: true,
-                                  contentPadding: EdgeInsets.zero,
-                                  title: const Text('Target Printer',
-                                      style: TextStyle(
-                                          fontSize: 12,
-                                          color: AppTheme.textSecondary)),
-                                  subtitle: Text(_labelPrinterUrl ??
-                                      'Belum dipilih (Gunakan Default)'),
-                                  trailing: TextButton(
-                                    onPressed: () async {
-                                      final printer =
-                                          await Printing.pickPrinter(
-                                              context: context);
-                                      if (printer != null) {
-                                        setState(() =>
-                                            _labelPrinterUrl = printer.url);
-                                        // Save to global settings as well
-                                        final current =
-                                            ref.read(settingsProvider);
-                                        ref
-                                            .read(settingsProvider.notifier)
-                                            .updateSettings(current.copyWith(
-                                                labelPrinterUrl: printer.url));
-                                      }
-                                    },
-                                    child: const Text('UBAH'),
-                                  ),
-                                ),
-                              ]),
-                              const Divider(height: 40),
-                            ],
+                  );
+                }
+
+                final selectedCount = _selectedQuantities.length;
+                return Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                      child: SegmentedButton<bool>(
+                        showSelectedIcon: false,
+                        segments: [
+                          ButtonSegment<bool>(
+                            value: false,
+                            icon: const Icon(Icons.qr_code_2_rounded),
+                            label: Text('Pilih Produk ($selectedCount)'),
                           ),
-                        ),
+                          const ButtonSegment<bool>(
+                            value: true,
+                            icon: Icon(Icons.tune_rounded),
+                            label: Text('Konfigurasi Cetak'),
+                          ),
+                        ],
+                        selected: {_showSettingsOnCompact},
+                        onSelectionChanged: (selection) {
+                          setState(() =>
+                              _showSettingsOnCompact = selection.first);
+                        },
                       ),
-                      Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: const BoxDecoration(
-                            border: Border(
-                                top: BorderSide(color: AppTheme.border))),
-                        child: Column(
-                          children: [
-                            SizedBox(
-                              width: double.infinity,
-                              height: 50,
-                              child: ElevatedButton.icon(
-                                onPressed: () => productsAsync
-                                    .whenData((p) => _printDirectly(p)),
-                                icon: const Icon(Icons.print_rounded),
-                                label: const Text('CETAK LANGSUNG'),
-                                style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppTheme.accent),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            SizedBox(
-                              width: double.infinity,
-                              height: 45,
-                              child: OutlinedButton.icon(
-                                onPressed: () => productsAsync
-                                    .whenData((p) => _openExternalPdf(p)),
-                                icon: const Icon(Icons.picture_as_pdf_rounded),
-                                label: const Text('BUKA PDF'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                    ),
+                    Expanded(
+                      child: _showSettingsOnCompact
+                          ? buildSettingsPanel(compact: true)
+                          : buildProductListPanel(compact: true),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ],
@@ -646,9 +678,9 @@ class _BarcodeManagementPageState extends ConsumerState<BarcodeManagementPage> {
     );
   }
 
-  Widget _sortDropdown() {
+  Widget _sortDropdown({bool compact = false}) {
     return SizedBox(
-      width: 160,
+      width: compact ? 120 : 160,
       height: 40,
       child: DropdownButtonFormField<String>(
         initialValue: _sortBy,
@@ -856,15 +888,12 @@ class _BarcodeModePainter extends CustomPainter {
       ..strokeWidth = 1.5;
 
     if (isRoll) {
-      // Draw Roll
       final centerX = size.width / 2;
       final centerY = size.height / 2;
 
-      // Roll circle
       canvas.drawCircle(Offset(centerX - 40, centerY), 30, paint);
       canvas.drawCircle(Offset(centerX - 40, centerY), 10, paint);
 
-      // Paper coming out
       final path = Path()
         ..moveTo(centerX - 40, centerY - 30)
         ..lineTo(centerX + 60, centerY - 30)
@@ -872,7 +901,6 @@ class _BarcodeModePainter extends CustomPainter {
         ..lineTo(centerX - 40, centerY + 30);
       canvas.drawPath(path, paint);
 
-      // Labels
       final labelPaint = Paint()
         ..color = AppTheme.accent.withValues(alpha: 0.4)
         ..style = PaintingStyle.fill;
@@ -885,14 +913,12 @@ class _BarcodeModePainter extends CustomPainter {
               centerY + 20, const Radius.circular(2)),
           labelPaint);
     } else {
-      // Draw Sheet (A4)
       final rect = Rect.fromCenter(
           center: Offset(size.width / 2, size.height / 2),
           width: 70,
           height: 90);
       canvas.drawRect(rect, paint);
 
-      // Grid of labels
       final labelPaint = Paint()
         ..color = AppTheme.accent.withValues(alpha: 0.4)
         ..style = PaintingStyle.fill;
@@ -1012,8 +1038,6 @@ class _ProductSelectionTileState extends State<_ProductSelectionTile> {
                     OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
               ),
               onChanged: (v) {
-                // If user clears the field or types 0, we send 0 to the update method
-                // which will handle resetting it to 1.
                 final val = int.tryParse(v) ?? 0;
                 widget.onQtyChanged(val);
               },

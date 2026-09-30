@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/theme/app_theme.dart';
@@ -179,6 +180,14 @@ class KonstruksiPosApp extends ConsumerWidget {
     final mode = ref.watch(themeProvider);
     final appSettings = ref.watch(appSettingsProvider);
 
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+      ),
+    );
+
     return MaterialApp(
       title: 'BuildEra',
       debugShowCheckedModeBanner: false,
@@ -279,7 +288,11 @@ class _MainShellState extends ConsumerState<MainShell> {
     return Scaffold(
       backgroundColor: AppTheme.bg,
       resizeToAvoidBottomInset: isPhone,
-      body: shell,
+      body: SafeArea(
+        top: true,
+        bottom: false,
+        child: shell,
+      ),
       bottomNavigationBar: isPhone
           ? NavigationBar(
               selectedIndex: _phoneDestinationIndex(idx),

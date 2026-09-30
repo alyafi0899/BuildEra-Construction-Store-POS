@@ -121,31 +121,59 @@ class _BillsPageState extends ConsumerState<BillsPage> with SingleTickerProvider
               color: AppTheme.surface,
               border: Border(bottom: BorderSide(color: AppTheme.border)),
             ),
-            child: Row(children: [
-              Expanded(child: StatCard(
-                label: 'Total Biaya Pengadaan', 
-                value: Formatters.currency(totalCost), 
-                icon: Icons.account_balance_wallet_rounded,
-                accentColor: AppTheme.info,
-                subtitle: 'Total Keseluruhan',
-              )),
-              const SizedBox(width: 16),
-              Expanded(child: StatCard(
-                label: 'Sudah Terbayar', 
-                value: Formatters.currency(totalPaid), 
-                icon: Icons.check_circle_outline_rounded,
-                accentColor: AppTheme.success,
-                subtitle: '${totalCost > 0 ? ((totalPaid / totalCost) * 100).toStringAsFixed(1) : 0}% Terlunasi',
-              )),
-              const SizedBox(width: 16),
-              Expanded(child: StatCard(
-                label: 'Sisa Hutang Aktif', 
-                value: Formatters.currency(totalRemaining), 
-                icon: Icons.pending_actions_rounded,
-                accentColor: AppTheme.warning,
-                subtitle: '$pendingCount Nota Belum Lunas',
-              )),
-            ]),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isCompact = constraints.maxWidth < 700;
+                final cards = [
+                  StatCard(
+                    label: 'Total Biaya Pengadaan',
+                    value: Formatters.currency(totalCost),
+                    icon: Icons.account_balance_wallet_rounded,
+                    accentColor: AppTheme.info,
+                    subtitle: 'Total Keseluruhan',
+                  ),
+                  StatCard(
+                    label: 'Sudah Terbayar',
+                    value: Formatters.currency(totalPaid),
+                    icon: Icons.check_circle_outline_rounded,
+                    accentColor: AppTheme.success,
+                    subtitle:
+                        '${totalCost > 0 ? ((totalPaid / totalCost) * 100).toStringAsFixed(1) : 0}% Terlunasi',
+                  ),
+                  StatCard(
+                    label: 'Sisa Hutang Aktif',
+                    value: Formatters.currency(totalRemaining),
+                    icon: Icons.pending_actions_rounded,
+                    accentColor: AppTheme.warning,
+                    subtitle: '$pendingCount Nota Belum Lunas',
+                  ),
+                ];
+
+                if (isCompact) {
+                  return SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: cards
+                          .map((card) => Padding(
+                                padding: const EdgeInsets.only(right: 12),
+                                child: SizedBox(width: 220, child: card),
+                              ))
+                          .toList(),
+                    ),
+                  );
+                }
+
+                return Row(
+                  children: [
+                    Expanded(child: cards[0]),
+                    const SizedBox(width: 16),
+                    Expanded(child: cards[1]),
+                    const SizedBox(width: 16),
+                    Expanded(child: cards[2]),
+                  ],
+                );
+              },
+            ),
           );
         },
         loading: () => const SizedBox(height: 100),
@@ -250,28 +278,35 @@ class _BillsListState extends ConsumerState<_BillsList> {
 
   Widget _buildFilterBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: AppTheme.border)),
       ),
-      child: Row(children: [
-        _filterChip('Belum Lunas', 'unpaid'),
-        const SizedBox(width: 8),
-        _filterChip('Sudah Lunas', 'paid'),
-        const SizedBox(width: 8),
-        _filterChip('Semua', 'all'),
-        const Spacer(),
-        ElevatedButton.icon(
-          onPressed: () => widget.isSupplier ? _showAddSupplier(context, ref) : _showAddShipping(context, ref),
-          icon: const Icon(Icons.add_rounded, size: 16),
-          label: Text('Tambah ${widget.isSupplier ? "Supplier" : "Ekspedisi"}', style: const TextStyle(fontSize: 11)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.accent,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-            visualDensity: VisualDensity.compact,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(children: [
+          _filterChip('Belum Lunas', 'unpaid'),
+          const SizedBox(width: 8),
+          _filterChip('Sudah Lunas', 'paid'),
+          const SizedBox(width: 8),
+          _filterChip('Semua', 'all'),
+          const SizedBox(width: 16),
+          ElevatedButton.icon(
+            onPressed: () => widget.isSupplier
+                ? _showAddSupplier(context, ref)
+                : _showAddShipping(context, ref),
+            icon: const Icon(Icons.add_rounded, size: 16),
+            label: Text(
+                'Tambah ${widget.isSupplier ? "Supplier" : "Ekspedisi"}',
+                style: const TextStyle(fontSize: 11)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.accent,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+              visualDensity: VisualDensity.compact,
+            ),
           ),
-        ),
-      ]),
+        ]),
+      ),
     );
   }
 

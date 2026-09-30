@@ -138,115 +138,197 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final settings = ref.watch(settingsProvider);
     _initFields(settings);
 
-    return Scaffold(
-      backgroundColor: AppTheme.bg,
-      body: Row(
-        children: [
-          // Sidebar Pengaturan
-          Container(
-            width: 280,
-            decoration: const BoxDecoration(
-              color: AppTheme.surface,
-              border: Border(right: BorderSide(color: AppTheme.border)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    Widget buildCompactTopMenu() {
+      final items = [
+        (0, Icons.store_rounded, 'Toko'),
+        (1, Icons.account_balance_rounded, 'Pembayaran'),
+        (2, Icons.print_rounded, 'Printer'),
+        (3, Icons.security_rounded, 'Keamanan'),
+        (4, Icons.display_settings_rounded, 'Tampilan'),
+        (5, Icons.stars_rounded, 'Langganan'),
+      ];
+
+      return Container(
+        color: AppTheme.surface,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
               children: [
-                const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Text('PENGATURAN',
-                      style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1)),
-                ),
-                _SidebarItem(
-                  icon: Icons.store_rounded,
-                  label: 'Informasi Toko',
-                  isSelected: _activeTab == 0,
-                  onTap: () => setState(() => _activeTab = 0),
-                ),
-                _SidebarItem(
-                  icon: Icons.account_balance_rounded,
-                  label: 'Pembayaran & Bank',
-                  isSelected: _activeTab == 1,
-                  onTap: () => setState(() => _activeTab = 1),
-                ),
-                _SidebarItem(
-                  icon: Icons.print_rounded,
-                  label: 'Printer & Struk',
-                  isSelected: _activeTab == 2,
-                  onTap: () => setState(() => _activeTab = 2),
-                ),
-                _SidebarItem(
-                  icon: Icons.security_rounded,
-                  label: 'Keamanan Data',
-                  isSelected: _activeTab == 3,
-                  onTap: () => setState(() => _activeTab = 3),
-                ),
-                _SidebarItem(
-                  icon: Icons.display_settings_rounded,
-                  label: 'Tampilan Aplikasi',
-                  isSelected: _activeTab == 4,
-                  onTap: () => setState(() => _activeTab = 4),
-                ),
-                _SidebarItem(
-                  icon: Icons.stars_rounded,
-                  label: 'Paket Langganan',
-                  isSelected: _activeTab == 5,
-                  onTap: () => setState(() => _activeTab = 5),
-                  trailing: ref.watch(isPremiumProvider)
-                      ? const Icon(Icons.check_circle_rounded,
-                          color: AppTheme.success, size: 16)
-                      : null,
-                ),
-                const SizedBox(height: 12),
-                _SidebarItem(
-                  icon: Icons.logout_rounded,
-                  label: 'Keluar / Logout',
-                  isSelected: false,
-                  iconColor: AppTheme.danger,
-                  textColor: AppTheme.danger,
-                  onTap: () => _handleLogout(context),
-                ),
+                const Text('PENGATURAN',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const Spacer(),
-                Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: ElevatedButton.icon(
-                    onPressed: _saveSettings,
-                    icon: const Icon(Icons.save_rounded),
-                    label: const Text('SIMPAN PERUBAHAN'),
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 50),
-                    ),
+                IconButton(
+                  onPressed: () => _handleLogout(context),
+                  icon: const Icon(Icons.logout_rounded, color: AppTheme.danger),
+                  tooltip: 'Keluar',
+                ),
+                ElevatedButton.icon(
+                  onPressed: _saveSettings,
+                  icon: const Icon(Icons.save_rounded, size: 16),
+                  label: const Text('Simpan'),
+                  style: ElevatedButton.styleFrom(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 8),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: items.map((item) {
+                  final isSelected = _activeTab == item.$1;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      selected: isSelected,
+                      showCheckmark: false,
+                      avatar: Icon(item.$2,
+                          size: 16,
+                          color: isSelected
+                              ? Colors.white
+                              : AppTheme.textSecondary),
+                      label: Text(item.$3),
+                      selectedColor: AppTheme.accent,
+                      onSelected: (_) => setState(() => _activeTab = item.$1),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
-          // Konten Utama
-          Expanded(
-            child: _activeTab == 5
-                ? const SubscriptionPage()
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.all(40),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (_activeTab == 0) _buildStoreSection(),
-                          if (_activeTab == 1) _buildPaymentSection(),
-                          if (_activeTab == 2) _buildPrintingSection(),
-                          if (_activeTab == 3) _buildSecuritySection(),
-                          if (_activeTab == 4) _buildDisplaySection(),
-                        ],
-                      ),
+    return Scaffold(
+      backgroundColor: AppTheme.bg,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isCompact = constraints.maxWidth < 800;
+
+          final mainContent = _activeTab == 5
+              ? const SubscriptionPage()
+              : SingleChildScrollView(
+                  padding: EdgeInsets.all(isCompact ? 16 : 40),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (_activeTab == 0) _buildStoreSection(),
+                        if (_activeTab == 1) _buildPaymentSection(),
+                        if (_activeTab == 2) _buildPrintingSection(),
+                        if (_activeTab == 3) _buildSecuritySection(),
+                        if (_activeTab == 4) _buildDisplaySection(),
+                      ],
                     ),
                   ),
-          ),
-        ],
+                );
+
+          if (isCompact) {
+            return Column(
+              children: [
+                buildCompactTopMenu(),
+                Expanded(child: mainContent),
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              // Sidebar Pengaturan
+              Container(
+                width: 280,
+                decoration: const BoxDecoration(
+                  color: AppTheme.surface,
+                  border: Border(right: BorderSide(color: AppTheme.border)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text('PENGATURAN',
+                          style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1)),
+                    ),
+                    _SidebarItem(
+                      icon: Icons.store_rounded,
+                      label: 'Informasi Toko',
+                      isSelected: _activeTab == 0,
+                      onTap: () => setState(() => _activeTab = 0),
+                    ),
+                    _SidebarItem(
+                      icon: Icons.account_balance_rounded,
+                      label: 'Pembayaran & Bank',
+                      isSelected: _activeTab == 1,
+                      onTap: () => setState(() => _activeTab = 1),
+                    ),
+                    _SidebarItem(
+                      icon: Icons.print_rounded,
+                      label: 'Printer & Struk',
+                      isSelected: _activeTab == 2,
+                      onTap: () => setState(() => _activeTab = 2),
+                    ),
+                    _SidebarItem(
+                      icon: Icons.security_rounded,
+                      label: 'Keamanan Data',
+                      isSelected: _activeTab == 3,
+                      onTap: () => setState(() => _activeTab = 3),
+                    ),
+                    _SidebarItem(
+                      icon: Icons.display_settings_rounded,
+                      label: 'Tampilan Aplikasi',
+                      isSelected: _activeTab == 4,
+                      onTap: () => setState(() => _activeTab = 4),
+                    ),
+                    _SidebarItem(
+                      icon: Icons.stars_rounded,
+                      label: 'Paket Langganan',
+                      isSelected: _activeTab == 5,
+                      onTap: () => setState(() => _activeTab = 5),
+                      trailing: ref.watch(isPremiumProvider)
+                          ? const Icon(Icons.check_circle_rounded,
+                              color: AppTheme.success, size: 16)
+                          : null,
+                    ),
+                    const SizedBox(height: 12),
+                    _SidebarItem(
+                      icon: Icons.logout_rounded,
+                      label: 'Keluar / Logout',
+                      isSelected: false,
+                      iconColor: AppTheme.danger,
+                      textColor: AppTheme.danger,
+                      onTap: () => _handleLogout(context),
+                    ),
+                    const Spacer(),
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: ElevatedButton.icon(
+                        onPressed: _saveSettings,
+                        icon: const Icon(Icons.save_rounded),
+                        label: const Text('SIMPAN PERUBAHAN'),
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 50),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Konten Utama
+              Expanded(child: mainContent),
+            ],
+          );
+        },
       ),
     );
   }

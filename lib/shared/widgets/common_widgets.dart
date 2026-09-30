@@ -335,12 +335,27 @@ class AppDivider extends StatelessWidget {
 // ── Loading ───────────────────────────────────────────────────────────────
 
 class AppLoading extends StatelessWidget {
-  const AppLoading({super.key});
+  final double size;
+  final double strokeWidth;
+  final Color? color;
+
+  const AppLoading({
+    super.key,
+    this.size = 22.0,
+    this.strokeWidth = 2.5,
+    this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: CircularProgressIndicator(color: AppTheme.accent),
+    return Center(
+      child: SizedBox.square(
+        dimension: size,
+        child: CircularProgressIndicator(
+          strokeWidth: strokeWidth,
+          color: color ?? AppTheme.accent,
+        ),
+      ),
     );
   }
 }
