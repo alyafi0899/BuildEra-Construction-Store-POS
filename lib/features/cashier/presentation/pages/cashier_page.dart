@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -94,6 +95,10 @@ class _CashierPageState extends ConsumerState<CashierPage> {
   Widget build(BuildContext context) {
     final category = ref.watch(productCategoryFilterProvider);
     final cart = ref.watch(cartProvider);
+    final supportsCameraScanner = kIsWeb ||
+        defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS;
 
     Widget buildProductPanel({required bool compact}) => Column(
           children: [
@@ -136,28 +141,30 @@ class _CashierPageState extends ConsumerState<CashierPage> {
                       },
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Container(
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: AppTheme.accent.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: AppTheme.accent.withValues(alpha: 0.3)),
+                  if (supportsCameraScanner) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: AppTheme.accent.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: AppTheme.accent.withValues(alpha: 0.3)),
+                      ),
+                      child: IconButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const ScannerPage()),
+                          );
+                        },
+                        icon: const Icon(Icons.qr_code_scanner_rounded,
+                            color: AppTheme.accent),
+                        tooltip: 'Buka Kamera Scanner',
+                      ),
                     ),
-                    child: IconButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const ScannerPage()),
-                        );
-                      },
-                      icon: const Icon(Icons.qr_code_scanner_rounded,
-                          color: AppTheme.accent),
-                      tooltip: 'Buka Kamera Scanner',
-                    ),
-                  ),
+                  ],
                 ],
               ),
             ),

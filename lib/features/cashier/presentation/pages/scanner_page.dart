@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../shared/widgets/common_widgets.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/scanner_controller.dart';
 
@@ -41,7 +43,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (!_scannerController.value.isInitialized) return;
+    if (!_scannerController.value.hasCameraPermission) return;
 
     switch (state) {
       case AppLifecycleState.resumed:
@@ -58,24 +60,22 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   }
 
   void _onDetect(BarcodeCapture capture) {
-    final barcodes = capture.barcodes;
-    for (final barcode in barcodes) {
-      final code = barcode.rawValue;
-      if (code != null) {
-        final result = ref
-            .read(scannerControllerProvider.notifier)
-            .onBarcodeScanned(code);
+    final barcode = capture.barcodes.cast<Barcode?>().firstWhere(
+          (candidate) => candidate?.rawValue?.trim().isNotEmpty == true,
+          orElse: () => null,
+        );
+    final code = barcode?.rawValue?.trim();
+    if (code == null || code.isEmpty) return;
 
-        if (result == ScanResult.added) {
-          // Success feedback: audio + haptic
-          HapticFeedback.lightImpact();
-          SystemSound.play(SystemSoundType.click);
-        } else if (result == ScanResult.notFound) {
-          // Failure feedback
-          HapticFeedback.heavyImpact();
-          _showNotFoundSnackbar(code);
-        }
-      }
+    final result =
+        ref.read(scannerControllerProvider.notifier).onBarcodeScanned(code);
+
+    if (result == ScanResult.added) {
+      HapticFeedback.lightImpact();
+      SystemSound.play(SystemSoundType.click);
+    } else if (result == ScanResult.notFound) {
+      HapticFeedback.heavyImpact();
+      _showNotFoundSnackbar(code);
     }
   }
 
@@ -93,80 +93,104 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   @override
   Widget build(BuildContext context) {
     Widget buildCameraPanel({required bool isPortrait}) {
-      return Stack(
-        children: [
-          MobileScanner(
-            controller: _scannerController,
-            onDetect: _onDetect,
-            errorBuilder: (context, error, child) {
-              if (error.errorCode ==
-                  MobileScannerErrorCode.permissionDenied) {
-                return _PermissionDeniedView(
-                    onRetry: () => _scannerController.start());
-              }
-              return _ErrorView(
-                  error: error.errorDetails?.message ?? 'Kesalahan kamera',
-                  onRetry: () => _scannerController.start());
-            },
-          ),
-          // Aim reticle overlay
-          _ScannerOverlay(isPortrait: isPortrait),
-          // Top Controls Bar (Back, Torch, Switch Camera)
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.arrow_back_rounded,
-                          color: Colors.white),
-                      tooltip: 'Kembali ke Kasir',
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: IconButton(
-                      onPressed: () async {
-                        await _scannerController.toggleTorch();
-                        setState(() => _isTorchOn = !_isTorchOn);
-                      },
-                      icon: Icon(
-                        _isTorchOn
-                            ? Icons.flash_on_rounded
-                            : Icons.flash_off_rounded,
-                        color: _isTorchOn ? Colors.amber : Colors.white,
-                      ),
-                      tooltip: 'Senter Kamera',
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: IconButton(
-                      onPressed: () => _scannerController.switchCamera(),
-                      icon: const Icon(Icons.cameraswitch_rounded,
-                          color: Colors.white),
-                      tooltip: 'Ganti Kamera',
-                    ),
-                  ),
-                ],
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final layoutSize = constraints.biggest;
+          final frameWidth = math.min(
+            isPortrait ? 260.0 : 360.0,
+            layoutSize.width * 0.85,
+          );
+          final frameHeight = math.min(
+            isPortrait ? 180.0 : 220.0,
+            layoutSize.height * 0.6,
+          );
+          final scanWindow = Rect.fromCenter(
+            center: layoutSize.center(Offset.zero),
+            width: frameWidth,
+            height: frameHeight,
+          );
+
+          return Stack(
+            children: [
+              MobileScanner(
+                controller: _scannerController,
+                scanWindow: scanWindow,
+                onDetect: _onDetect,
+                errorBuilder: (context, error, child) {
+                  if (error.errorCode ==
+                      MobileScannerErrorCode.permissionDenied) {
+                    return _PermissionDeniedView(
+                        onRetry: () => _scannerController.start());
+                  }
+                  return _ErrorView(
+                      error: error.errorDetails?.message ?? 'Kesalahan kamera',
+                      onRetry: () => _scannerController.start());
+                },
               ),
-            ),
-          ),
-        ],
+              _ScannerOverlay(
+                isPortrait: isPortrait,
+                scanWindow: scanWindow,
+              ),
+              SafeArea(
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.arrow_back_rounded,
+                              color: Colors.white),
+                          tooltip: 'Kembali ke Kasir',
+                        ),
+                      ),
+                      const Spacer(),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: IconButton(
+                          onPressed: () async {
+                            await _scannerController.toggleTorch();
+                            if (mounted) {
+                              setState(() => _isTorchOn = !_isTorchOn);
+                            }
+                          },
+                          icon: Icon(
+                            _isTorchOn
+                                ? Icons.flash_on_rounded
+                                : Icons.flash_off_rounded,
+                            color: _isTorchOn ? Colors.amber : Colors.white,
+                          ),
+                          tooltip: 'Senter Kamera',
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: IconButton(
+                          onPressed: () => _scannerController.switchCamera(),
+                          icon: const Icon(Icons.cameraswitch_rounded,
+                              color: Colors.white),
+                          tooltip: 'Ganti Kamera',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       );
     }
 
@@ -245,8 +269,8 @@ class _ScannerCartPanel extends ConsumerWidget {
                 const SizedBox(width: 8),
                 if (cart.itemCount > 0)
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
                       color: AppTheme.accent,
                       borderRadius: BorderRadius.circular(10),
@@ -260,10 +284,21 @@ class _ScannerCartPanel extends ConsumerWidget {
                 const Spacer(),
                 if (!cart.isEmpty)
                   TextButton.icon(
-                    onPressed: () => ref.read(cartProvider.notifier).clear(),
+                    onPressed: () async {
+                      final confirmed = await showConfirmDialog(
+                        context,
+                        title: 'Kosongkan Keranjang Aktif?',
+                        content:
+                            'Semua produk pada transaksi Kasir yang sedang berjalan akan dihapus.',
+                        confirmLabel: 'Kosongkan',
+                      );
+                      if (confirmed) {
+                        ref.read(cartProvider.notifier).clear();
+                      }
+                    },
                     icon: const Icon(Icons.clear_all_rounded, size: 16),
-                    label: const Text('Kosongkan',
-                        style: TextStyle(fontSize: 12)),
+                    label:
+                        const Text('Kosongkan', style: TextStyle(fontSize: 12)),
                   ),
               ],
             ),
@@ -340,8 +375,8 @@ class _ScannerCartPanel extends ConsumerWidget {
                                   constraints: const BoxConstraints(),
                                 ),
                                 Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8),
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 8),
                                   child: Text(
                                     Formatters.decimal(item.quantity),
                                     style: const TextStyle(
@@ -429,13 +464,15 @@ class _ScannerCartPanel extends ConsumerWidget {
 
 class _ScannerOverlay extends StatelessWidget {
   final bool isPortrait;
-  const _ScannerOverlay({required this.isPortrait});
+  final Rect scanWindow;
+
+  const _ScannerOverlay({
+    required this.isPortrait,
+    required this.scanWindow,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final boxWidth = isPortrait ? 260.0 : 360.0;
-    final boxHeight = isPortrait ? 180.0 : 220.0;
-
     return Stack(
       children: [
         ColorFiltered(
@@ -449,10 +486,9 @@ class _ScannerOverlay extends StatelessWidget {
                   backgroundBlendMode: BlendMode.dstOut,
                 ),
               ),
-              Center(
+              Positioned.fromRect(
+                rect: scanWindow,
                 child: Container(
-                  height: boxHeight,
-                  width: boxWidth,
                   decoration: BoxDecoration(
                     color: Colors.red,
                     borderRadius: BorderRadius.circular(16),
@@ -462,10 +498,9 @@ class _ScannerOverlay extends StatelessWidget {
             ],
           ),
         ),
-        Center(
+        Positioned.fromRect(
+          rect: scanWindow,
           child: Container(
-            height: boxHeight,
-            width: boxWidth,
             decoration: BoxDecoration(
               border: Border.all(color: AppTheme.accent, width: 3),
               borderRadius: BorderRadius.circular(16),

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:buildera/shared/models/product.dart';
 import 'package:buildera/features/cashier/models/cart_item.dart';
 import 'package:buildera/features/cashier/providers/cart_provider.dart';
@@ -93,6 +94,20 @@ void main() {
       expect(cart.taxAmount, equals(13750));
       // Total = 125,000 + 13,750 = 138,750
       expect(cart.total, equals(138750));
+    });
+
+    test('setting cart quantity to zero removes the line item', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final cartNotifier = container.read(cartProvider.notifier);
+      cartNotifier.addProduct(testProduct);
+      final itemId = container.read(cartProvider).items.single.id;
+
+      cartNotifier.updateQuantity(itemId, 0);
+
+      expect(container.read(cartProvider).items, isEmpty);
+      expect(container.read(cartProvider).itemCount, 0);
     });
 
     test('Cash payment change calculation', () {

@@ -17,17 +17,18 @@ class CartState {
   final String? customerName;
 
   const CartState({
-    this.items               = const [],
-    this.transDiscountValue  = 0,
-    this.transDiscountType   = DiscountType.fixed,
-    this.taxRate             = 0.11,
-    this.taxEnabled          = false,
+    this.items = const [],
+    this.transDiscountValue = 0,
+    this.transDiscountType = DiscountType.fixed,
+    this.taxRate = 0.11,
+    this.taxEnabled = false,
     this.customerId,
     this.customerName,
   });
 
   /// Sum of (soldPrice * quantity) - BEFORE item-level discounts
-  double get grossSubtotal => items.fold(0, (s, i) => s + i.totalBeforeDiscount);
+  double get grossSubtotal =>
+      items.fold(0, (s, i) => s + i.totalBeforeDiscount);
 
   /// Total of all item-level discounts
   double get itemDiscountTotal => items.fold(0, (s, i) => s + i.totalDiscount);
@@ -47,11 +48,12 @@ class CartState {
   /// Total discount (Item + Transaction)
   double get totalDiscount => itemDiscountTotal + transDiscountAmount;
 
-  double get taxAmount  => taxEnabled ? (netSubtotal - transDiscountAmount) * taxRate : 0;
-  double get total      => netSubtotal - transDiscountAmount + taxAmount;
-  
-  int    get itemCount  => items.length;
-  bool   get isEmpty    => items.isEmpty;
+  double get taxAmount =>
+      taxEnabled ? (netSubtotal - transDiscountAmount) * taxRate : 0;
+  double get total => netSubtotal - transDiscountAmount + taxAmount;
+
+  int get itemCount => items.length;
+  bool get isEmpty => items.isEmpty;
 
   CartState copyWith({
     List<CartItem>? items,
@@ -63,13 +65,13 @@ class CartState {
     String? customerName,
   }) =>
       CartState(
-        items:               items              ?? this.items,
-        transDiscountValue:  transDiscountValue  ?? this.transDiscountValue,
-        transDiscountType:   transDiscountType   ?? this.transDiscountType,
-        taxRate:             taxRate            ?? this.taxRate,
-        taxEnabled:          taxEnabled         ?? this.taxEnabled,
-        customerId:          customerId         ?? this.customerId,
-        customerName:        customerName       ?? this.customerName,
+        items: items ?? this.items,
+        transDiscountValue: transDiscountValue ?? this.transDiscountValue,
+        transDiscountType: transDiscountType ?? this.transDiscountType,
+        taxRate: taxRate ?? this.taxRate,
+        taxEnabled: taxEnabled ?? this.taxEnabled,
+        customerId: customerId ?? this.customerId,
+        customerName: customerName ?? this.customerName,
       );
 
   void updateState(CartState newState) {
@@ -128,9 +130,10 @@ class CartNotifier extends Notifier<CartState> {
         u = product.allUnits.first;
       }
     }
-    
+
     final existing = state.items.indexWhere(
-      (i) => i.product.id == product.id && i.selectedUnit.unitName == u.unitName,
+      (i) =>
+          i.product.id == product.id && i.selectedUnit.unitName == u.unitName,
     );
 
     if (existing >= 0) {
@@ -143,13 +146,13 @@ class CartNotifier extends Notifier<CartState> {
       state = state.copyWith(items: [
         ...state.items,
         CartItem(
-          id:            _uuid.v4(),
-          product:       product,
-          selectedUnit:  u,
-          quantity:      1,
-          costPrice:     product.costPrice * u.conversionRate,
+          id: _uuid.v4(),
+          product: product,
+          selectedUnit: u,
+          quantity: 1,
+          costPrice: product.costPrice * u.conversionRate,
           originalPrice: u.sellPrice,
-          soldPrice:     u.sellPrice,
+          soldPrice: u.sellPrice,
         ),
       ]);
     }
@@ -157,6 +160,10 @@ class CartNotifier extends Notifier<CartState> {
 
   void updateQuantity(String cartItemId, double qty) {
     if (qty < 0) return;
+    if (qty == 0) {
+      removeItem(cartItemId);
+      return;
+    }
     state = state.copyWith(
       items: state.items.map((i) {
         if (i.id == cartItemId) return i.copyWith(quantity: qty);
@@ -170,10 +177,11 @@ class CartNotifier extends Notifier<CartState> {
       items: state.items.map((i) {
         if (i.id == cartItemId) {
           return i.copyWith(
-            selectedUnit:  unit,
-            costPrice:     i.product.costPrice * unit.conversionRate,
+            selectedUnit: unit,
+            costPrice: i.product.costPrice * unit.conversionRate,
             originalPrice: unit.sellPrice,
-            soldPrice:     unit.sellPrice, // Reset override on unit change? Usually yes.
+            soldPrice:
+                unit.sellPrice, // Reset override on unit change? Usually yes.
           );
         }
         return i;
@@ -194,24 +202,27 @@ class CartNotifier extends Notifier<CartState> {
   void setItemDiscount(String cartItemId, double value, DiscountType type) {
     state = state.copyWith(
       items: state.items.map((i) {
-        if (i.id == cartItemId) return i.copyWith(discountValue: value, discountType: type);
+        if (i.id == cartItemId) {
+          return i.copyWith(discountValue: value, discountType: type);
+        }
         return i;
       }).toList(),
     );
   }
 
   void removeItem(String cartItemId) {
-    state = state.copyWith(items: state.items.where((i) => i.id != cartItemId).toList());
+    state = state.copyWith(
+        items: state.items.where((i) => i.id != cartItemId).toList());
   }
 
-  void setTransDiscount(double v, DiscountType type) => 
+  void setTransDiscount(double v, DiscountType type) =>
       state = state.copyWith(transDiscountValue: v, transDiscountType: type);
 
-  void setCustomer(String? id, String? name) => 
+  void setCustomer(String? id, String? name) =>
       state = state.copyWith(customerId: id, customerName: name);
-  
-  void toggleTax()           => state = state.copyWith(taxEnabled: !state.taxEnabled);
-  void setTaxRate(double r)  => state = state.copyWith(taxRate: r);
+
+  void toggleTax() => state = state.copyWith(taxEnabled: !state.taxEnabled);
+  void setTaxRate(double r) => state = state.copyWith(taxRate: r);
 
   void clear() => state = const CartState();
 
@@ -219,4 +230,5 @@ class CartNotifier extends Notifier<CartState> {
   set stateValue(CartState newState) => state = newState;
 }
 
-final cartProvider = NotifierProvider<CartNotifier, CartState>(CartNotifier.new);
+final cartProvider =
+    NotifierProvider<CartNotifier, CartState>(CartNotifier.new);
