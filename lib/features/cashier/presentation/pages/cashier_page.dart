@@ -18,6 +18,7 @@ import '../widgets/barcode_listener.dart';
 import '../widgets/cashier_intents.dart';
 import '../../providers/cart_focus_provider.dart';
 import '../widgets/payment_dialog.dart';
+import 'scanner_page.dart';
 
 import '../../../../shared/widgets/product_detail_dialog.dart';
 
@@ -111,25 +112,53 @@ class _CashierPageState extends ConsumerState<CashierPage> {
               padding: EdgeInsets.symmetric(
                   horizontal: compact ? 12 : 24, vertical: compact ? 8 : 16),
               color: AppTheme.surface,
-              child: AppSearchField(
-                controller: _searchCtrl,
-                focusNode: _searchFocusNode,
-                hintText: 'Cari produk atau scan barcode...',
-                onChanged: (v) {
-                  ref.read(productSearchQueryProvider.notifier).set(v);
-                  _resetUnfocusTimer();
-                },
-                onClear: () {
-                  _searchCtrl.clear();
-                  ref.read(productSearchQueryProvider.notifier).set('');
-                  _searchFocusNode.requestFocus();
-                },
-                onSubmitted: (v) {
-                  ref.read(productSearchQueryProvider.notifier).set(v);
-                  ref.read(barcodeScannerProvider.notifier).clearBuffer();
-                  _searchFocusNode.requestFocus();
-                  _unfocusTimer?.cancel();
-                },
+              child: Row(
+                children: [
+                  Expanded(
+                    child: AppSearchField(
+                      controller: _searchCtrl,
+                      focusNode: _searchFocusNode,
+                      hintText: 'Cari produk atau scan barcode...',
+                      onChanged: (v) {
+                        ref.read(productSearchQueryProvider.notifier).set(v);
+                        _resetUnfocusTimer();
+                      },
+                      onClear: () {
+                        _searchCtrl.clear();
+                        ref.read(productSearchQueryProvider.notifier).set('');
+                        _searchFocusNode.requestFocus();
+                      },
+                      onSubmitted: (v) {
+                        ref.read(productSearchQueryProvider.notifier).set(v);
+                        ref.read(barcodeScannerProvider.notifier).clearBuffer();
+                        _searchFocusNode.requestFocus();
+                        _unfocusTimer?.cancel();
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: AppTheme.accent.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: AppTheme.accent.withValues(alpha: 0.3)),
+                    ),
+                    child: IconButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const ScannerPage()),
+                        );
+                      },
+                      icon: const Icon(Icons.qr_code_scanner_rounded,
+                          color: AppTheme.accent),
+                      tooltip: 'Buka Kamera Scanner',
+                    ),
+                  ),
+                ],
               ),
             ),
             _CategoryFilter(
