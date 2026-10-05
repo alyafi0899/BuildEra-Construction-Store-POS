@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../../../features/auth/providers/auth_provider.dart';
+import '../../utils/image_helper.dart';
 import '../models/sync_task.dart';
 import '../services/local_database.dart';
 import 'connectivity_provider.dart';
@@ -19,7 +21,7 @@ class SyncState {
 
   const SyncState({
     this.pendingCount = 0,
-    this.isSyncing    = false,
+    this.isSyncing = false,
     this.lastSyncAt,
     this.lastError,
   });
@@ -29,18 +31,20 @@ class SyncState {
     bool? isSyncing,
     DateTime? lastSyncAt,
     String? lastError,
+    bool clearLastError = false,
   }) =>
       SyncState(
         pendingCount: pendingCount ?? this.pendingCount,
-        isSyncing:    isSyncing    ?? this.isSyncing,
-        lastSyncAt:   lastSyncAt   ?? this.lastSyncAt,
-        lastError:    lastError    ?? this.lastError,
+        isSyncing: isSyncing ?? this.isSyncing,
+        lastSyncAt: lastSyncAt ?? this.lastSyncAt,
+        lastError: clearLastError ? null : (lastError ?? this.lastError),
       );
 }
 
 // ── Notifier ──────────────────────────────────────────────────────────────
 
-final syncProvider = NotifierProvider<SyncNotifier, SyncState>(SyncNotifier.new);
+final syncProvider =
+    NotifierProvider<SyncNotifier, SyncState>(SyncNotifier.new);
 
 class SyncNotifier extends Notifier<SyncState> {
   Box? _queueBox;
@@ -49,14 +53,16 @@ class SyncNotifier extends Notifier<SyncState> {
   RealtimeChannel? _signalChannel;
   final String _sessionId = const Uuid().v4();
   bool _isFetchingDeltas = false;
+  Future<Box>? _queueOpening;
+  String? _queueOpeningUid;
 
   @override
   SyncState build() {
     final auth = ref.watch(authStateProvider).value;
     final isOnline = ref.watch(isOnlineProvider);
-    
+
     _uid = auth?.uid;
-    
+
     if (_uid != null) {
       _initQueue();
     } else {
@@ -80,9 +86,37 @@ class SyncNotifier extends Notifier<SyncState> {
     return const SyncState();
   }
 
+  Future<Box?> _ensureQueueBox() async {
+    final uid = _uid;
+    if (uid == null) return null;
+
+    final existing = _queueBox;
+    if (existing != null && existing.isOpen) return existing;
+
+    if (_queueOpening != null && _queueOpeningUid == uid) {
+      return _queueOpening;
+    }
+
+    _queueOpeningUid = uid;
+    final opening = LocalDatabase.openBox(uid, 'sync_queue');
+    _queueOpening = opening;
+    try {
+      final box = await opening;
+      if (_uid == uid) {
+        _queueBox = box;
+        state = state.copyWith(pendingCount: box.length);
+      }
+      return box;
+    } finally {
+      if (identical(_queueOpening, opening)) {
+        _queueOpening = null;
+        _queueOpeningUid = null;
+      }
+    }
+  }
+
   Future<void> _initQueue() async {
-    _queueBox = await LocalDatabase.openBox(_uid!, 'sync_queue');
-    state = state.copyWith(pendingCount: _queueBox!.length);
+    await _ensureQueueBox();
   }
 
   void _closeQueue() {
@@ -93,7 +127,8 @@ class SyncNotifier extends Notifier<SyncState> {
 
   void _startSync() {
     _syncTimer?.cancel();
-    _syncTimer = Timer.periodic(const Duration(seconds: 15), (_) => processQueue());
+    _syncTimer =
+        Timer.periodic(const Duration(seconds: 15), (_) => processQueue());
     Future.microtask(() => processQueue());
   }
 
@@ -104,38 +139,43 @@ class SyncNotifier extends Notifier<SyncState> {
 
   void _startSignalListener() {
     if (_signalChannel != null || _uid == null) return;
-    
+
     final client = ref.read(supabaseClientProvider);
-    _signalChannel = client.channel('public:sync_metadata:$_uid')
-      .onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'sync_metadata',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
-          column: 'user_id',
-          value: _uid!,
-        ),
-        callback: (payload) async {
-          final data = payload.newRecord;
-          if (data.isEmpty) return;
-          
-          final lastUpdateBy = data['updated_by_session'] as String?;
-          if (lastUpdateBy == _sessionId) return;
+    _signalChannel = client
+        .channel('public:sync_metadata:$_uid')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'sync_metadata',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: _uid!,
+          ),
+          callback: (payload) async {
+            final data = payload.newRecord;
+            if (data.isEmpty) return;
 
-          final remoteLastUpdateStr = data['last_update'] as String?;
-          if (remoteLastUpdateStr == null) return;
-          final remoteLastUpdate = DateTime.parse(remoteLastUpdateStr);
+            final lastUpdateBy = data['updated_by_session'] as String?;
+            if (lastUpdateBy == _sessionId) return;
 
-          final localLastSyncRaw = await LocalDatabase.getMetadata(_uid!, 'last_remote_sync');
-          final localLastSync = localLastSyncRaw != null ? DateTime.parse(localLastSyncRaw as String) : DateTime(2000);
+            final remoteLastUpdateStr = data['last_update'] as String?;
+            if (remoteLastUpdateStr == null) return;
+            final remoteLastUpdate = DateTime.parse(remoteLastUpdateStr);
 
-          if (remoteLastUpdate.isAfter(localLastSync.subtract(const Duration(seconds: 1)))) {
-            await fetchDeltas(remoteLastUpdate);
-          }
-        },
-      )
-      .subscribe();
+            final localLastSyncRaw =
+                await LocalDatabase.getMetadata(_uid!, 'last_remote_sync');
+            final localLastSync = localLastSyncRaw != null
+                ? DateTime.parse(localLastSyncRaw as String)
+                : DateTime(2000);
+
+            if (remoteLastUpdate
+                .isAfter(localLastSync.subtract(const Duration(seconds: 1)))) {
+              await fetchDeltas(remoteLastUpdate);
+            }
+          },
+        )
+        .subscribe();
   }
 
   void _stopSignalListener() {
@@ -163,16 +203,18 @@ class SyncNotifier extends Notifier<SyncState> {
   }
 
   Future<void> addBatchToQueue(List<SyncTask> tasks) async {
-    if (_queueBox == null || tasks.isEmpty) return;
+    if (tasks.isEmpty) return;
+    final queue = await _ensureQueueBox();
+    if (queue == null) return;
 
     final Map<dynamic, dynamic> entries = {};
     for (final task in tasks) {
       entries[task.id] = task.toMap();
     }
 
-    await _queueBox!.putAll(entries);
-    state = state.copyWith(pendingCount: _queueBox!.length);
-    
+    await queue.putAll(entries);
+    state = state.copyWith(pendingCount: queue.length);
+
     if (ref.read(isOnlineProvider)) {
       unawaited(processQueue());
     }
@@ -180,97 +222,172 @@ class SyncNotifier extends Notifier<SyncState> {
 
   bool _isCurrentlyProcessing = false;
 
-  Future<void> fetchDeltas(DateTime remoteTimestamp) async {
-    if (_uid == null || _isFetchingDeltas || !ref.read(isOnlineProvider)) return;
+  Future<bool> fetchDeltas(DateTime remoteTimestamp) async {
+    final uid = _uid;
+    if (uid == null || _isFetchingDeltas || !ref.read(isOnlineProvider)) {
+      return false;
+    }
 
     _isFetchingDeltas = true;
     final client = ref.read(supabaseClientProvider);
-    
-    final localLastSyncRaw = await LocalDatabase.getMetadata(_uid!, 'last_remote_sync');
-    final localLastSync = localLastSyncRaw != null ? DateTime.parse(localLastSyncRaw as String) : DateTime(2000);
-
-    final collections = ['products', 'customers', 'debts', 'debt_payments', 'transactions', 'purchases'];
-    final queryTimestamp = localLastSync.subtract(const Duration(seconds: 1));
-
-    final pendingIds = _queueBox?.values
-        .map((e) => Map<String, dynamic>.from(e as Map)['document_id'] as String)
-        .toSet() ?? {};
+    final failures = <String>[];
 
     try {
-      final futures = collections.map((col) async {
+      final localLastSyncRaw =
+          await LocalDatabase.getMetadata(uid, 'last_remote_sync');
+      final localLastSync = localLastSyncRaw != null
+          ? DateTime.parse(localLastSyncRaw as String)
+          : DateTime(2000);
+      final queryTimestamp = localLastSync.subtract(const Duration(seconds: 1));
+
+      final pendingKeys = _queueBox?.values.map((entry) {
+            final task = Map<String, dynamic>.from(entry as Map);
+            return '${task['collection']}:${task['document_id']}';
+          }).toSet() ??
+          <String>{};
+
+      Future<void> pullUpdatedCollection(String collection) async {
         try {
-          final List<dynamic> response = await client
-              .from(col)
-              .select()
-              .eq('user_id', _uid!)
+          final select = collection == 'transactions'
+              ? '*, items:transaction_items(*)'
+              : '*';
+          final response = await client
+              .from(collection)
+              .select(select)
+              .eq('user_id', uid)
               .gt('updated_at', queryTimestamp.toIso8601String());
+          final box = await LocalDatabase.openBox(uid, collection);
 
-          if (response.isNotEmpty) {
-            final box = await LocalDatabase.openBox(_uid!, col);
-            
-            for (final item in response) {
-              final data = LocalDatabase.sanitize(item as Map<String, dynamic>);
-              final id = data['id'] as String?;
+          for (final row in response) {
+            final data =
+                LocalDatabase.sanitize(Map<String, dynamic>.from(row as Map));
+            final id = data['id']?.toString();
+            if (id == null || pendingKeys.contains('$collection:$id')) continue;
 
-              if (id == null || pendingIds.contains(id)) continue;
+            final localRaw = box.get(id);
+            if (localRaw != null) {
+              final local = Map<String, dynamic>.from(localRaw as Map);
+              final localUpdated =
+                  DateTime.tryParse(local['updated_at']?.toString() ?? '') ??
+                      DateTime(2000);
+              final remoteUpdated =
+                  DateTime.tryParse(data['updated_at']?.toString() ?? '') ??
+                      DateTime(2000);
+              if (!remoteUpdated.isAfter(localUpdated)) continue;
+            }
+            await box.put(id, data);
+          }
+        } catch (error) {
+          failures.add('$collection: $error');
+          debugPrint('Delta Fetch Error for $collection: $error');
+        }
+      }
 
-              final localDataRaw = box.get(id);
-              if (localDataRaw != null) {
-                final localData = Map<String, dynamic>.from(localDataRaw as Map);
-                final localUpdatedStr = localData['updated_at'] as String?;
-                final remoteUpdatedStr = data['updated_at'] as String?;
+      Future<void> pullSnapshotCollection(String collection) async {
+        try {
+          final response =
+              await client.from(collection).select().eq('user_id', uid);
+          final box = await LocalDatabase.openBox(uid, collection);
+          final remoteEntries = <String, Map<String, dynamic>>{};
 
-                if (localUpdatedStr != null && remoteUpdatedStr != null) {
-                  final localUpdated = DateTime.tryParse(localUpdatedStr) ?? DateTime(2000);
-                  final remoteUpdated = DateTime.tryParse(remoteUpdatedStr) ?? DateTime(2000);
+          for (final row in response) {
+            final data =
+                LocalDatabase.sanitize(Map<String, dynamic>.from(row as Map));
+            final id = data['id']?.toString();
+            if (id != null && id.isNotEmpty) remoteEntries[id] = data;
+          }
 
-                  if (localUpdated.isAfter(remoteUpdated) || localUpdated.isAtSameMomentAs(remoteUpdated)) {
-                    continue;
-                  }
-                }
-              }
-              await box.put(id, data);
+          for (final entry in remoteEntries.entries) {
+            if (!pendingKeys.contains('$collection:${entry.key}')) {
+              await box.put(entry.key, entry.value);
             }
           }
-        } catch (e) {
-          // Table might not exist yet, skip
-          debugPrint('Delta Fetch Error for $col: $e');
-        }
-      });
 
-      await Future.wait(futures);
-      await LocalDatabase.setMetadata(_uid!, 'last_remote_sync', remoteTimestamp.toIso8601String());
-    } catch (e) {
-      debugPrint('Supabase Delta Fetch Error: $e');
+          // These collections have no reliable updated_at field. A full snapshot
+          // is needed to observe edits and deletions from another device.
+          for (final localKey in box.keys.toList()) {
+            final id = localKey.toString();
+            if (!remoteEntries.containsKey(id) &&
+                !pendingKeys.contains('$collection:$id')) {
+              await box.delete(localKey);
+            }
+          }
+        } catch (error) {
+          failures.add('$collection: $error');
+          debugPrint('Snapshot Fetch Error for $collection: $error');
+        }
+      }
+
+      const updatedCollections = [
+        'products',
+        'customers',
+        'debts',
+        'debt_payments',
+        'transactions',
+        'purchases',
+      ];
+      const snapshotCollections = [
+        'suppliers',
+        'shipping_services',
+        'restock_history',
+        'bill_payments',
+        'barcode_history',
+      ];
+
+      await Future.wait([
+        ...updatedCollections.map(pullUpdatedCollection),
+        ...snapshotCollections.map(pullSnapshotCollection),
+      ]);
+
+      if (failures.isNotEmpty) {
+        state = state.copyWith(
+          lastError:
+              'Sinkronisasi belum lengkap: ${failures.take(3).join(' | ')}',
+        );
+        return false;
+      }
+
+      await LocalDatabase.setMetadata(
+          uid, 'last_remote_sync', remoteTimestamp.toIso8601String());
+      state = state.copyWith(clearLastError: true, lastSyncAt: DateTime.now());
+      return true;
+    } catch (error) {
+      state = state.copyWith(lastError: 'Delta sync gagal: $error');
+      debugPrint('Supabase Delta Fetch Error: $error');
+      return false;
     } finally {
       _isFetchingDeltas = false;
     }
   }
 
   Future<void> processQueue() async {
-    if (_isCurrentlyProcessing || _queueBox == null || _queueBox!.isEmpty || !ref.read(isOnlineProvider)) return;
+    if (_isCurrentlyProcessing || !ref.read(isOnlineProvider)) return;
+    final queue = await _ensureQueueBox();
+    if (queue == null || queue.isEmpty) return;
 
     _isCurrentlyProcessing = true;
-    state = state.copyWith(isSyncing: true, lastError: null);
-    
+    state = state.copyWith(isSyncing: true, clearLastError: true);
+
     final client = ref.read(supabaseClientProvider);
 
     try {
       bool hasChanges = false;
 
-      while (_queueBox!.isNotEmpty && ref.read(isOnlineProvider)) {
-        final keys = _queueBox!.keys.take(50).toList();
+      while (queue.isNotEmpty && ref.read(isOnlineProvider)) {
+        final keys = queue.keys.take(50).toList();
         final processedKeys = <dynamic>[];
+        var batchFailed = false;
 
         for (final key in keys) {
-          final raw = _queueBox!.get(key);
+          final raw = queue.get(key);
           if (raw == null) {
             processedKeys.add(key);
             continue;
           }
-          
+
+          SyncTask? task;
           try {
-            final task = SyncTask.fromMap(Map<String, dynamic>.from(raw as Map));
+            task = SyncTask.fromMap(Map<String, dynamic>.from(raw as Map));
             final table = task.collection;
 
             // ENSURE ID IS PRESENT (Fixes PGRST 23502)
@@ -278,6 +395,7 @@ class SyncNotifier extends Notifier<SyncState> {
             if (!finalData.containsKey('id')) {
               finalData['id'] = task.documentId;
             }
+            await _prepareRemotePayload(task, finalData, client);
 
             switch (task.action) {
               case SyncAction.create:
@@ -289,31 +407,51 @@ class SyncNotifier extends Notifier<SyncState> {
                 });
                 break;
               case SyncAction.delete:
-                await client.from(table).delete().eq('id', task.documentId).eq('user_id', _uid!);
+                await client
+                    .from(table)
+                    .delete()
+                    .eq('id', task.documentId)
+                    .eq('user_id', _uid!);
                 break;
             }
             processedKeys.add(key);
           } catch (e) {
             debugPrint('Sync Task Process Error for key $key: $e');
-            // Discared if it's a structural error (column not found) to prevent infinite loop
-            if (e.toString().contains('PGRST204') || e.toString().contains('PGRST205')) {
-               processedKeys.add(key);
+            batchFailed = true;
+            final failedTask = task;
+            if (failedTask != null) {
+              try {
+                await queue.put(
+                  key,
+                  failedTask
+                      .copyWith(
+                        retryCount: failedTask.retryCount + 1,
+                        lastError: e.toString(),
+                      )
+                      .toMap(),
+                );
+              } catch (queueError) {
+                debugPrint('Could not persist sync retry state: $queueError');
+              }
             }
-            // Discard if it's a foreign key error for now, until full sync is re-run
-            if (e.toString().contains('23503')) {
-               processedKeys.add(key);
-            }
+            state = state.copyWith(
+              lastError: 'Sync ${task?.collection ?? 'task'} gagal: $e',
+            );
           }
         }
 
         if (processedKeys.isNotEmpty) {
-          await _queueBox!.deleteAll(processedKeys);
+          await queue.deleteAll(processedKeys);
           hasChanges = true;
           state = state.copyWith(
-            pendingCount: _queueBox!.length, 
+            pendingCount: queue.length,
             lastSyncAt: DateTime.now(),
           );
         }
+
+        // Keep failed tasks queued and wait for the next sync cycle instead of
+        // immediately retrying the same schema/network failure in a tight loop.
+        if (batchFailed) break;
       }
 
       if (hasChanges) {
@@ -332,5 +470,44 @@ class SyncNotifier extends Notifier<SyncState> {
       _isCurrentlyProcessing = false;
       state = state.copyWith(isSyncing: false);
     }
+  }
+
+  Future<void> _prepareRemotePayload(
+    SyncTask task,
+    Map<String, dynamic> data,
+    SupabaseClient client,
+  ) async {
+    if (task.collection != 'products') return;
+    final imagePath = data['image_path']?.toString();
+    if (imagePath == null ||
+        imagePath.isEmpty ||
+        imagePath.startsWith('http')) {
+      return;
+    }
+
+    if (kIsWeb) {
+      // A browser-local path is not resolvable on another device.
+      data.remove('image_path');
+      return;
+    }
+
+    final resolvedPath = await ImageHelper.resolveLocalPath(imagePath);
+    if (resolvedPath == null) {
+      throw StateError('Foto produk lokal tidak ditemukan: $imagePath');
+    }
+    final imageFile = File(resolvedPath);
+    if (!await imageFile.exists()) {
+      throw StateError('Foto produk lokal tidak ditemukan: $resolvedPath');
+    }
+
+    final storagePath = 'users/$_uid/products/${task.documentId}.jpg';
+    await client.storage.from('products').uploadBinary(
+          storagePath,
+          await imageFile.readAsBytes(),
+          fileOptions:
+              const FileOptions(contentType: 'image/jpeg', upsert: true),
+        );
+    data['image_path'] =
+        client.storage.from('products').getPublicUrl(storagePath);
   }
 }

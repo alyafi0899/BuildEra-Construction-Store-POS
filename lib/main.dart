@@ -28,6 +28,7 @@ import 'features/debts/providers/debt_repository.dart';
 import 'features/auth/presentation/widgets/auth_gate.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'core/sync/services/local_database.dart';
+import 'core/sync/providers/sync_provider.dart';
 import 'core/providers/navigation_provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:window_manager/window_manager.dart';
@@ -259,6 +260,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     });
 
     // Keep essential providers warm for backup and analytics
+    ref.watch(syncProvider);
     ref.watch(productsProvider);
     ref.watch(restockHistoryProvider);
     ref.watch(transactionsProvider);

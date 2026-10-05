@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -11,22 +12,73 @@ final settingsProvider =
 
 class SettingsNotifier extends Notifier<StoreSettings> {
   String? _initializedUid;
+  String? _settingsChannelUid;
+  RealtimeChannel? _settingsChannel;
 
   @override
   StoreSettings build() {
     final user = ref.watch(authStateProvider).value;
     if (user != null && _initializedUid != user.uid) {
       _initializedUid = user.uid;
-      Future.microtask(() => _loadSettings(user.uid));
+      Future.microtask(() {
+        _listenForRemoteSettings(user.uid);
+        _loadSettings(user.uid);
+      });
       return const StoreSettings(isLoading: true);
     } else if (user == null) {
       _initializedUid = null;
+      _settingsChannel?.unsubscribe();
+      _settingsChannel = null;
+      _settingsChannelUid = null;
     }
+    ref.onDispose(() => _settingsChannel?.unsubscribe());
     return const StoreSettings();
   }
 
   SupabaseClient get _supabase => ref.read(supabaseClientProvider);
   Future<Box> _getBox(String uid) => LocalDatabase.openBox(uid, 'settings');
+
+  void _listenForRemoteSettings(String uid) {
+    if (_settingsChannelUid == uid) return;
+    _settingsChannel?.unsubscribe();
+    _settingsChannelUid = uid;
+    _settingsChannel = _supabase
+        .channel('store_settings:$uid')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'users',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: uid,
+          ),
+          callback: (payload) {
+            if (payload.newRecord.isEmpty || _initializedUid != uid) return;
+            unawaited(_applyRemoteSettings(uid, payload.newRecord));
+          },
+        )
+        .subscribe();
+  }
+
+  Future<void> _applyRemoteSettings(
+      String uid, Map<String, dynamic> remoteRow) async {
+    final merged = Map<String, dynamic>.from(state.toMap())
+      ..addAll(LocalDatabase.sanitize(remoteRow));
+    // Brand images are device-local and must not be overwritten by remote rows.
+    merged['logo_url'] = state.logoUrl;
+    merged['qris_image_path'] = state.qrisImagePath;
+    final settings = StoreSettings.fromMap(merged, isLoading: false);
+    state = settings;
+    final box = await _getBox(uid);
+    await box.put('store_settings', settings.toMap());
+  }
+
+  Future<void> refreshFromRemote() async {
+    final user = ref.read(authStateProvider).value;
+    if (user == null) return;
+    await _loadSettings(user.uid);
+  }
 
   Future<void> _loadSettings(String uid) async {
     StoreSettings? cachedSettings;
@@ -149,6 +201,13 @@ class SettingsNotifier extends Notifier<StoreSettings> {
         await Future.delayed(const Duration(seconds: 2));
       }
     }
+  }
+
+  Future<void> refreshFromRemote() async {
+    final user = ref.read(authStateProvider).value;
+    if (user == null) return;
+    _initializedUid = user.uid;
+    await _loadSettings(user.uid);
   }
 
   Future<void> updateSettings(StoreSettings settings, {String? uid}) async {

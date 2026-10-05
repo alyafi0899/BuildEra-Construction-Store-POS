@@ -36,27 +36,31 @@ class SyncTask {
 
   factory SyncTask.fromMap(Map<dynamic, dynamic> m) {
     return SyncTask(
-      id:         m['id'] as String,
+      id: m['id'] as String,
       collection: m['collection'] as String,
       documentId: m['document_id'] as String,
-      action:     SyncAction.values.byName(m['action'] as String),
-      data:       Map<String, dynamic>.from(m['data'] as Map),
-      createdAt:  DateTime.parse(m['created_at'] as String),
+      action: SyncAction.values.byName(m['action'] as String),
+      data: Map<String, dynamic>.from(m['data'] as Map),
+      createdAt: DateTime.parse(m['created_at'] as String),
       retryCount: m['retry_count'] as int? ?? 0,
-      lastError:  m['last_error'] as String?,
+      lastError: m['last_error'] as String?,
     );
   }
 
-  SyncTask copyWith({int? retryCount, String? lastError}) {
+  SyncTask copyWith({
+    int? retryCount,
+    String? lastError,
+    bool clearLastError = false,
+  }) {
     return SyncTask(
-      id:         id,
+      id: id,
       collection: collection,
       documentId: documentId,
-      action:     action,
-      data:       data,
-      createdAt:  createdAt,
+      action: action,
+      data: data,
+      createdAt: createdAt,
       retryCount: retryCount ?? this.retryCount,
-      lastError:  lastError ?? this.lastError,
+      lastError: clearLastError ? null : (lastError ?? this.lastError),
     );
   }
 }

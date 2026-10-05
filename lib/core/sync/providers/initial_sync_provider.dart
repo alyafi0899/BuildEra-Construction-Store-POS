@@ -9,6 +9,9 @@ import '../../../features/products/providers/barcode_history_provider.dart';
 import '../../../features/payment/providers/transaction_provider.dart';
 import '../../../features/debts/providers/debt_repository.dart';
 import '../../../features/inventory/providers/restock_provider.dart';
+import '../../../features/products/providers/entity_provider.dart';
+import '../../../features/purchase/providers/purchase_provider.dart';
+import '../../../features/settings/providers/settings_provider.dart';
 
 class InitialSyncState {
   final bool isInitialSyncDone;
@@ -32,6 +35,7 @@ class InitialSyncState {
     bool? isSyncing,
     bool? isStatusLoaded,
     String? error,
+    bool clearError = false,
     double? progress,
     String? currentTask,
   }) {
@@ -39,7 +43,7 @@ class InitialSyncState {
       isInitialSyncDone: isInitialSyncDone ?? this.isInitialSyncDone,
       isSyncing: isSyncing ?? this.isSyncing,
       isStatusLoaded: isStatusLoaded ?? this.isStatusLoaded,
-      error: error ?? this.error,
+      error: clearError ? null : (error ?? this.error),
       progress: progress ?? this.progress,
       currentTask: currentTask ?? this.currentTask,
     );
@@ -65,7 +69,7 @@ class InitialSyncNotifier extends Notifier<InitialSyncState> {
   Future<void> markAsDone() async {
     final auth = ref.read(authStateProvider).value;
     if (auth == null) return;
-    
+
     final box = await LocalDatabase.openBox(auth.uid, 'sync_meta');
     await box.put('initial_sync_done', true);
     state = state.copyWith(isInitialSyncDone: true);
@@ -75,22 +79,30 @@ class InitialSyncNotifier extends Notifier<InitialSyncState> {
   Future<void> triggerManualSync() async {
     final auth = ref.read(authStateProvider).value;
     final isOnline = ref.read(isOnlineProvider);
-    
+
     if (auth == null || !isOnline || state.isSyncing) return;
 
-    state = state.copyWith(isSyncing: true, error: null, currentTask: 'Memeriksa pembaruan...');
-    
+    state = state.copyWith(
+      isSyncing: true,
+      clearError: true,
+      currentTask: 'Memeriksa pembaruan...',
+    );
+
     try {
       // 1. Process local outgoing changes first
-      await ref.read(syncProvider.notifier).processQueue();
-      
-      // 2. Fetch remote incoming changes (Delta Sync)
-      // We pass a very old timestamp or the actual last sync to ensure we get what's missing
-      final localLastSyncRaw = await LocalDatabase.getMetadata(auth.uid, 'last_remote_sync');
-      final lastSync = localLastSyncRaw != null ? DateTime.parse(localLastSyncRaw as String) : DateTime(2000);
-      
-      await ref.read(syncProvider.notifier).fetchDeltas(lastSync);
-      
+      final syncNotifier = ref.read(syncProvider.notifier);
+      await syncNotifier.processQueue();
+      final queueError = ref.read(syncProvider).lastError;
+
+      // Pull remote changes and use the successful pull time as its checkpoint.
+      final deltaSucceeded = await syncNotifier.fetchDeltas(DateTime.now());
+      if (queueError != null || !deltaSucceeded) {
+        throw Exception(
+          queueError ?? ref.read(syncProvider).lastError ?? 'Pull data gagal.',
+        );
+      }
+      await ref.read(settingsProvider.notifier).refreshFromRemote();
+
       state = state.copyWith(isSyncing: false, currentTask: 'Selesai');
     } catch (e) {
       state = state.copyWith(isSyncing: false, error: e.toString());
@@ -101,7 +113,7 @@ class InitialSyncNotifier extends Notifier<InitialSyncState> {
     debugPrint('SYNC: Triggered performInitialSync(force: $force)');
     final auth = ref.read(authStateProvider).value;
     final isOnline = ref.read(isOnlineProvider);
-    
+
     if (auth == null) {
       debugPrint('SYNC: No user found for initial sync');
       return;
@@ -109,22 +121,33 @@ class InitialSyncNotifier extends Notifier<InitialSyncState> {
 
     if (!isOnline) {
       debugPrint('SYNC: Offline - Aborting');
-      state = state.copyWith(error: 'Tidak ada koneksi internet. Silakan coba lagi nanti.');
+      state = state.copyWith(
+          error: 'Tidak ada koneksi internet. Silakan coba lagi nanti.');
       return;
     }
 
     debugPrint('SYNC: Starting Initial Download for user ${auth.uid}');
-    state = state.copyWith(isSyncing: true, error: null, progress: 0, currentTask: 'Menyiapkan...');
+    state = state.copyWith(
+      isSyncing: true,
+      clearError: true,
+      progress: 0,
+      currentTask: 'Menyiapkan...',
+    );
 
     try {
       int completed = 0;
-      const total = 5;
+      const total = 7;
 
-      Future<void> runBootstrap(String name, Future<void> Function({bool force}) bootstrapFn) async {
+      Future<bool> runBootstrap(
+        String name,
+        Future<void> Function({bool force}) bootstrapFn,
+      ) async {
+        var succeeded = true;
         try {
           await bootstrapFn(force: force);
         } catch (e) {
           debugPrint('SYNC Error in $name: $e');
+          succeeded = false;
         } finally {
           completed++;
           state = state.copyWith(
@@ -132,20 +155,58 @@ class InitialSyncNotifier extends Notifier<InitialSyncState> {
             currentTask: 'Mengunduh $name... ($completed/$total)',
           );
         }
+        return succeeded;
       }
 
-      await Future.wait([
+      final bootstrapResults = await Future.wait([
         runBootstrap('Produk', ref.read(productRepositoryProvider).bootstrap),
-        runBootstrap('Transaksi', ref.read(transactionRepositoryProvider).bootstrap),
-        runBootstrap('Piutang & Pelanggan', ref.read(debtRepositoryProvider).bootstrap),
-        runBootstrap('Stok & Pembayaran', ref.read(restockRepositoryProvider).bootstrap),
-        runBootstrap('Riwayat Barcode', ref.read(barcodeHistoryRepositoryProvider).bootstrap),
+        runBootstrap(
+            'Transaksi', ref.read(transactionRepositoryProvider).bootstrap),
+        runBootstrap(
+            'Piutang & Pelanggan', ref.read(debtRepositoryProvider).bootstrap),
+        runBootstrap(
+            'Stok & Pembayaran', ref.read(restockRepositoryProvider).bootstrap),
+        runBootstrap('Riwayat Barcode',
+            ref.read(barcodeHistoryRepositoryProvider).bootstrap),
+        runBootstrap('Supplier & Ekspedisi',
+            ref.read(entityRepositoryProvider).bootstrap),
+        runBootstrap(
+            'Pembelian', ref.read(purchaseRepositoryProvider).bootstrap),
       ]);
+
+      final taskNames = [
+        'Produk',
+        'Transaksi',
+        'Piutang & Pelanggan',
+        'Stok & Pembayaran',
+        'Riwayat Barcode',
+        'Supplier & Ekspedisi',
+        'Pembelian',
+      ];
+      final failedTasks = [
+        for (var index = 0; index < bootstrapResults.length; index++)
+          if (!bootstrapResults[index]) taskNames[index],
+      ];
+
+      if (failedTasks.isNotEmpty) {
+        state = state.copyWith(
+          isSyncing: false,
+          isInitialSyncDone: false,
+          error:
+              'Gagal mengunduh: ${failedTasks.join(', ')}. Silakan coba lagi.',
+          currentTask: 'Sebagian data belum tersinkron',
+        );
+        return;
+      }
 
       final box = await LocalDatabase.openBox(auth.uid, 'sync_meta');
       await box.put('initial_sync_done', true);
 
-      state = state.copyWith(isSyncing: false, isInitialSyncDone: true, progress: 1.0, currentTask: 'Selesai');
+      state = state.copyWith(
+          isSyncing: false,
+          isInitialSyncDone: true,
+          progress: 1.0,
+          currentTask: 'Selesai');
       debugPrint('SYNC: Initial Download Completed');
     } catch (e) {
       debugPrint('SYNC: Initial Download Error: $e');
@@ -154,4 +215,6 @@ class InitialSyncNotifier extends Notifier<InitialSyncState> {
   }
 }
 
-final initialSyncProvider = NotifierProvider<InitialSyncNotifier, InitialSyncState>(InitialSyncNotifier.new);
+final initialSyncProvider =
+    NotifierProvider<InitialSyncNotifier, InitialSyncState>(
+        InitialSyncNotifier.new);

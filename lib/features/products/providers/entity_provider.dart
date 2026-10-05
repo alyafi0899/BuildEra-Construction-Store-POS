@@ -20,6 +20,29 @@ class EntityRepository {
 
   Future<Box> _getBox(String col) => LocalDatabase.openBox(_uid, col);
 
+  Future<void> bootstrap({bool force = false}) async {
+    final client = _ref.read(supabaseClientProvider);
+    for (final collection in ['suppliers', 'shipping_services']) {
+      final box = await _getBox(collection);
+      if (box.isNotEmpty && !force) continue;
+
+      final response = await client
+          .from(collection)
+          .select()
+          .eq('user_id', _uid)
+          .timeout(const Duration(seconds: 20));
+
+      final entries = <String, dynamic>{};
+      for (final item in response) {
+        entries[item['id'] as String] =
+            LocalDatabase.sanitize(Map<String, dynamic>.from(item));
+      }
+
+      if (force) await box.clear();
+      if (entries.isNotEmpty) await box.putAll(entries);
+    }
+  }
+
   // ── Suppliers ────────────────────────────────────────────────────────────
 
   Stream<List<Supplier>> getSuppliersStream() async* {
@@ -29,7 +52,9 @@ class EntityRepository {
   }
 
   List<Supplier> _suppliersFromBox(Box box) {
-    final list = box.values.map((d) => Supplier.fromMap(Map<String, dynamic>.from(d as Map))).toList();
+    final list = box.values
+        .map((d) => Supplier.fromMap(Map<String, dynamic>.from(d as Map)))
+        .toList();
     list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     return list;
   }
@@ -40,11 +65,11 @@ class EntityRepository {
     await box.put(s.id, data);
 
     await _ref.read(syncProvider.notifier).addToQueue(
-      collection: 'suppliers',
-      documentId: s.id,
-      action:     SyncAction.update,
-      data:       data,
-    );
+          collection: 'suppliers',
+          documentId: s.id,
+          action: SyncAction.update,
+          data: data,
+        );
   }
 
   Future<void> deleteSupplier(String id) async {
@@ -54,8 +79,8 @@ class EntityRepository {
     await _ref.read(syncProvider.notifier).addToQueue(
       collection: 'suppliers',
       documentId: id,
-      action:     SyncAction.delete,
-      data:       {},
+      action: SyncAction.delete,
+      data: {},
     );
   }
 
@@ -81,17 +106,19 @@ class EntityRepository {
 
     // 3. Clean up Restock History (BATCH)
     final restockBox = await LocalDatabase.openBox(_uid, 'restock_history');
-    final restocks = restockBox.values.map((d) => RestockRecord.fromMap(Map<String, dynamic>.from(d as Map))).toList();
+    final restocks = restockBox.values
+        .map((d) => RestockRecord.fromMap(Map<String, dynamic>.from(d as Map)))
+        .toList();
     for (final r in restocks) {
       if (r.supplierName == name) {
         final updated = r.copyWith(supplierName: null);
         await restockBox.put(r.id, updated.toMap());
         await _ref.read(syncProvider.notifier).addToQueue(
-          collection: 'restock_history',
-          documentId: r.id,
-          action: SyncAction.update,
-          data: updated.toMap(),
-        );
+              collection: 'restock_history',
+              documentId: r.id,
+              action: SyncAction.update,
+              data: updated.toMap(),
+            );
       }
     }
   }
@@ -105,7 +132,10 @@ class EntityRepository {
   }
 
   List<ShippingService> _shippingFromBox(Box box) {
-    final list = box.values.map((d) => ShippingService.fromMap(Map<String, dynamic>.from(d as Map))).toList();
+    final list = box.values
+        .map(
+            (d) => ShippingService.fromMap(Map<String, dynamic>.from(d as Map)))
+        .toList();
     list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     return list;
   }
@@ -116,11 +146,11 @@ class EntityRepository {
     await box.put(s.id, data);
 
     await _ref.read(syncProvider.notifier).addToQueue(
-      collection: 'shipping_services',
-      documentId: s.id,
-      action:     SyncAction.update,
-      data:       data,
-    );
+          collection: 'shipping_services',
+          documentId: s.id,
+          action: SyncAction.update,
+          data: data,
+        );
   }
 
   Future<void> deleteShippingService(String id) async {
@@ -130,8 +160,8 @@ class EntityRepository {
     await _ref.read(syncProvider.notifier).addToQueue(
       collection: 'shipping_services',
       documentId: id,
-      action:     SyncAction.delete,
-      data:       {},
+      action: SyncAction.delete,
+      data: {},
     );
   }
 
@@ -157,17 +187,19 @@ class EntityRepository {
 
     // 3. Clean up Restock History (BATCH)
     final restockBox = await LocalDatabase.openBox(_uid, 'restock_history');
-    final restocks = restockBox.values.map((d) => RestockRecord.fromMap(Map<String, dynamic>.from(d as Map))).toList();
+    final restocks = restockBox.values
+        .map((d) => RestockRecord.fromMap(Map<String, dynamic>.from(d as Map)))
+        .toList();
     for (final r in restocks) {
       if (r.shippingServiceName == name) {
         final updated = r.copyWith(shippingServiceName: null);
         await restockBox.put(r.id, updated.toMap());
         await _ref.read(syncProvider.notifier).addToQueue(
-          collection: 'restock_history',
-          documentId: r.id,
-          action: SyncAction.update,
-          data: updated.toMap(),
-        );
+              collection: 'restock_history',
+              documentId: r.id,
+              action: SyncAction.update,
+              data: updated.toMap(),
+            );
       }
     }
   }

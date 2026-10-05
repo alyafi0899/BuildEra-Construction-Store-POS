@@ -28,12 +28,35 @@ class PurchaseRepository {
 
   Future<Box> _getBox() => LocalDatabase.openBox(_uid, 'purchases');
 
+  Future<void> bootstrap({bool force = false}) async {
+    final box = await _getBox();
+    if (box.isNotEmpty && !force) return;
+
+    final client = _ref.read(supabaseClientProvider);
+    final response = await client
+        .from('purchases')
+        .select()
+        .eq('user_id', _uid)
+        .timeout(const Duration(seconds: 20));
+
+    final entries = <String, dynamic>{};
+    for (final item in response) {
+      entries[item['id'] as String] =
+          LocalDatabase.sanitize(Map<String, dynamic>.from(item));
+    }
+
+    if (force) await box.clear();
+    if (entries.isNotEmpty) await box.putAll(entries);
+  }
+
   Future<List<Purchase>> getAllPurchases() async {
     final box = await _getBox();
     final list = box.values.map((data) {
       final m = Map<String, dynamic>.from(data as Map);
       final itemsData = m['items'] as List? ?? [];
-      final items = itemsData.map((i) => PurchaseItem.fromMap(Map<String, dynamic>.from(i as Map))).toList();
+      final items = itemsData
+          .map((i) => PurchaseItem.fromMap(Map<String, dynamic>.from(i as Map)))
+          .toList();
       return Purchase.fromMap(m, items: items);
     }).toList();
     list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -48,11 +71,11 @@ class PurchaseRepository {
     await box.put(p.id, data);
 
     await _ref.read(syncProvider.notifier).addToQueue(
-      collection: 'purchases',
-      documentId: p.id,
-      action:     SyncAction.create,
-      data:       data,
-    );
+          collection: 'purchases',
+          documentId: p.id,
+          action: SyncAction.create,
+          data: data,
+        );
 
     return p;
   }
@@ -64,8 +87,8 @@ class PurchaseRepository {
     await _ref.read(syncProvider.notifier).addToQueue(
       collection: 'purchases',
       documentId: id,
-      action:     SyncAction.delete,
-      data:       {},
+      action: SyncAction.delete,
+      data: {},
     );
   }
 
@@ -89,9 +112,9 @@ final purchaseRepositoryProvider = Provider<PurchaseRepository>((ref) {
 final purchasesProvider = StreamProvider<List<Purchase>>((ref) {
   final repo = ref.watch(purchaseRepositoryProvider);
   if (repo._uid == 'unknown') return Stream.value([]);
-  
+
   final controller = StreamController<List<Purchase>>();
-  
+
   void update() async {
     final list = await repo.getAllPurchases();
     if (!controller.isClosed) controller.add(list);
@@ -128,42 +151,42 @@ class PurchaseNotifier extends Notifier<void> {
 
     final purchaseId = _uuid.v4();
     final invoice = _repo.generateInvoiceNumber();
-    
-    final status = amountPaid >= cart.total 
-        ? PaymentStatus.paid 
+
+    final status = amountPaid >= cart.total
+        ? PaymentStatus.paid
         : (amountPaid > 0 ? PaymentStatus.partial : PaymentStatus.unpaid);
 
     final items = cart.items.map((item) {
       return PurchaseItem(
-        id:            _uuid.v4(),
-        purchaseId:    purchaseId,
-        productId:     item.product.id,
-        productName:   item.product.name,
-        unitName:      item.unit.unitName,
-        conversionRate:item.unit.conversionRate,
-        quantity:      item.quantity,
+        id: _uuid.v4(),
+        purchaseId: purchaseId,
+        productId: item.product.id,
+        productName: item.product.name,
+        unitName: item.unit.unitName,
+        conversionRate: item.unit.conversionRate,
+        quantity: item.quantity,
         purchasePrice: item.purchasePrice,
-        subtotal:      item.subtotal,
+        subtotal: item.subtotal,
       );
     }).toList();
 
     final now = DateTime.now();
     final purchase = Purchase(
-      id:             purchaseId,
-      invoiceNumber:  invoice,
-      supplierId:     cart.supplierId,
-      supplierName:   cart.supplierName,
-      staffName:      settings.ownerName.isEmpty ? 'Admin' : settings.ownerName,
-      subtotal:       cart.subtotal,
-      shippingFee:    cart.shippingFee,
-      total:          cart.total,
-      paymentMethod:  paymentMethod,
-      amountPaid:     amountPaid,
-      paymentStatus:  status,
-      notes:          notes,
-      createdAt:      now,
-      updatedAt:      now,
-      items:          items,
+      id: purchaseId,
+      invoiceNumber: invoice,
+      supplierId: cart.supplierId,
+      supplierName: cart.supplierName,
+      staffName: settings.ownerName.isEmpty ? 'Admin' : settings.ownerName,
+      subtotal: cart.subtotal,
+      shippingFee: cart.shippingFee,
+      total: cart.total,
+      paymentMethod: paymentMethod,
+      amountPaid: amountPaid,
+      paymentStatus: status,
+      notes: notes,
+      createdAt: now,
+      updatedAt: now,
+      items: items,
     );
 
     // 1. Save Purchase Record
@@ -172,33 +195,35 @@ class PurchaseNotifier extends Notifier<void> {
     // 2. Process each item (Update Stock & Create Restock Record for History/Financials)
     for (final item in cart.items) {
       final baseQty = item.quantity * item.unit.conversionRate;
-      
+
       // Update stock
       await prodRepo.updateStock(item.product.id, baseQty);
 
       // Calculate allocation of shipping fee per item based on value weight
       final weight = item.subtotal / cart.subtotal;
       final allocatedShipping = cart.shippingFee * weight;
-      final totalCostPerBaseUnit = (item.subtotal + allocatedShipping) / baseQty;
+      final totalCostPerBaseUnit =
+          (item.subtotal + allocatedShipping) / baseQty;
 
       final restock = RestockRecord(
-        id:                    _uuid.v4(),
-        productId:             item.product.id,
-        productName:           item.product.name,
-        quantityAdded:         baseQty,
-        unitName:              item.unit.unitName,
-        supplierPrice:         item.subtotal,
-        shippingCost:          allocatedShipping,
-        totalCostPerUnit:      totalCostPerBaseUnit,
-        sellingPrice:          item.product.basePrice, // Keep existing selling price
-        supplierPaidAmount:    (amountPaid / cart.total) * item.subtotal,
-        shippingPaidAmount:    (amountPaid / cart.total) * allocatedShipping,
-        supplierName:          cart.supplierName,
+        id: _uuid.v4(),
+        productId: item.product.id,
+        productName: item.product.name,
+        quantityAdded: baseQty,
+        unitName: item.unit.unitName,
+        supplierPrice: item.subtotal,
+        shippingCost: allocatedShipping,
+        totalCostPerUnit: totalCostPerBaseUnit,
+        sellingPrice: item.product.basePrice, // Keep existing selling price
+        supplierPaidAmount: (amountPaid / cart.total) * item.subtotal,
+        shippingPaidAmount: (amountPaid / cart.total) * allocatedShipping,
+        supplierName: cart.supplierName,
         supplierPaymentStatus: status,
-        shippingServiceName:   null, // Multi-item purchase usually has one shipping for all
+        shippingServiceName:
+            null, // Multi-item purchase usually has one shipping for all
         shippingPaymentStatus: status,
-        createdAt:             now,
-        notes:                 'Dari Pembelian: ${purchase.invoiceNumber}. ${notes ?? ""}',
+        createdAt: now,
+        notes: 'Dari Pembelian: ${purchase.invoiceNumber}. ${notes ?? ""}',
       );
 
       await restockRepo.saveRestock(restock);
@@ -222,7 +247,9 @@ class PurchaseNotifier extends Notifier<void> {
 
       final m = Map<String, dynamic>.from(data as Map);
       final itemsData = m['items'] as List? ?? [];
-      final items = itemsData.map((i) => PurchaseItem.fromMap(Map<String, dynamic>.from(i as Map))).toList();
+      final items = itemsData
+          .map((i) => PurchaseItem.fromMap(Map<String, dynamic>.from(i as Map)))
+          .toList();
       final p = Purchase.fromMap(m, items: items);
 
       final prodRepo = ref.read(productRepositoryProvider);
@@ -230,15 +257,15 @@ class PurchaseNotifier extends Notifier<void> {
 
       // 1. Revert Stock & Delete Linked Restock Records
       for (final item in p.items) {
-        await prodRepo.updateStock(item.productId, - (item.quantity * item.conversionRate));
+        await prodRepo.updateStock(
+            item.productId, -(item.quantity * item.conversionRate));
 
         final restocks = await ref.read(restockHistoryProvider.future);
-        final linkedRestock = restocks.firstWhereOrNull(
-          (r) => r.productId == item.productId && 
-                 r.notes != null && 
-                 r.notes!.contains(p.invoiceNumber)
-        );
-        
+        final linkedRestock = restocks.firstWhereOrNull((r) =>
+            r.productId == item.productId &&
+            r.notes != null &&
+            r.notes!.contains(p.invoiceNumber));
+
         if (linkedRestock != null) {
           await restockRepo.deleteRestock(linkedRestock);
         }
@@ -258,4 +285,5 @@ class PurchaseNotifier extends Notifier<void> {
   }
 }
 
-final purchaseActionProvider = NotifierProvider<PurchaseNotifier, void>(PurchaseNotifier.new);
+final purchaseActionProvider =
+    NotifierProvider<PurchaseNotifier, void>(PurchaseNotifier.new);
