@@ -152,12 +152,15 @@ class _CashierPageState extends ConsumerState<CashierPage> {
                             color: AppTheme.accent.withValues(alpha: 0.3)),
                       ),
                       child: IconButton(
-                        onPressed: () {
-                          Navigator.push(
+                        onPressed: () async {
+                          final scanned = await Navigator.push<bool>(
                             context,
                             MaterialPageRoute(
                                 builder: (_) => const ScannerPage()),
                           );
+                          if (scanned == true && mounted) {
+                            setState(() => _showCartOnCompact = true);
+                          }
                         },
                         icon: const Icon(Icons.qr_code_scanner_rounded,
                             color: AppTheme.accent),

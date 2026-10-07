@@ -143,7 +143,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: IconButton(
-                          onPressed: () => Navigator.pop(context),
+                          onPressed: () => Navigator.pop(context, false),
                           icon: const Icon(Icons.arrow_back_rounded,
                               color: Colors.white),
                           tooltip: 'Kembali ke Kasir',
@@ -444,7 +444,7 @@ class _ScannerCartPanel extends ConsumerWidget {
                   width: double.infinity,
                   height: 44,
                   child: ElevatedButton.icon(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () => Navigator.pop(context, cart.itemCount > 0),
                     icon: const Icon(Icons.shopping_bag_rounded, size: 18),
                     label: const Text('PROSES / LIHAT KERANJANG'),
                     style: ElevatedButton.styleFrom(
