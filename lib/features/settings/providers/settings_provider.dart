@@ -74,11 +74,7 @@ class SettingsNotifier extends Notifier<StoreSettings> {
     await box.put('store_settings', settings.toMap());
   }
 
-  Future<void> refreshFromRemote() async {
-    final user = ref.read(authStateProvider).value;
-    if (user == null) return;
-    await _loadSettings(user.uid);
-  }
+
 
   Future<void> _loadSettings(String uid) async {
     StoreSettings? cachedSettings;

@@ -1,12 +1,10 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../../../features/auth/providers/auth_provider.dart';
-import '../../utils/image_helper.dart';
 import '../models/sync_task.dart';
 import '../services/local_database.dart';
 import 'connectivity_provider.dart';
@@ -477,37 +475,11 @@ class SyncNotifier extends Notifier<SyncState> {
     Map<String, dynamic> data,
     SupabaseClient client,
   ) async {
-    if (task.collection != 'products') return;
+    // Keep image files strictly device-local to conserve cloud resources.
+    // Local image paths (e.g. C:\... or /data/user/...) are stripped from cloud payload.
     final imagePath = data['image_path']?.toString();
-    if (imagePath == null ||
-        imagePath.isEmpty ||
-        imagePath.startsWith('http')) {
-      return;
-    }
-
-    if (kIsWeb) {
-      // A browser-local path is not resolvable on another device.
+    if (imagePath != null && !imagePath.startsWith('http')) {
       data.remove('image_path');
-      return;
     }
-
-    final resolvedPath = await ImageHelper.resolveLocalPath(imagePath);
-    if (resolvedPath == null) {
-      throw StateError('Foto produk lokal tidak ditemukan: $imagePath');
-    }
-    final imageFile = File(resolvedPath);
-    if (!await imageFile.exists()) {
-      throw StateError('Foto produk lokal tidak ditemukan: $resolvedPath');
-    }
-
-    final storagePath = 'users/$_uid/products/${task.documentId}.jpg';
-    await client.storage.from('products').uploadBinary(
-          storagePath,
-          await imageFile.readAsBytes(),
-          fileOptions:
-              const FileOptions(contentType: 'image/jpeg', upsert: true),
-        );
-    data['image_path'] =
-        client.storage.from('products').getPublicUrl(storagePath);
   }
 }
