@@ -210,11 +210,19 @@ class SettingsNotifier extends Notifier<StoreSettings> {
     final targetUid = uid ?? ref.read(authStateProvider).value?.uid;
     if (targetUid == null) throw 'User session not found';
 
-    try {
-      // Update local state IMMEDIATELY so UI can react (e.g. AuthGate)
-      state = settings.copyWith(isLoading: false);
+    // 1. Update local Riverpod state IMMEDIATELY
+    state = settings.copyWith(isLoading: false);
 
-      // 1. Persist to Remote
+    // 2. Persist to local Hive Cache IMMEDIATELY
+    try {
+      final box = await _getBox(targetUid);
+      await box.put('store_settings', settings.toMap());
+    } catch (e) {
+      debugPrint('Hive Settings Cache Error: $e');
+    }
+
+    // 3. Persist to Remote (Supabase) - fail-soft on schema/network issues
+    try {
       final remoteSettings = settings.toMap()
         ..remove('logo_url')
         ..remove('qris_image_path');
@@ -222,17 +230,9 @@ class SettingsNotifier extends Notifier<StoreSettings> {
         'id': targetUid,
         ...remoteSettings,
         'updated_at': DateTime.now().toIso8601String(),
-      }).timeout(const Duration(seconds: 10));
-
-      // 2. Persist to Hive Cache
-      final box = await _getBox(targetUid);
-      await box.put('store_settings', settings.toMap());
+      }).timeout(const Duration(seconds: 5));
     } catch (e) {
-      debugPrint('Update Settings Error: $e');
-      // Update Hive anyway for offline consistency
-      final box = await _getBox(targetUid);
-      await box.put('store_settings', settings.toMap());
-      rethrow;
+      debugPrint('Supabase Remote Settings Sync Exception: $e');
     }
   }
 }

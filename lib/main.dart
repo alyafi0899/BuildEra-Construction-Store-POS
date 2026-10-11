@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
+import 'features/settings/providers/settings_provider.dart';
 import 'core/utils/responsive_breakpoints.dart';
 import 'shared/widgets/sidebar.dart';
 import 'features/cashier/presentation/pages/cashier_page.dart';
@@ -334,16 +335,20 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   void _showMoreDestinations(
       BuildContext context, WidgetRef ref, int selectedIndex) {
-    const destinations = <(int, String, IconData)>[
-      (10, 'Pembelian', Icons.local_shipping_rounded),
-      (11, 'Riwayat Beli', Icons.history_edu_rounded),
-      (4, 'Pelanggan', Icons.people_rounded),
-      (6, 'Label Barcode', Icons.qr_code_2_rounded),
-      (5, 'Analitik', Icons.bar_chart_rounded),
-      (8, 'Tagihan', Icons.receipt_rounded),
-      (7, 'Pengaturan', Icons.settings_rounded),
-      (9, 'Tampilan Pelanggan', Icons.display_settings_rounded),
+    final settings = ref.read(settingsProvider);
+
+    final allDestinations = <(int, String, IconData, bool)>[
+      (10, 'Pembelian', Icons.local_shipping_rounded, settings.enablePurchase),
+      (11, 'Riwayat Beli', Icons.history_edu_rounded, settings.enablePurchase),
+      (4, 'Pelanggan', Icons.people_rounded, settings.enableDebts),
+      (6, 'Label Barcode', Icons.qr_code_2_rounded, settings.enableBarcode),
+      (5, 'Analitik', Icons.bar_chart_rounded, settings.enableAnalytics),
+      (8, 'Tagihan', Icons.receipt_rounded, settings.enableBills),
+      (7, 'Pengaturan', Icons.settings_rounded, true),
+      (9, 'Tampilan Pelanggan', Icons.display_settings_rounded, true),
     ];
+
+    final filtered = allDestinations.where((d) => d.$4).toList();
 
     showModalBottomSheet<void>(
       context: context,
@@ -352,7 +357,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         child: ListView(
           shrinkWrap: true,
           children: [
-            for (final destination in destinations)
+            for (final destination in filtered)
               ListTile(
                 leading: Icon(destination.$3),
                 title: Text(destination.$2),

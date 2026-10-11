@@ -28,6 +28,19 @@ class ProductFormDialog extends ConsumerStatefulWidget {
   const ProductFormDialog({super.key, this.product});
 
   static Future<void> show(BuildContext context, {Product? product}) {
+    final isMobile = MediaQuery.of(context).size.width < 700;
+    if (isMobile) {
+      return Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => Scaffold(
+            backgroundColor: AppTheme.bg,
+            body: SafeArea(
+              child: ProductFormDialog(product: product),
+            ),
+          ),
+        ),
+      );
+    }
     return showDialog(
       context:            context,
       barrierDismissible: false,
@@ -300,798 +313,6 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
     setState(() => _units[idx] = updated);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final width = MediaQuery.of(context).size.width;
-    final isCompact = width < 700;
-
-    final dialogContent = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // ── Header ──────────────────────────────────────────────────
-        Container(
-          padding: EdgeInsets.symmetric(
-              horizontal: isCompact ? 16 : 24, vertical: isCompact ? 12 : 20),
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: AppTheme.border)),
-          ),
-          child: Row(children: [
-            const Icon(Icons.inventory_2_rounded,
-                color: AppTheme.accent, size: 22),
-            const SizedBox(width: 12),
-            Text(
-              widget.product == null
-                  ? 'Tambah Produk Baru'
-                  : 'Edit Produk',
-              style: isCompact
-                  ? const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)
-                  : Theme.of(context).textTheme.headlineMedium,
-            ),
-            const Spacer(),
-            IconButton(
-              onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.close, color: AppTheme.textMuted),
-            ),
-          ]),
-        ),
-
-            // ── Body ────────────────────────────────────────────────────
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Image & Basic Info
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildImagePicker(),
-                          const SizedBox(width: 24),
-                          Expanded(
-                            child: Column(
-                              children: [
-                                // Row 1: name + barcode
-                                Row(children: [
-                                  Expanded(
-                                    flex: 3,
-                                    child: TextFormField(
-                                      controller: _name,
-                                      keyboardType: TextInputType.text,
-                                      decoration: const InputDecoration(labelText: 'Nama Produk *'),
-                                      validator:  (v) => v!.trim().isEmpty ? 'Nama wajib diisi' : null,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    flex: 2,
-                                    child: TextFormField(
-                                      controller: _barcode,
-                                      keyboardType: TextInputType.text,
-                                      decoration: InputDecoration(
-                                        labelText:  'Barcode',
-                                        hintText:   'Scan atau ketik barcode',
-                                        prefixIcon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
-                                        suffixIcon: _generatingBarcode 
-                                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                                          : IconButton(
-                                              icon: const Icon(Icons.auto_fix_high_rounded, size: 18, color: AppTheme.accent),
-                                              tooltip: 'Generate Barcode',
-                                              onPressed: _generateBarcode,
-                                            ),
-                                      ),
-                                    ),
-                                  ),
-                                ]),
-                                const SizedBox(height: 16),
-
-                                TextFormField(
-                                  controller: _description,
-                                  maxLines: 2,
-                                  keyboardType: TextInputType.multiline,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Deskripsi Produk',
-                                    hintText: 'Tambahkan keterangan detail mengenai produk ini...',
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-
-                                Row(children: [
-                                  Expanded(
-                                    flex: 2,
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Text('Kategori Produk *', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-                                        const SizedBox(height: 8),
-                                        Autocomplete<String>(
-                                          optionsBuilder: (TextEditingValue textEditingValue) {
-                                            final list = ref.read(productsProvider).asData?.value.map((p) => p.category).toSet().toList() ?? [];
-                                            final combined = {...AppConstants.categories, ...list}.toList();
-                                            if (textEditingValue.text.isEmpty) {
-                                              return combined;
-                                            }
-                                            return combined.where((String option) {
-                                              return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
-                                            });
-                                          },
-                                          onSelected: (String selection) {
-                                            _categoryCtrl.text = selection;
-                                          },
-                                          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                                            if (controller.text.isEmpty && _categoryCtrl.text.isNotEmpty) {
-                                              controller.text = _categoryCtrl.text;
-                                            }
-                                            return TextFormField(
-                                              controller: controller,
-                                              focusNode: focusNode,
-                                              onChanged: (v) => _categoryCtrl.text = v,
-                                              keyboardType: TextInputType.text,
-                                              decoration: const InputDecoration(
-                                                labelText: 'Kategori Produk *',
-                                                hintText: 'Pilih atau ketik baru...',
-                                                suffixIcon: Icon(Icons.arrow_drop_down, size: 20),
-                                              ),
-                                              validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
-                                            );
-                                          },
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Autocomplete<String>(
-                            optionsBuilder: (TextEditingValue textEditingValue) {
-                              final list = ref.read(productsProvider).asData?.value.map((p) => p.baseUnit).toSet().toList() ?? [];
-                              final combined = {...AppConstants.baseUnits, ...list}.toList();
-                              if (textEditingValue.text.isEmpty) {
-                                return combined;
-                              }
-                              return combined.where((String option) {
-                                return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
-                              });
-                            },
-                            onSelected: (String selection) {
-                              setState(() {
-                                _baseUnitCtrl.text = selection;
-                              });
-                            },
-                            fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                              if (controller.text.isEmpty && _baseUnitCtrl.text.isNotEmpty) {
-                                controller.text = _baseUnitCtrl.text;
-                              }
-                              return TextFormField(
-                                controller: controller,
-                                focusNode: focusNode,
-                                onChanged: (v) => setState(() => _baseUnitCtrl.text = v),
-                                keyboardType: TextInputType.text,
-                                decoration: const InputDecoration(
-                                  labelText: 'Satuan Dasar *',
-                                  hintText: 'e.g. pcs, kg, m',
-                                  suffixIcon: Icon(Icons.arrow_drop_down, size: 20),
-                                ),
-                                validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                            Expanded(
-                              child: ScrollableQtyField(
-                                controller: _stock,
-                                onChanged: (_) => _updateCalculatedCost(),
-                                child: TextFormField(
-                                  controller:   _stock,
-                                  decoration:   const InputDecoration(labelText: 'Jumlah Barang *'),
-                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                  onChanged: (_) => _updateCalculatedCost(),
-                                  validator: (v) {
-                                    if (v == null || v.isEmpty) return 'Wajib diisi';
-                                    if (Formatters.parseQuantity(v) <= 0) return 'Format salah';
-                                    return null;
-                                  },
-                                ),
-                              ),
-                            ),
-                      ]),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-
-                      // ── Section: Biaya & Supplier ──────────────────
-                      _sectionLabel(context, 'Biaya & Supplier'),
-                      const SizedBox(height: 16),
-
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppTheme.surfaceAlt.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppTheme.border),
-                        ),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                const Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text('Metode Perhitungan Modal', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                      Text('Pilih Otomatis jika ingin menghitung modal dari total beli + ongkir', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
-                                    ],
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.bg,
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Text('Otomatis', style: TextStyle(fontSize: 11, fontWeight: !_isManualCost ? FontWeight.bold : FontWeight.normal, color: !_isManualCost ? AppTheme.accent : AppTheme.textMuted)),
-                                      Switch(
-                                        value: _isManualCost,
-                                        onChanged: (v) => setState(() {
-                                          _isManualCost = v;
-                                          if (v) {
-                                            // Reset shipping if switching to manual mode
-                                            _supplierShippingCost.text = '';
-                                            _selectedShippingId = null;
-                                            _shippingPaymentStatus = PaymentStatus.notApplicable;
-                                          }
-                                          _updateCalculatedCost();
-                                        }),
-                                        activeThumbColor: AppTheme.accent,
-                                      ),
-                                      Text('Manual', style: TextStyle(fontSize: 11, fontWeight: _isManualCost ? FontWeight.bold : FontWeight.normal, color: _isManualCost ? AppTheme.accent : AppTheme.textMuted)),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const Divider(height: 32),
-                            
-                            if (!_isManualCost) ...[
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: TextFormField(
-                                      controller: _supplierPrice,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Harga Total Supplier (Rp)',
-                                        prefixText: 'Rp ',
-                                        isDense: true,
-                                      ),
-                                      keyboardType: TextInputType.number,
-                                      inputFormatters: [CurrencyInputFormatter()],
-                                      onChanged: (v) {
-                                        _updateCalculatedCost();
-                                        // Auto-transition status from N/A to Unpaid if price > 0
-                                        if (Formatters.parsePrice(v) > 0 && _supplierPaymentStatus == PaymentStatus.notApplicable) {
-                                          setState(() => _supplierPaymentStatus = PaymentStatus.unpaid);
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: TextFormField(
-                                      controller: _supplierShippingCost,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Total Ongkos Kirim (Rp)',
-                                        prefixText: 'Rp ',
-                                        isDense: true,
-                                      ),
-                                      keyboardType: TextInputType.number,
-                                      inputFormatters: [CurrencyInputFormatter()],
-                                      onChanged: (v) {
-                                        _updateCalculatedCost();
-                                        // Auto-transition status from N/A to Unpaid if cost > 0
-                                        if (Formatters.parsePrice(v) > 0 && _shippingPaymentStatus == PaymentStatus.notApplicable) {
-                                          setState(() => _shippingPaymentStatus = PaymentStatus.unpaid);
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 16),
-                            ],
-
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: TextFormField(
-                                    controller: _costPrice,
-                                    readOnly: !_isManualCost,
-                                    decoration: InputDecoration(
-                                      labelText: 'Total Modal per Unit (Rp) *',
-                                      prefixText: 'Rp ',
-                                      fillColor: !_isManualCost ? AppTheme.bg.withValues(alpha: 0.5) : null,
-                                      filled: !_isManualCost,
-                                      helperText: !_isManualCost ? 'Dihitung otomatis: (Beli+Ongkir)/Qty' : 'Input harga modal akhir per unit',
-                                    ),
-                                    keyboardType: TextInputType.number,
-                                    inputFormatters: [CurrencyInputFormatter()],
-                                    onChanged: (_) {
-                                      setState(() {});
-                                      _applyProfitPercentage();
-                                    },
-                                    validator: (v) {
-                                      final val = Formatters.parsePrice(v ?? '');
-                                      if (val == 0 && (v ?? '').isNotEmpty && (v ?? '') != '0') return 'Format salah';
-                                      if (val == 0 && (v ?? '').isEmpty) return 'Wajib diisi';
-                                      return null;
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Expanded(
-                                        flex: 2,
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            TextFormField(
-                                              controller: _profitPercentCtrl,
-                                              decoration: InputDecoration(
-                                                labelText: 'Profit %',
-                                                suffixText: '%',
-                                                suffixIcon: PopupMenuButton<int>(
-                                                  icon: const Icon(Icons.arrow_drop_down, size: 20),
-                                                  tooltip: 'Shortcut %',
-                                                  onSelected: (val) {
-                                                    _profitPercentCtrl.text = val.toString();
-                                                    _applyProfitPercentage();
-                                                  },
-                                                  itemBuilder: (context) => [5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29]
-                                                      .map((v) => PopupMenuItem(value: v, child: Text('$v%')))
-                                                      .toList(),
-                                                ),
-                                              ),
-                                              keyboardType: TextInputType.number,
-                                              onChanged: (_) => _applyProfitPercentage(),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        flex: 3,
-                                        child: TextFormField(
-                                          controller: _basePrice,
-                                          decoration: const InputDecoration(
-                                            labelText: 'Harga Jual (Rp) *',
-                                            prefixText: 'Rp ',
-                                          ),
-                                          keyboardType: TextInputType.number,
-                                          inputFormatters: [CurrencyInputFormatter()],
-                                          onChanged: (_) => _onBasePriceChanged(),
-                                          validator: (v) {
-                                            final sell = Formatters.parsePrice(v ?? '');
-                                            final cost = Formatters.parsePrice(_costPrice.text);
-                                            if (sell <= 0) return 'Wajib diisi';
-                                            if (sell < cost) return 'Harga jual di bawah modal';
-                                            return null;
-                                          },
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            
-                            const SizedBox(height: 12),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              decoration: BoxDecoration(
-                                color: _netProfit >= 0 ? AppTheme.success.withValues(alpha: 0.1) : AppTheme.danger.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: (_netProfit >= 0 ? AppTheme.success : AppTheme.danger).withValues(alpha: 0.3)),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(_netProfit >= 0 ? Icons.trending_up_rounded : Icons.trending_down_rounded, 
-                                    color: _netProfit >= 0 ? AppTheme.success : AppTheme.danger, size: 20),
-                                  const SizedBox(width: 12),
-                                  const Text('Estimasi Profit Bersih:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-                                  const Spacer(),
-                                  Text(Formatters.currency(_netProfit), 
-                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: _netProfit >= 0 ? AppTheme.success : AppTheme.danger)),
-                                  Text(' / unit', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // ── Section: Pengiriman & Supplier (Detail) ─────
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Informasi Supplier', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                const SizedBox(height: 12),
-                                ref.watch(suppliersProvider).when(
-                                  data: (list) => Column(
-                                    children: [
-                                      SizedBox(
-                                        height: 48,
-                                        child: DropdownButtonFormField<String?>(
-                                          initialValue: _selectedSupplierId,
-                                          isExpanded: true,
-                                          decoration: const InputDecoration(labelText: 'Pilih Supplier', isDense: true),
-                                          dropdownColor: AppTheme.surfaceAlt,
-                                          items: [
-                                            const DropdownMenuItem(value: null, child: Text('Belum Dipilih', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic))),
-                                            ...list.map((s) => DropdownMenuItem(
-                                              value: s.id,
-                                              child: Text(s.name, style: const TextStyle(fontSize: 12)),
-                                            )),
-                                          ],
-                                          onChanged: (v) => setState(() => _selectedSupplierId = v),
-                                          validator: (v) {
-                                            // Mandatory if Price > 0 in Auto mode
-                                            if (!_isManualCost && Formatters.parsePrice(_supplierPrice.text) > 0 && v == null) {
-                                              return 'Wajib pilih supplier';
-                                            }
-                                            return null;
-                                          },
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      SizedBox(
-                                        width: double.infinity,
-                                        child: OutlinedButton.icon(
-                                          onPressed: () => _showQuickAddSupplier(context),
-                                          icon: const Icon(Icons.add_business_rounded, size: 16),
-                                          label: const Text('Daftarkan Supplier Baru', style: TextStyle(fontSize: 11)),
-                                          style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  loading: () => const AppLoading(),
-                                  error: (_, __) => const Text('Gagal memuat'),
-                                ),
-                                const SizedBox(height: 12),
-                                _paymentStatusDropdown(
-                                  label: 'Status Bayar Barang',
-                                  value: _supplierPaymentStatus,
-                                  onChanged: (v) {
-                                    setState(() {
-                                      _supplierPaymentStatus = v!;
-                                      if (v == PaymentStatus.paid) {
-                                        _supplierPaidAmount.text = _supplierPrice.text.isEmpty ? '0' : _supplierPrice.text;
-                                      } else {
-                                        _supplierPaidAmount.text = '0';
-                                      }
-                                    });
-                                  },
-                                  validator: (v) {
-                                    // Mandatory if Price > 0 in Auto mode
-                                    if (!_isManualCost && Formatters.parsePrice(_supplierPrice.text) > 0 && (v == null || v == PaymentStatus.notApplicable)) {
-                                      return 'Pilih status bayar';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                                if (_supplierPaymentStatus == PaymentStatus.partial) ...[
-                                  const SizedBox(height: 8),
-                                  TextFormField(
-                                    controller: _supplierPaidAmount,
-                                    decoration: const InputDecoration(labelText: 'Jumlah Cicilan Awal (Rp) *', prefixText: 'Rp ', isDense: true),
-                                    keyboardType: TextInputType.number,
-                                    inputFormatters: [CurrencyInputFormatter()],
-                                    validator: (v) => Formatters.parsePrice(v ?? '') <= 0 ? 'Wajib diisi untuk status Cicilan' : null,
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 24),
-                          if (!_isManualCost)
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Informasi Ekspedisi / Kurir', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                const SizedBox(height: 12),
-                                ref.watch(shippingServicesProvider).when(
-                                  data: (list) => Column(
-                                    children: [
-                                      SizedBox(
-                                        height: 48,
-                                        child: DropdownButtonFormField<String?>(
-                                          initialValue: _selectedShippingId,
-                                          isExpanded: true,
-                                          decoration: const InputDecoration(labelText: 'Pilih Ekspedisi', isDense: true),
-                                          dropdownColor: AppTheme.surfaceAlt,
-                                          items: [
-                                            const DropdownMenuItem(value: null, child: Text('Belum Dipilih', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic))),
-                                            ...list.map((s) => DropdownMenuItem(
-                                              value: s.id,
-                                              child: Text(s.name, style: const TextStyle(fontSize: 12)),
-                                            )),
-                                          ],
-                                          onChanged: (v) => setState(() => _selectedShippingId = v),
-                                          validator: (v) {
-                                            // Mandatory if Shipping Cost > 0
-                                            if (Formatters.parsePrice(_supplierShippingCost.text) > 0 && v == null) {
-                                              return 'Wajib pilih ekspedisi';
-                                            }
-                                            return null;
-                                          },
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      SizedBox(
-                                        width: double.infinity,
-                                        child: OutlinedButton.icon(
-                                          onPressed: () => _showQuickAddShipping(context),
-                                          icon: const Icon(Icons.local_shipping_rounded, size: 16),
-                                          label: const Text('Daftarkan Ekspedisi Baru', style: TextStyle(fontSize: 11)),
-                                          style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  loading: () => const AppLoading(),
-                                  error: (_, __) => const Text('Gagal memuat'),
-                                ),
-                                const SizedBox(height: 12),
-                                _paymentStatusDropdown(
-                                  label: 'Status Bayar Ongkir',
-                                  value: _shippingPaymentStatus,
-                                  onChanged: (v) {
-                                    setState(() {
-                                      _shippingPaymentStatus = v!;
-                                      if (v == PaymentStatus.paid) {
-                                        _shippingPaidAmount.text = _supplierShippingCost.text.isEmpty ? '0' : _supplierShippingCost.text;
-                                      } else {
-                                        _shippingPaidAmount.text = '0';
-                                      }
-                                    });
-                                  },
-                                  validator: (v) {
-                                    // Mandatory if Shipping Cost > 0
-                                    if (Formatters.parsePrice(_supplierShippingCost.text) > 0 && (v == null || v == PaymentStatus.notApplicable)) {
-                                      return 'Pilih status bayar';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                                if (_shippingPaymentStatus == PaymentStatus.partial) ...[
-                                  const SizedBox(height: 8),
-                                  TextFormField(
-                                    controller: _shippingPaidAmount,
-                                    decoration: const InputDecoration(labelText: 'Jumlah Cicilan Awal (Rp) *', prefixText: 'Rp ', isDense: true),
-                                    keyboardType: TextInputType.number,
-                                    inputFormatters: [CurrencyInputFormatter()],
-                                    validator: (v) => Formatters.parsePrice(v ?? '') <= 0 ? 'Wajib diisi untuk status Cicilan' : null,
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 28),
-
-                      Row(children: [
-                        _sectionLabel(context, 'Satuan Jual & Harga (Opsional)'),
-                        const Spacer(),
-                        TextButton.icon(
-                          onPressed: _addUnit,
-                          icon:  const Icon(Icons.add_circle_outline_rounded, size: 16),
-                          label: const Text('Tambah Satuan'),
-                        ),
-                      ]),
-                      const SizedBox(height: 12),
-
-                      if (_units.isEmpty)
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: AppTheme.surfaceAlt.withValues(alpha: 0.3),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: AppTheme.border.withValues(alpha: 0.5)),
-                          ),
-                          child: const Text(
-                            'Hanya gunakan Satuan Dasar untuk penjualan ini. Klik "Tambah Satuan" jika ingin menjual dalam satuan lain (seperti Box, Dus, dll).',
-                            style: TextStyle(color: AppTheme.textMuted, fontSize: 12, fontStyle: FontStyle.italic),
-                          ),
-                        )
-                      else
-                        Container(
-                          decoration: BoxDecoration(
-                            border:       Border.all(color: AppTheme.border),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Column(children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                              decoration: const BoxDecoration(
-                                color:        AppTheme.surfaceAlt,
-                                borderRadius: BorderRadius.vertical(top: Radius.circular(9)),
-                              ),
-                              child: Row(children: [
-                                Expanded(flex: 2, child: _th('Satuan Jual')),
-                                const SizedBox(width: 12),
-                                Expanded(flex: 3, child: _th('Konversi (ke Dasar)')),
-                                const SizedBox(width: 12),
-                                Expanded(flex: 2, child: _th('Harga Jual')),
-                                const SizedBox(width: 44),
-                              ]),
-                            ),
-                            ListView.builder(
-                              shrinkWrap: true,
-                              physics:    const NeverScrollableScrollPhysics(),
-                              itemCount:  _units.length,
-                              itemBuilder: (context, i) => _UnitRowWidget(
-                                key:       ValueKey(_units[i].id),
-                                entry:     _units[i],
-                                baseUnit:  _baseUnitCtrl.text,
-                                isLast:    i == _units.length - 1,
-                                canDelete: _units.isNotEmpty,
-                                onChanged: (u) => _updateUnit(i, u),
-                                onDelete:  () => _removeUnit(i),
-                              ),
-                            ),
-                          ]),
-                        ),
-                      const SizedBox(height: 32),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // ── Footer ──────────────────────────────────────────────────
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: AppTheme.border)),
-              ),
-              child: Row(children: [
-                OutlinedButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child:     const Text('Batal'),
-                ),
-                const Spacer(),
-                SizedBox(
-                  width:  200,
-                  height: 46,
-                  child: ElevatedButton.icon(
-                    onPressed: _saving ? null : _save,
-                    icon:  _saving ? const AppLoading() : const Icon(Icons.check_rounded),
-                    label: Text(_saving ? 'Menyimpan...' : 'Simpan Produk'),
-                  ),
-                ),
-              ]),
-            ),
-          ],
-        );
-
-    final shortcutsWidget = Shortcuts(
-      shortcuts: {
-        LogicalKeySet(LogicalKeyboardKey.enter): const ActivateIntent(),
-        LogicalKeySet(LogicalKeyboardKey.numpadEnter): const ActivateIntent(),
-      },
-      child: Actions(
-        actions: {
-          ActivateIntent: CallbackAction<ActivateIntent>(
-            onInvoke: (intent) => _save(),
-          ),
-        },
-        child: isCompact
-            ? Dialog.fullscreen(
-                backgroundColor: AppTheme.surface,
-                child: dialogContent,
-              )
-            : Dialog(
-                insetPadding: const EdgeInsets.all(40),
-                child: SizedBox(
-                  width: 740,
-                  child: dialogContent,
-                ),
-              ),
-      ),
-    );
-
-    return shortcutsWidget;
-  }
-
-  Widget _buildImagePicker() {
-    return InkWell(
-      onTap: _pickImage,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        width:  160,
-        height: 160,
-        decoration: BoxDecoration(
-          color:        AppTheme.surfaceAlt,
-          borderRadius: BorderRadius.circular(12),
-          border:       Border.all(color: AppTheme.border),
-        ),
-        child: _imageBytes != null
-            ? ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.memory(_imageBytes!, fit: BoxFit.cover),
-              )
-            : widget.product?.imagePath != null
-                ? ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.file(File(widget.product!.imagePath!), fit: BoxFit.cover),
-                  )
-                : const Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.add_a_photo_rounded, color: AppTheme.textMuted, size: 32),
-                      SizedBox(height: 8),
-                      Text('Foto Produk', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
-                    ],
-                  ),
-      ),
-    );
-  }
-
-  Widget _paymentStatusDropdown({
-    required String label,
-    required PaymentStatus value,
-    required ValueChanged<PaymentStatus?> onChanged,
-    String? Function(PaymentStatus?)? validator,
-  }) {
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
-              const SizedBox(height: 4),
-              SizedBox(
-                height: 42,
-                child: DropdownButtonFormField<PaymentStatus>(
-                  initialValue: value,
-                  isExpanded: true,
-                  decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-                  dropdownColor: AppTheme.surfaceAlt,
-                  style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
-                  items: PaymentStatus.values.map((s) => DropdownMenuItem(
-                    value: s,
-                    child: Text(s.label.toUpperCase(), style: TextStyle(color: _statusColor(s), fontWeight: FontWeight.bold, fontSize: 11)),
-                  )).toList(),
-                  onChanged: onChanged,
-                  validator: validator,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
   void _showQuickAddSupplier(BuildContext context, {Supplier? supplier}) {
     final nameCtrl = TextEditingController(text: supplier?.name);
     final phoneCtrl = TextEditingController(text: supplier?.phone);
@@ -1192,6 +413,1029 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
             child: const Text('Simpan'),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _paymentStatusDropdown({
+    required String label,
+    required PaymentStatus value,
+    required ValueChanged<PaymentStatus?> onChanged,
+    String? Function(PaymentStatus?)? validator,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+              const SizedBox(height: 4),
+              SizedBox(
+                height: 42,
+                child: DropdownButtonFormField<PaymentStatus>(
+                  initialValue: value,
+                  isExpanded: true,
+                  decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                  dropdownColor: AppTheme.surfaceAlt,
+                  style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                  items: PaymentStatus.values.map((s) => DropdownMenuItem(
+                    value: s,
+                    child: Text(s.label.toUpperCase(), style: TextStyle(color: _statusColor(s), fontWeight: FontWeight.bold, fontSize: 11)),
+                  )).toList(),
+                  onChanged: onChanged,
+                  validator: validator,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSupplierColumn() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Informasi Supplier', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+        const SizedBox(height: 12),
+        ref.watch(suppliersProvider).when(
+          data: (list) => Column(
+            children: [
+              SizedBox(
+                height: 48,
+                child: DropdownButtonFormField<String?>(
+                  initialValue: _selectedSupplierId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Pilih Supplier', isDense: true),
+                  dropdownColor: AppTheme.surfaceAlt,
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('Belum Dipilih', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic))),
+                    ...list.map((s) => DropdownMenuItem(
+                      value: s.id,
+                      child: Text(s.name, style: const TextStyle(fontSize: 12)),
+                    )),
+                  ],
+                  onChanged: (v) => setState(() => _selectedSupplierId = v),
+                  validator: (v) {
+                    if (!_isManualCost && Formatters.parsePrice(_supplierPrice.text) > 0 && v == null) {
+                      return 'Wajib pilih supplier';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _showQuickAddSupplier(context),
+                  icon: const Icon(Icons.add_business_rounded, size: 16),
+                  label: const Text('Daftarkan Supplier Baru', style: TextStyle(fontSize: 11)),
+                  style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                ),
+              ),
+            ],
+          ),
+          loading: () => const AppLoading(),
+          error: (_, __) => const Text('Gagal memuat'),
+        ),
+        const SizedBox(height: 12),
+        _paymentStatusDropdown(
+          label: 'Status Bayar Barang',
+          value: _supplierPaymentStatus,
+          onChanged: (v) {
+            setState(() {
+              _supplierPaymentStatus = v!;
+              if (v == PaymentStatus.paid) {
+                _supplierPaidAmount.text = _supplierPrice.text.isEmpty ? '0' : _supplierPrice.text;
+              } else {
+                _supplierPaidAmount.text = '0';
+              }
+            });
+          },
+          validator: (v) {
+            if (!_isManualCost && Formatters.parsePrice(_supplierPrice.text) > 0 && (v == null || v == PaymentStatus.notApplicable)) {
+              return 'Pilih status bayar';
+            }
+            return null;
+          },
+        ),
+        if (_supplierPaymentStatus == PaymentStatus.partial) ...[
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: _supplierPaidAmount,
+            decoration: const InputDecoration(labelText: 'Jumlah Cicilan Awal (Rp) *', prefixText: 'Rp ', isDense: true),
+            keyboardType: TextInputType.number,
+            inputFormatters: [CurrencyInputFormatter()],
+            validator: (v) => Formatters.parsePrice(v ?? '') <= 0 ? 'Wajib diisi untuk status Cicilan' : null,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildShippingColumn() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Informasi Ekspedisi / Kurir', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+        const SizedBox(height: 12),
+        ref.watch(shippingServicesProvider).when(
+          data: (list) => Column(
+            children: [
+              SizedBox(
+                height: 48,
+                child: DropdownButtonFormField<String?>(
+                  initialValue: _selectedShippingId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Pilih Ekspedisi', isDense: true),
+                  dropdownColor: AppTheme.surfaceAlt,
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('Belum Dipilih', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic))),
+                    ...list.map((s) => DropdownMenuItem(
+                      value: s.id,
+                      child: Text(s.name, style: const TextStyle(fontSize: 12)),
+                    )),
+                  ],
+                  onChanged: (v) => setState(() => _selectedShippingId = v),
+                  validator: (v) {
+                    if (Formatters.parsePrice(_supplierShippingCost.text) > 0 && v == null) {
+                      return 'Wajib pilih ekspedisi';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _showQuickAddShipping(context),
+                  icon: const Icon(Icons.local_shipping_rounded, size: 16),
+                  label: const Text('Daftarkan Ekspedisi Baru', style: TextStyle(fontSize: 11)),
+                  style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                ),
+              ),
+            ],
+          ),
+          loading: () => const AppLoading(),
+          error: (_, __) => const Text('Gagal memuat'),
+        ),
+        const SizedBox(height: 12),
+        _paymentStatusDropdown(
+          label: 'Status Bayar Ongkir',
+          value: _shippingPaymentStatus,
+          onChanged: (v) {
+            setState(() {
+              _shippingPaymentStatus = v!;
+              if (v == PaymentStatus.paid) {
+                _shippingPaidAmount.text = _supplierShippingCost.text.isEmpty ? '0' : _supplierShippingCost.text;
+              } else {
+                _shippingPaidAmount.text = '0';
+              }
+            });
+          },
+          validator: (v) {
+            if (Formatters.parsePrice(_supplierShippingCost.text) > 0 && (v == null || v == PaymentStatus.notApplicable)) {
+              return 'Pilih status bayar';
+            }
+            return null;
+          },
+        ),
+        if (_shippingPaymentStatus == PaymentStatus.partial) ...[
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: _shippingPaidAmount,
+            decoration: const InputDecoration(labelText: 'Jumlah Cicilan Awal (Rp) *', prefixText: 'Rp ', isDense: true),
+            keyboardType: TextInputType.number,
+            inputFormatters: [CurrencyInputFormatter()],
+            validator: (v) => Formatters.parsePrice(v ?? '') <= 0 ? 'Wajib diisi untuk status Cicilan' : null,
+          ),
+        ],
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final isCompact = width < 700;
+
+    final shortcutsWidget = Shortcuts(
+      shortcuts: {
+        LogicalKeySet(LogicalKeyboardKey.enter): const ActivateIntent(),
+        LogicalKeySet(LogicalKeyboardKey.numpadEnter): const ActivateIntent(),
+      },
+      child: Actions(
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (intent) => _save(),
+          ),
+        },
+        child: isCompact
+            ? Dialog.fullscreen(
+                backgroundColor: AppTheme.surface,
+                child: _buildDialogContent(context, isCompact),
+              )
+            : Dialog(
+                insetPadding: const EdgeInsets.all(40),
+                child: SizedBox(
+                  width: 740,
+                  child: _buildDialogContent(context, isCompact),
+                ),
+              ),
+      ),
+    );
+
+    return shortcutsWidget;
+  }
+
+  Widget _buildDialogContent(BuildContext context, bool isCompact) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // ── Header ──────────────────────────────────────────────────
+        Container(
+          padding: EdgeInsets.symmetric(
+              horizontal: isCompact ? 16 : 24, vertical: isCompact ? 12 : 20),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: AppTheme.border)),
+          ),
+          child: Row(children: [
+            const Icon(Icons.inventory_2_rounded,
+                color: AppTheme.accent, size: 22),
+            const SizedBox(width: 12),
+            Text(
+              widget.product == null
+                  ? 'Tambah Produk Baru'
+                  : 'Edit Produk',
+              style: isCompact
+                  ? const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)
+                  : Theme.of(context).textTheme.headlineMedium,
+            ),
+            const Spacer(),
+            IconButton(
+              onPressed: () => Navigator.of(context).pop(),
+              icon: const Icon(Icons.close, color: AppTheme.textMuted),
+            ),
+          ]),
+        ),
+
+            // ── Body ────────────────────────────────────────────────────
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Image & Basic Info
+                      if (isCompact) ...[
+                        Center(child: _buildImagePicker()),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _name,
+                          keyboardType: TextInputType.text,
+                          decoration: const InputDecoration(labelText: 'Nama Produk *'),
+                          validator: (v) => v!.trim().isEmpty ? 'Nama wajib diisi' : null,
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _barcode,
+                          keyboardType: TextInputType.text,
+                          decoration: InputDecoration(
+                            labelText: 'Barcode',
+                            hintText: 'Scan atau ketik barcode',
+                            prefixIcon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
+                            suffixIcon: _generatingBarcode
+                                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                                : IconButton(
+                                    icon: const Icon(Icons.auto_fix_high_rounded, size: 18, color: AppTheme.accent),
+                                    tooltip: 'Generate Barcode',
+                                    onPressed: _generateBarcode,
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _description,
+                          maxLines: 2,
+                          keyboardType: TextInputType.multiline,
+                          decoration: const InputDecoration(
+                            labelText: 'Deskripsi Produk',
+                            hintText: 'Tambahkan keterangan detail mengenai produk ini...',
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Kategori Produk *', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                            const SizedBox(height: 8),
+                            Autocomplete<String>(
+                              optionsBuilder: (TextEditingValue textEditingValue) {
+                                final list = ref.read(productsProvider).asData?.value.map((p) => p.category).toSet().toList() ?? [];
+                                final combined = {...AppConstants.categories, ...list}.toList();
+                                if (textEditingValue.text.isEmpty) return combined;
+                                return combined.where((String option) => option.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                              },
+                              onSelected: (String selection) => _categoryCtrl.text = selection,
+                              fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                                if (controller.text.isEmpty && _categoryCtrl.text.isNotEmpty) {
+                                  controller.text = _categoryCtrl.text;
+                                }
+                                return TextFormField(
+                                  controller: controller,
+                                  focusNode: focusNode,
+                                  onChanged: (v) => _categoryCtrl.text = v,
+                                  keyboardType: TextInputType.text,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Kategori Produk *',
+                                    hintText: 'Pilih atau ketik baru...',
+                                    suffixIcon: Icon(Icons.arrow_drop_down, size: 20),
+                                  ),
+                                  validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Autocomplete<String>(
+                          optionsBuilder: (TextEditingValue textEditingValue) {
+                            final list = ref.read(productsProvider).asData?.value.map((p) => p.baseUnit).toSet().toList() ?? [];
+                            final combined = {...AppConstants.baseUnits, ...list}.toList();
+                            if (textEditingValue.text.isEmpty) return combined;
+                            return combined.where((String option) => option.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                          },
+                          onSelected: (String selection) => setState(() => _baseUnitCtrl.text = selection),
+                          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                            if (controller.text.isEmpty && _baseUnitCtrl.text.isNotEmpty) {
+                              controller.text = _baseUnitCtrl.text;
+                            }
+                            return TextFormField(
+                              controller: controller,
+                              focusNode: focusNode,
+                              onChanged: (v) => setState(() => _baseUnitCtrl.text = v),
+                              keyboardType: TextInputType.text,
+                              decoration: const InputDecoration(
+                                labelText: 'Satuan Dasar *',
+                                hintText: 'e.g. pcs, kg, m',
+                                suffixIcon: Icon(Icons.arrow_drop_down, size: 20),
+                              ),
+                              validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        ScrollableQtyField(
+                          controller: _stock,
+                          onChanged: (_) => _updateCalculatedCost(),
+                          child: TextFormField(
+                            controller: _stock,
+                            decoration: const InputDecoration(labelText: 'Jumlah Barang *'),
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            onChanged: (_) => _updateCalculatedCost(),
+                            validator: (v) {
+                              if (v == null || v.isEmpty) return 'Wajib diisi';
+                              if (Formatters.parseQuantity(v) <= 0) return 'Format salah';
+                              return null;
+                            },
+                          ),
+                        ),
+                      ] else ...[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildImagePicker(),
+                            const SizedBox(width: 24),
+                            Expanded(
+                              child: Column(
+                                children: [
+                                  Row(children: [
+                                    Expanded(
+                                      flex: 3,
+                                      child: TextFormField(
+                                        controller: _name,
+                                        keyboardType: TextInputType.text,
+                                        decoration: const InputDecoration(labelText: 'Nama Produk *'),
+                                        validator: (v) => v!.trim().isEmpty ? 'Nama wajib diisi' : null,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      flex: 2,
+                                      child: TextFormField(
+                                        controller: _barcode,
+                                        keyboardType: TextInputType.text,
+                                        decoration: InputDecoration(
+                                          labelText: 'Barcode',
+                                          hintText: 'Scan atau ketik barcode',
+                                          prefixIcon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
+                                          suffixIcon: _generatingBarcode 
+                                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                                            : IconButton(
+                                                icon: const Icon(Icons.auto_fix_high_rounded, size: 18, color: AppTheme.accent),
+                                                tooltip: 'Generate Barcode',
+                                                onPressed: _generateBarcode,
+                                              ),
+                                        ),
+                                      ),
+                                    ),
+                                  ]),
+                                  const SizedBox(height: 16),
+
+                                  TextFormField(
+                                    controller: _description,
+                                    maxLines: 2,
+                                    keyboardType: TextInputType.multiline,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Deskripsi Produk',
+                                      hintText: 'Tambahkan keterangan detail mengenai produk ini...',
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  Row(children: [
+                                    Expanded(
+                                      flex: 2,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text('Kategori Produk *', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                                          const SizedBox(height: 8),
+                                          Autocomplete<String>(
+                                            optionsBuilder: (TextEditingValue textEditingValue) {
+                                              final list = ref.read(productsProvider).asData?.value.map((p) => p.category).toSet().toList() ?? [];
+                                              final combined = {...AppConstants.categories, ...list}.toList();
+                                              if (textEditingValue.text.isEmpty) {
+                                                return combined;
+                                              }
+                                              return combined.where((String option) {
+                                                return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                                              });
+                                            },
+                                            onSelected: (String selection) {
+                                              _categoryCtrl.text = selection;
+                                            },
+                                            fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                                              if (controller.text.isEmpty && _categoryCtrl.text.isNotEmpty) {
+                                                controller.text = _categoryCtrl.text;
+                                              }
+                                              return TextFormField(
+                                                controller: controller,
+                                                focusNode: focusNode,
+                                                onChanged: (v) => _categoryCtrl.text = v,
+                                                keyboardType: TextInputType.text,
+                                                decoration: const InputDecoration(
+                                                  labelText: 'Kategori Produk *',
+                                                  hintText: 'Pilih atau ketik baru...',
+                                                  suffixIcon: Icon(Icons.arrow_drop_down, size: 20),
+                                                ),
+                                                validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
+                                              );
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Autocomplete<String>(
+                                        optionsBuilder: (TextEditingValue textEditingValue) {
+                                          final list = ref.read(productsProvider).asData?.value.map((p) => p.baseUnit).toSet().toList() ?? [];
+                                          final combined = {...AppConstants.baseUnits, ...list}.toList();
+                                          if (textEditingValue.text.isEmpty) {
+                                            return combined;
+                                          }
+                                          return combined.where((String option) {
+                                            return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                                          });
+                                        },
+                                        onSelected: (String selection) {
+                                          setState(() {
+                                            _baseUnitCtrl.text = selection;
+                                          });
+                                        },
+                                        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                                          if (controller.text.isEmpty && _baseUnitCtrl.text.isNotEmpty) {
+                                            controller.text = _baseUnitCtrl.text;
+                                          }
+                                          return TextFormField(
+                                            controller: controller,
+                                            focusNode: focusNode,
+                                            onChanged: (v) => setState(() => _baseUnitCtrl.text = v),
+                                            keyboardType: TextInputType.text,
+                                            decoration: const InputDecoration(
+                                              labelText: 'Satuan Dasar *',
+                                              hintText: 'e.g. pcs, kg, m',
+                                              suffixIcon: Icon(Icons.arrow_drop_down, size: 20),
+                                            ),
+                                            validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: ScrollableQtyField(
+                                        controller: _stock,
+                                        onChanged: (_) => _updateCalculatedCost(),
+                                        child: TextFormField(
+                                          controller:   _stock,
+                                          decoration:   const InputDecoration(labelText: 'Jumlah Barang *'),
+                                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                          onChanged: (_) => _updateCalculatedCost(),
+                                          validator: (v) {
+                                            if (v == null || v.isEmpty) return 'Wajib diisi';
+                                            if (Formatters.parseQuantity(v) <= 0) return 'Format salah';
+                                            return null;
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                  ]),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 24),
+
+                      // ── Section: Biaya & Supplier ──────────────────
+                      _sectionLabel(context, 'Biaya & Supplier'),
+                      const SizedBox(height: 16),
+
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surfaceAlt.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppTheme.border),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('Metode Perhitungan Modal', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                      Text('Pilih Otomatis jika ingin menghitung modal dari total beli + ongkir', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.bg,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Text('Otomatis', style: TextStyle(fontSize: 11, fontWeight: !_isManualCost ? FontWeight.bold : FontWeight.normal, color: !_isManualCost ? AppTheme.accent : AppTheme.textMuted)),
+                                      Switch(
+                                        value: _isManualCost,
+                                        onChanged: (v) => setState(() {
+                                          _isManualCost = v;
+                                          if (v) {
+                                            // Reset shipping if switching to manual mode
+                                            _supplierShippingCost.text = '';
+                                            _selectedShippingId = null;
+                                            _shippingPaymentStatus = PaymentStatus.notApplicable;
+                                          }
+                                          _updateCalculatedCost();
+                                        }),
+                                        activeThumbColor: AppTheme.accent,
+                                      ),
+                                      Text('Manual', style: TextStyle(fontSize: 11, fontWeight: _isManualCost ? FontWeight.bold : FontWeight.normal, color: _isManualCost ? AppTheme.accent : AppTheme.textMuted)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Divider(height: 32),
+                            
+                            if (!_isManualCost) ...[
+                              if (isCompact) ...[
+                                TextFormField(
+                                  controller: _supplierPrice,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Harga Total Supplier (Rp)',
+                                    prefixText: 'Rp ',
+                                    isDense: true,
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [CurrencyInputFormatter()],
+                                  onChanged: (v) {
+                                    _updateCalculatedCost();
+                                    if (Formatters.parsePrice(v) > 0 && _supplierPaymentStatus == PaymentStatus.notApplicable) {
+                                      setState(() => _supplierPaymentStatus = PaymentStatus.unpaid);
+                                    }
+                                  },
+                                ),
+                                const SizedBox(height: 16),
+                                TextFormField(
+                                  controller: _supplierShippingCost,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Total Ongkos Kirim (Rp)',
+                                    prefixText: 'Rp ',
+                                    isDense: true,
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [CurrencyInputFormatter()],
+                                  onChanged: (v) {
+                                    _updateCalculatedCost();
+                                    if (Formatters.parsePrice(v) > 0 && _shippingPaymentStatus == PaymentStatus.notApplicable) {
+                                      setState(() => _shippingPaymentStatus = PaymentStatus.unpaid);
+                                    }
+                                  },
+                                ),
+                              ] else ...[
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller: _supplierPrice,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Harga Total Supplier (Rp)',
+                                          prefixText: 'Rp ',
+                                          isDense: true,
+                                        ),
+                                        keyboardType: TextInputType.number,
+                                        inputFormatters: [CurrencyInputFormatter()],
+                                        onChanged: (v) {
+                                          _updateCalculatedCost();
+                                          if (Formatters.parsePrice(v) > 0 && _supplierPaymentStatus == PaymentStatus.notApplicable) {
+                                            setState(() => _supplierPaymentStatus = PaymentStatus.unpaid);
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller: _supplierShippingCost,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Total Ongkos Kirim (Rp)',
+                                          prefixText: 'Rp ',
+                                          isDense: true,
+                                        ),
+                                        keyboardType: TextInputType.number,
+                                        inputFormatters: [CurrencyInputFormatter()],
+                                        onChanged: (v) {
+                                          _updateCalculatedCost();
+                                          if (Formatters.parsePrice(v) > 0 && _shippingPaymentStatus == PaymentStatus.notApplicable) {
+                                            setState(() => _shippingPaymentStatus = PaymentStatus.unpaid);
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                              const SizedBox(height: 16),
+                            ],
+
+                            if (isCompact) ...[
+                              TextFormField(
+                                controller: _costPrice,
+                                readOnly: !_isManualCost,
+                                decoration: InputDecoration(
+                                  labelText: 'Total Modal per Unit (Rp) *',
+                                  prefixText: 'Rp ',
+                                  fillColor: !_isManualCost ? AppTheme.bg.withValues(alpha: 0.5) : null,
+                                  filled: !_isManualCost,
+                                  helperText: !_isManualCost ? 'Dihitung otomatis: (Beli+Ongkir)/Qty' : 'Input harga modal akhir per unit',
+                                ),
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [CurrencyInputFormatter()],
+                                onChanged: (_) {
+                                  setState(() {});
+                                  _applyProfitPercentage();
+                                },
+                                validator: (v) {
+                                  final val = Formatters.parsePrice(v ?? '');
+                                  if (val == 0 && (v ?? '').isNotEmpty && (v ?? '') != '0') return 'Format salah';
+                                  if (val == 0 && (v ?? '').isEmpty) return 'Wajib diisi';
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    flex: 2,
+                                    child: TextFormField(
+                                      controller: _profitPercentCtrl,
+                                      decoration: InputDecoration(
+                                        labelText: 'Profit %',
+                                        suffixText: '%',
+                                        suffixIcon: PopupMenuButton<int>(
+                                          icon: const Icon(Icons.arrow_drop_down, size: 20),
+                                          tooltip: 'Shortcut %',
+                                          onSelected: (val) {
+                                            _profitPercentCtrl.text = val.toString();
+                                            _applyProfitPercentage();
+                                          },
+                                          itemBuilder: (context) => [5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29]
+                                              .map((v) => PopupMenuItem(value: v, child: Text('$v%')))
+                                              .toList(),
+                                        ),
+                                      ),
+                                      keyboardType: TextInputType.number,
+                                      onChanged: (_) => _applyProfitPercentage(),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    flex: 3,
+                                    child: TextFormField(
+                                      controller: _basePrice,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Harga Jual (Rp) *',
+                                        prefixText: 'Rp ',
+                                      ),
+                                      keyboardType: TextInputType.number,
+                                      inputFormatters: [CurrencyInputFormatter()],
+                                      onChanged: (_) => _onBasePriceChanged(),
+                                      validator: (v) {
+                                        final sell = Formatters.parsePrice(v ?? '');
+                                        final cost = Formatters.parsePrice(_costPrice.text);
+                                        if (sell <= 0) return 'Wajib diisi';
+                                        if (sell < cost) return 'Harga jual di bawah modal';
+                                        return null;
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ] else ...[
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _costPrice,
+                                      readOnly: !_isManualCost,
+                                      decoration: InputDecoration(
+                                        labelText: 'Total Modal per Unit (Rp) *',
+                                        prefixText: 'Rp ',
+                                        fillColor: !_isManualCost ? AppTheme.bg.withValues(alpha: 0.5) : null,
+                                        filled: !_isManualCost,
+                                        helperText: !_isManualCost ? 'Dihitung otomatis: (Beli+Ongkir)/Qty' : 'Input harga modal akhir per unit',
+                                      ),
+                                      keyboardType: TextInputType.number,
+                                      inputFormatters: [CurrencyInputFormatter()],
+                                      onChanged: (_) {
+                                        setState(() {});
+                                        _applyProfitPercentage();
+                                      },
+                                      validator: (v) {
+                                        final val = Formatters.parsePrice(v ?? '');
+                                        if (val == 0 && (v ?? '').isNotEmpty && (v ?? '') != '0') return 'Format salah';
+                                        if (val == 0 && (v ?? '').isEmpty) return 'Wajib diisi';
+                                        return null;
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(
+                                          flex: 2,
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              TextFormField(
+                                                controller: _profitPercentCtrl,
+                                                decoration: InputDecoration(
+                                                  labelText: 'Profit %',
+                                                  suffixText: '%',
+                                                  suffixIcon: PopupMenuButton<int>(
+                                                    icon: const Icon(Icons.arrow_drop_down, size: 20),
+                                                    tooltip: 'Shortcut %',
+                                                    onSelected: (val) {
+                                                      _profitPercentCtrl.text = val.toString();
+                                                      _applyProfitPercentage();
+                                                    },
+                                                    itemBuilder: (context) => [5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29]
+                                                        .map((v) => PopupMenuItem(value: v, child: Text('$v%')))
+                                                        .toList(),
+                                                  ),
+                                                ),
+                                                keyboardType: TextInputType.number,
+                                                onChanged: (_) => _applyProfitPercentage(),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          flex: 3,
+                                          child: TextFormField(
+                                            controller: _basePrice,
+                                            decoration: const InputDecoration(
+                                              labelText: 'Harga Jual (Rp) *',
+                                              prefixText: 'Rp ',
+                                            ),
+                                            keyboardType: TextInputType.number,
+                                            inputFormatters: [CurrencyInputFormatter()],
+                                            onChanged: (_) => _onBasePriceChanged(),
+                                            validator: (v) {
+                                              final sell = Formatters.parsePrice(v ?? '');
+                                              final cost = Formatters.parsePrice(_costPrice.text);
+                                              if (sell <= 0) return 'Wajib diisi';
+                                              if (sell < cost) return 'Harga jual di bawah modal';
+                                              return null;
+                                            },
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                            
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _netProfit >= 0 ? AppTheme.success.withValues(alpha: 0.1) : AppTheme.danger.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: (_netProfit >= 0 ? AppTheme.success : AppTheme.danger).withValues(alpha: 0.3)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(_netProfit >= 0 ? Icons.trending_up_rounded : Icons.trending_down_rounded, 
+                                    color: _netProfit >= 0 ? AppTheme.success : AppTheme.danger, size: 20),
+                                  const SizedBox(width: 12),
+                                  const Text('Estimasi Profit Bersih:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                                  const Spacer(),
+                                  Text(Formatters.currency(_netProfit), 
+                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: _netProfit >= 0 ? AppTheme.success : AppTheme.danger)),
+                                  Text(' / unit', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // ── Section: Pengiriman & Supplier (Detail) ─────
+                      if (isCompact) ...[
+                        _buildSupplierColumn(),
+                        const SizedBox(height: 24),
+                        if (!_isManualCost) _buildShippingColumn(),
+                      ] else ...[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: _buildSupplierColumn()),
+                            const SizedBox(width: 24),
+                            if (!_isManualCost) Expanded(child: _buildShippingColumn()),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 28),
+
+                      Row(children: [
+                        _sectionLabel(context, 'Satuan Jual & Harga (Opsional)'),
+                        const Spacer(),
+                        TextButton.icon(
+                          onPressed: _addUnit,
+                          icon:  const Icon(Icons.add_circle_outline_rounded, size: 16),
+                          label: const Text('Tambah Satuan'),
+                        ),
+                      ]),
+                      const SizedBox(height: 12),
+
+                      if (_units.isEmpty)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppTheme.surfaceAlt.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: AppTheme.border.withValues(alpha: 0.5)),
+                          ),
+                          child: const Text(
+                            'Hanya gunakan Satuan Dasar untuk penjualan ini. Klik "Tambah Satuan" jika ingin menjual dalam satuan lain (seperti Box, Dus, dll).',
+                            style: TextStyle(color: AppTheme.textMuted, fontSize: 12, fontStyle: FontStyle.italic),
+                          ),
+                        )
+                      else
+                        Container(
+                          decoration: BoxDecoration(
+                            border:       Border.all(color: AppTheme.border),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Column(children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              decoration: const BoxDecoration(
+                                color:        AppTheme.surfaceAlt,
+                                borderRadius: BorderRadius.vertical(top: Radius.circular(9)),
+                              ),
+                              child: Row(children: [
+                                Expanded(flex: 2, child: _th('Satuan Jual')),
+                                const SizedBox(width: 12),
+                                Expanded(flex: 3, child: _th('Konversi (ke Dasar)')),
+                                const SizedBox(width: 12),
+                                Expanded(flex: 2, child: _th('Harga Jual')),
+                                const SizedBox(width: 44),
+                              ]),
+                            ),
+                            ListView.builder(
+                              shrinkWrap: true,
+                              physics:    const NeverScrollableScrollPhysics(),
+                              itemCount:  _units.length,
+                              itemBuilder: (context, i) => _UnitRowWidget(
+                                key:       ValueKey(_units[i].id),
+                                entry:     _units[i],
+                                baseUnit:  _baseUnitCtrl.text,
+                                isLast:    i == _units.length - 1,
+                                canDelete: _units.isNotEmpty,
+                                onChanged: (u) => _updateUnit(i, u),
+                                onDelete:  () => _removeUnit(i),
+                              ),
+                            ),
+                          ]),
+                        ),
+                      const SizedBox(height: 32),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // ── Footer ──────────────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: AppTheme.border)),
+              ),
+              child: Row(children: [
+                OutlinedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child:     const Text('Batal'),
+                ),
+                const Spacer(),
+                SizedBox(
+                  width:  200,
+                  height: 46,
+                  child: ElevatedButton.icon(
+                    onPressed: _saving ? null : _save,
+                    icon:  _saving ? const AppLoading() : const Icon(Icons.check_rounded),
+                    label: Text(_saving ? 'Menyimpan...' : 'Simpan Produk'),
+                  ),
+                ),
+              ]),
+            ),
+          ],
+        );
+  }
+
+  Widget _buildImagePicker() {
+    return InkWell(
+      onTap: _pickImage,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width:  160,
+        height: 160,
+        decoration: BoxDecoration(
+          color:        AppTheme.surfaceAlt,
+          borderRadius: BorderRadius.circular(12),
+          border:       Border.all(color: AppTheme.border),
+        ),
+        child: _imageBytes != null
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.memory(_imageBytes!, fit: BoxFit.cover),
+              )
+            : widget.product?.imagePath != null
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.file(File(widget.product!.imagePath!), fit: BoxFit.cover),
+                  )
+                : const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.add_a_photo_rounded, color: AppTheme.textMuted, size: 32),
+                      SizedBox(height: 8),
+                      Text('Foto Produk', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                    ],
+                  ),
       ),
     );
   }

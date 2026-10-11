@@ -46,170 +46,192 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
   @override
   Widget build(BuildContext context) {
     final txAsync = ref.watch(transactionsProvider);
+    final width = MediaQuery.of(context).size.width;
+    final isCompact = width < 800;
 
-    return Scaffold(
-      backgroundColor: AppTheme.bg,
-      body: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // List Section
-          Expanded(
-            flex: 6,
-            child: Column(
-              children: [
-                PageHeader(
-                  title: 'Riwayat Transaksi',
-                  subtitle: 'Semua transaksi yang telah selesai',
-                  icon: Icons.receipt_long_rounded,
-                  actions: [
-                    IconButton(
-                      onPressed: () => ref.refresh(transactionsProvider),
-                      icon: const Icon(Icons.refresh_rounded,
-                          color: AppTheme.accent),
-                    ),
-                  ],
-                ),
-
-                // Filters Bar
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  decoration: const BoxDecoration(
-                    color: AppTheme.surface,
-                    border: Border(bottom: BorderSide(color: AppTheme.border)),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: AppSearchField(
-                              controller: _searchCtrl,
-                              focusNode: _searchFocus, // Use FocusNode
-                              hintText: 'Cari nomor invoice...',
-                              onChanged: (v) => setState(() => _search = v),
-                              onClear: () => setState(() {
-                                _search = '';
-                                _searchCtrl.clear();
-                              }),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          _buildMethodDropdown(),
-                        ],
-                      ),
-                      if (_methodFilter == AppConstants.paymentPiutang) ...[
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            const Text('Status Piutang:',
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.textSecondary)),
-                            const SizedBox(width: 12),
-                            _filterChip('Semua', _debtPaidFilter == null,
-                                () => setState(() => _debtPaidFilter = null)),
-                            const SizedBox(width: 8),
-                            _filterChip('Lunas', _debtPaidFilter == true,
-                                () => setState(() => _debtPaidFilter = true)),
-                            const SizedBox(width: 8),
-                            _filterChip('Belum Lunas', _debtPaidFilter == false,
-                                () => setState(() => _debtPaidFilter = false)),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-
-                Expanded(
-                  child: txAsync.when(
-                    loading: () => const AppLoading(),
-                    error: (e, _) => Center(child: Text('Error: $e')),
-                    data: (txs) {
-                      // Apply filters
-                      final filtered = txs.where((t) {
-                        final matchSearch = _search.isEmpty ||
-                            t.invoiceNumber
-                                .toLowerCase()
-                                .contains(_search.toLowerCase());
-                        final matchMethod = _methodFilter == null ||
-                            t.paymentMethod == _methodFilter;
-
-                        bool matchDebt = true;
-                        if (_methodFilter == AppConstants.paymentPiutang &&
-                            _debtPaidFilter != null) {
-                          // We need to resolve debt status.
-                          // Since we can't easily watch debts for ALL transactions here efficiently,
-                          // we check the state from debt repository if possible or just rely on simple filtering if data available.
-                          // For now, let's assume we filter by what's loaded.
-                          // Actually, we can't accurately filter without the debt status data.
-                          // I'll skip deep debt filtering in the main list for now to avoid provider complexity,
-                          // or I'll implement it if I find a clean way.
-                        }
-
-                        return matchSearch && matchMethod && matchDebt;
-                      }).toList();
-
-                      if (filtered.isEmpty) {
-                        return const EmptyState(
-                          icon: Icons.receipt_long_outlined,
-                          title: 'Transaksi tidak ditemukan',
-                          subtitle:
-                              'Sesuaikan filter atau kata kunci pencarian Anda',
-                        );
-                      }
-                      return Scrollbar(
-                        controller: _listScrollController,
-                        thumbVisibility: true,
-                        child: ListView.separated(
-                          controller: _listScrollController,
-                          padding: const EdgeInsets.all(20),
-                          itemCount: filtered.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 8),
-                          itemBuilder: (_, i) {
-                            final tx = filtered[i];
-                            return _TxCard(
-                              key: ValueKey('tx_card_${tx.id}'),
-                              tx: tx,
-                              selected: _selected?.id == tx.id,
-                              onTap: () {
-                                setState(() {
-                                  _selected =
-                                      _selected?.id == tx.id ? null : tx;
-                                });
-                              },
-                            );
-                          },
-                        ),
-                      );
-                    },
-                  ),
+    // Build List Column
+    Widget buildListSection() => Column(
+          children: [
+            PageHeader(
+              title: 'Riwayat Transaksi',
+              subtitle: 'Semua transaksi yang telah selesai',
+              icon: Icons.receipt_long_rounded,
+              actions: [
+                IconButton(
+                  onPressed: () => ref.refresh(transactionsProvider),
+                  icon: const Icon(Icons.refresh_rounded,
+                      color: AppTheme.accent),
                 ),
               ],
             ),
-          ),
 
-          // Detail Section
-          if (_selected != null)
-            SizedBox(
-              width: 450,
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: AppTheme.surface,
-                  border: Border(
-                      left: BorderSide(color: AppTheme.border, width: 1)),
-                ),
-                child: _TxDetail(
-                  key: ValueKey('tx_detail_view_${_selected!.id}'),
-                  tx: _selected!,
-                ),
+            // Filters Bar
+            Container(
+              padding:
+                  EdgeInsets.symmetric(horizontal: isCompact ? 12 : 24, vertical: 12),
+              decoration: const BoxDecoration(
+                color: AppTheme.surface,
+                border: Border(bottom: BorderSide(color: AppTheme.border)),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: AppSearchField(
+                          controller: _searchCtrl,
+                          focusNode: _searchFocus,
+                          hintText: 'Cari nomor invoice...',
+                          onChanged: (v) => setState(() => _search = v),
+                          onClear: () => setState(() {
+                            _search = '';
+                            _searchCtrl.clear();
+                          }),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      _buildMethodDropdown(),
+                    ],
+                  ),
+                  if (_methodFilter == AppConstants.paymentPiutang) ...[
+                    const SizedBox(height: 12),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          const Text('Status Piutang:',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.textSecondary)),
+                          const SizedBox(width: 12),
+                          _filterChip('Semua', _debtPaidFilter == null,
+                              () => setState(() => _debtPaidFilter = null)),
+                          const SizedBox(width: 8),
+                          _filterChip('Lunas', _debtPaidFilter == true,
+                              () => setState(() => _debtPaidFilter = true)),
+                          const SizedBox(width: 8),
+                          _filterChip('Belum Lunas', _debtPaidFilter == false,
+                              () => setState(() => _debtPaidFilter = false)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
-        ],
-      ),
+
+            Expanded(
+              child: txAsync.when(
+                loading: () => const AppLoading(),
+                error: (e, _) => Center(child: Text('Error: $e')),
+                data: (txs) {
+                  final filtered = txs.where((t) {
+                    final matchSearch = _search.isEmpty ||
+                        t.invoiceNumber
+                            .toLowerCase()
+                            .contains(_search.toLowerCase());
+                    final matchMethod = _methodFilter == null ||
+                        t.paymentMethod == _methodFilter;
+                    return matchSearch && matchMethod;
+                  }).toList();
+
+                  if (filtered.isEmpty) {
+                    return const EmptyState(
+                      icon: Icons.receipt_long_outlined,
+                      title: 'Transaksi tidak ditemukan',
+                      subtitle:
+                          'Sesuaikan filter atau kata kunci pencarian Anda',
+                    );
+                  }
+                  return Scrollbar(
+                    controller: _listScrollController,
+                    thumbVisibility: true,
+                    child: ListView.separated(
+                      controller: _listScrollController,
+                      padding: EdgeInsets.all(isCompact ? 12 : 20),
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(height: 8),
+                      itemBuilder: (_, i) {
+                        final tx = filtered[i];
+                        return _TxCard(
+                          key: ValueKey('tx_card_${tx.id}'),
+                          tx: tx,
+                          selected: _selected?.id == tx.id,
+                          onTap: () {
+                            setState(() {
+                              _selected =
+                                  _selected?.id == tx.id ? null : tx;
+                            });
+                          },
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+
+    // Build Detail View
+    Widget buildDetailView() => Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              color: AppTheme.surface,
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () => setState(() => _selected = null),
+                    icon: const Icon(Icons.arrow_back_rounded, color: AppTheme.accent),
+                    tooltip: 'Kembali ke Daftar',
+                  ),
+                  const SizedBox(width: 8),
+                  const Text('Detail Transaksi',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: AppTheme.border),
+            Expanded(
+              child: _TxDetail(
+                key: ValueKey('tx_detail_view_${_selected!.id}'),
+                tx: _selected!,
+              ),
+            ),
+          ],
+        );
+
+    return Scaffold(
+      backgroundColor: AppTheme.bg,
+      body: isCompact
+          ? (_selected != null ? buildDetailView() : buildListSection())
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  flex: 6,
+                  child: buildListSection(),
+                ),
+                if (_selected != null)
+                  SizedBox(
+                    width: 450,
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        color: AppTheme.surface,
+                        border: Border(
+                            left: BorderSide(color: AppTheme.border, width: 1)),
+                      ),
+                      child: _TxDetail(
+                        key: ValueKey('tx_detail_view_${_selected!.id}'),
+                        tx: _selected!,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
     );
   }
 

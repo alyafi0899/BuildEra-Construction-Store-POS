@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
+import '../../features/settings/models/store_settings.dart';
 import '../../features/settings/providers/settings_provider.dart';
 import '../../core/sync/widgets/sync_status_bar.dart';
 import '../../core/providers/navigation_provider.dart';
@@ -194,10 +195,30 @@ class AppSidebar extends ConsumerWidget {
     );
   }
 
+  bool _isItemEnabled(_NavItem item, StoreSettings settings) {
+    switch (item.index) {
+      case 0: return settings.enableCashier;
+      case 10:
+      case 11: return settings.enablePurchase;
+      case 2: return settings.enableTransactions;
+      case 3:
+      case 4: return settings.enableDebts;
+      case 1: return settings.enableProducts;
+      case 6: return settings.enableBarcode;
+      case 5: return settings.enableAnalytics;
+      case 8: return settings.enableBills;
+      case 7: return true;
+      default: return true;
+    }
+  }
+
   List<Widget> _buildCategorizedNav(
       BuildContext context, WidgetRef ref, bool isCollapsed) {
+    final settings = ref.watch(settingsProvider);
+    final visibleItems = _navItems.where((i) => _isItemEnabled(i, settings)).toList();
+
     final Map<String, List<_NavItem>> categories = {};
-    for (final item in _navItems) {
+    for (final item in visibleItems) {
       final cat = item.category ?? 'LAINNYA';
       categories.putIfAbsent(cat, () => []).add(item);
     }

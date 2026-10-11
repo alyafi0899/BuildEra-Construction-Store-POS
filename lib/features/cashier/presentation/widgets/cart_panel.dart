@@ -778,332 +778,606 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: AppTheme.surfaceAlt,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppTheme.border),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center, // 6. Name Alignment Middle
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isCompact = constraints.maxWidth < 480;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Product Name (Wrapped & Centered)
-              Expanded(
-                flex: 4,
-                child: Text(
-                  item.product.name,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontSize: 12, fontWeight: FontWeight.bold), // Reduced font
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 6), // Reduced from 12
-
-              // 5. Divider between Name and Input
-              const SizedBox(
-                height: 32,
-                child: VerticalDivider(width: 1, color: AppTheme.border),
-              ),
-              const SizedBox(width: 6), // Reduced from 12
-
-              // 2. Unit Section
-              _CartInputGroup(
-                label: 'Unit',
-                child: _StandardBox(
-                  width: 48, // Reduced from 55
-                  child: item.product.allUnits.length > 1
-                      ? DropdownButton<String>(
-                          value: item.selectedUnit.unitName,
-                          isDense: true,
-                          isExpanded: true,
-                          underline: const SizedBox(),
-                          dropdownColor: AppTheme.surfaceAlt,
-                          icon: const Icon(Icons.arrow_drop_down, size: 14), // Smaller icon
-                          style: const TextStyle(
-                              color: AppTheme.accent,
-                              fontSize: 10, // Reduced font
-                              fontWeight: FontWeight.w600),
-                          items: item.product.allUnits
-                              .map((u) => DropdownMenuItem(
-                                    value: u.unitName,
-                                    child: Text(u.unitName),
-                                  ))
-                              .toList(),
-                          onChanged: (v) {
-                            final u = item.product.allUnits
-                                .firstWhere((u) => u.unitName == v);
-                            notifier.updateUnit(item.id, u);
-                          },
-                        )
-                      : Center(
-                          child: Text(item.selectedUnit.unitName,
+              if (isCompact) ...[
+                // ── Mobile 3-Row Vertical Stretched Layout ──
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        item.product.name,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(
+                                fontSize: 13, fontWeight: FontWeight.bold),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.accent.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                            color: AppTheme.accent.withValues(alpha: 0.3)),
+                      ),
+                      child: item.product.allUnits.length > 1
+                          ? DropdownButton<String>(
+                              value: item.selectedUnit.unitName,
+                              isDense: true,
+                              underline: const SizedBox(),
+                              dropdownColor: AppTheme.surfaceAlt,
+                              icon: const Icon(Icons.arrow_drop_down,
+                                  size: 14, color: AppTheme.accent),
                               style: const TextStyle(
                                   color: AppTheme.accent,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600)),
-                        ),
-                ),
-              ),
-              const SizedBox(width: 4), // Reduced from 8
-
-              // 2. QTY Section with +/- Buttons
-              _CartInputGroup(
-                label: 'Qty',
-                child: Row(
-                  children: [
-                    QtyButton(
-                        icon: Icons.remove,
-                        onTap: () {
-                          final q = item.quantity - 1;
-                          if (q >= 0) {
-                            notifier.updateQuantity(item.id, q);
-                            _qtyCtrl.text = q % 1 == 0 ? q.toInt().toString() : q.toString();
-                          }
-                        }),
-                    const SizedBox(width: 2), // Reduced from 4
-                    _StandardBox(
-                      width: 38, // Reduced from 45
-                      child: ScrollableQtyField(
-                        controller: _qtyCtrl,
-                        onChanged: (v) {
-                          if (v >= 0) {
-                            notifier.updateQuantity(item.id, v);
-                          }
-                        },
-                        child: TextField(
-                          controller: _qtyCtrl,
-                          focusNode: _qtyFocus,
-                          textAlign: TextAlign.center,
-                          keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true),
-                          style: const TextStyle(
-                              color: AppTheme.textPrimary,
-                              fontSize: 11, // Reduced font
-                              fontWeight: FontWeight.w600),
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            contentPadding: EdgeInsets.zero,
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                          ),
-                          onChanged: (v) {
-                            final qty = Formatters.parseQuantity(v);
-                            if (qty >= 0) {
-                              notifier.updateQuantity(item.id, qty);
-                            }
-                          },
-                          onSubmitted: (v) => notifier.updateQuantity(
-                              item.id,
-                              Formatters.parseQuantity(v) >= 0
-                                  ? Formatters.parseQuantity(v)
-                                  : 0),
-                        ),
-                      ),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold),
+                              items: item.product.allUnits
+                                  .map((u) => DropdownMenuItem(
+                                        value: u.unitName,
+                                        child: Text(u.unitName),
+                                      ))
+                                  .toList(),
+                              onChanged: (v) {
+                                final u = item.product.allUnits
+                                    .firstWhere((u) => u.unitName == v);
+                                notifier.updateUnit(item.id, u);
+                              },
+                            )
+                          : Text(item.selectedUnit.unitName,
+                              style: const TextStyle(
+                                  color: AppTheme.accent,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold)),
                     ),
-                    const SizedBox(width: 2), // Reduced from 4
-                    QtyButton(
-                        icon: Icons.add,
-                        onTap: () {
-                          final q = item.quantity + 1;
-                          notifier.updateQuantity(item.id, q);
-                          _qtyCtrl.text = q % 1 == 0 ? q.toInt().toString() : q.toString();
-                        }),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 4), // Reduced from 8
-
-              // 3. Harga Jual
-              _CartInputGroup(
-                label: 'Harga Jual',
-                child: _StandardBox(
-                  width: 85, // Reduced from 100
-                  child: ScrollableQtyField(
-                    controller: _priceCtrl,
-                    step: 1000,
-                    onChanged: (v) => notifier.updateSoldPrice(item.id, v),
-                    child: _InlineTextField(
-                      key: ValueKey(
-                          'price_${item.id}_${item.selectedUnit.unitName}'),
-                      controller: _priceCtrl,
-                      focusNode: _priceFocus,
-                      initialValue: item.soldPrice.toStringAsFixed(0),
-                      onChanged: (v) => notifier.updateSoldPrice(
-                          item.id,
-                          Formatters.parsePrice(v) > 0
-                              ? Formatters.parsePrice(v)
-                              : item.originalPrice),
-                      prefixText: 'Rp ',
-                      isBare: true,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4), // Reduced from 8
-
-              // 4. Diskon
-              _CartInputGroup(
-                label: 'Diskon',
-                child: Row(
-                  children: [
-                    _StandardBox(
-                      width: 50, // Reduced from 60
-                      child: ScrollableQtyField(
-                        controller: _discountCtrl,
-                        step: 1000,
-                        onChanged: (v) =>
-                            notifier.setItemDiscount(item.id, v, item.discountType),
-                        child: _InlineTextField(
-                          key: ValueKey('discount_${item.id}'),
-                          controller: _discountCtrl,
-                          focusNode: _discountFocus,
-                          initialValue: item.discountValue.toStringAsFixed(0),
-                          onChanged: (v) => notifier.setItemDiscount(
-                              item.id,
-                              Formatters.parsePrice(v),
-                              item.discountType),
-                          isBare: true,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    _StandardBox(
-                      width: 35, // Reduced from 40
-                      child: DropdownButton<DiscountType>(
-                        value: item.discountType,
-                        underline: const SizedBox(),
-                        isDense: true,
-                        isExpanded: true,
-                        alignment: Alignment.center,
-                        icon: const SizedBox(),
-                        style: const TextStyle(
-                            fontSize: 10, // Reduced font
-                            color: AppTheme.accent,
-                            fontWeight: FontWeight.bold),
-                        items: const [
-                          DropdownMenuItem(
-                              value: DiscountType.fixed,
-                              child: Center(child: Text('Rp'))),
-                          DropdownMenuItem(
-                              value: DiscountType.percentage,
-                              child: Center(child: Text('%'))),
-                        ],
-                        onChanged: (v) => notifier.setItemDiscount(
-                            item.id, item.discountValue, v!),
-                      ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: () => notifier.removeItem(item.id),
+                      icon: const Icon(Icons.close_rounded,
+                          size: 18, color: AppTheme.textMuted),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      tooltip: 'Hapus Item',
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 4), // Reduced from 8
-
-              // 3. Divider between Input and Total
-              const SizedBox(
-                height: 32,
-                child: VerticalDivider(width: 1, color: AppTheme.border),
-              ),
-              const SizedBox(width: 4), // Reduced from 8
-
-              // 5. Total Price & Profit Icon
-              Expanded(
-                flex: 4, // Increased flex to give price more room
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                const SizedBox(height: 8),
+                const Divider(height: 1, color: AppTheme.border),
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Total Harga', style: TextStyle(fontSize: 9, color: AppTheme.textMuted)),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerRight,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                if (item.totalDiscount > 0)
-                                  Text('-${Formatters.currency(item.totalDiscount)}',
-                                      style: const TextStyle(
-                                          color: AppTheme.success,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600)),
-                                Text(Formatters.currency(item.subtotal),
+                    Expanded(
+                      flex: 4,
+                      child: _CartInputGroup(
+                        label: 'Qty',
+                        child: Row(
+                          children: [
+                            QtyButton(
+                                icon: Icons.remove,
+                                onTap: () {
+                                  final q = item.quantity - 1;
+                                  if (q >= 0) {
+                                    notifier.updateQuantity(item.id, q);
+                                    _qtyCtrl.text = q % 1 == 0
+                                        ? q.toInt().toString()
+                                        : q.toString();
+                                  }
+                                }),
+                            const SizedBox(width: 2),
+                            Expanded(
+                              child: _StandardBox(
+                                child: ScrollableQtyField(
+                                  controller: _qtyCtrl,
+                                  onChanged: (v) {
+                                    if (v >= 0) {
+                                      notifier.updateQuantity(item.id, v);
+                                    }
+                                  },
+                                  child: TextField(
+                                    controller: _qtyCtrl,
+                                    focusNode: _qtyFocus,
+                                    textAlign: TextAlign.center,
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                            decimal: true),
                                     style: const TextStyle(
-                                        color: AppTheme.accent,
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 15)),
-                              ],
+                                        color: AppTheme.textPrimary,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600),
+                                    decoration: const InputDecoration(
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                      border: InputBorder.none,
+                                      enabledBorder: InputBorder.none,
+                                      focusedBorder: InputBorder.none,
+                                    ),
+                                    onChanged: (v) {
+                                      final qty = Formatters.parseQuantity(v);
+                                      if (qty >= 0) {
+                                        notifier.updateQuantity(item.id, qty);
+                                      }
+                                    },
+                                    onSubmitted: (v) => notifier.updateQuantity(
+                                        item.id,
+                                        Formatters.parseQuantity(v) >= 0
+                                            ? Formatters.parseQuantity(v)
+                                            : 0),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 2),
+                            QtyButton(
+                                icon: Icons.add,
+                                onTap: () {
+                                  final q = item.quantity + 1;
+                                  notifier.updateQuantity(item.id, q);
+                                  _qtyCtrl.text = q % 1 == 0
+                                      ? q.toInt().toString()
+                                      : q.toString();
+                                }),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 5,
+                      child: _CartInputGroup(
+                        label: 'Harga Jual',
+                        child: _StandardBox(
+                          child: ScrollableQtyField(
+                            controller: _priceCtrl,
+                            step: 1000,
+                            onChanged: (v) =>
+                                notifier.updateSoldPrice(item.id, v),
+                            child: _InlineTextField(
+                              key: ValueKey(
+                                  'price_${item.id}_${item.selectedUnit.unitName}'),
+                              controller: _priceCtrl,
+                              focusNode: _priceFocus,
+                              initialValue: item.soldPrice.toStringAsFixed(0),
+                              onChanged: (v) => notifier.updateSoldPrice(
+                                  item.id,
+                                  Formatters.parsePrice(v) > 0
+                                      ? Formatters.parsePrice(v)
+                                      : item.originalPrice),
+                              prefixText: 'Rp ',
+                              isBare: true,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        _ProfitToggleIcon(
-                          item: item,
-                          isActive: _showProfit,
-                          onTap: _verifyPinAndShowProfit,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 4,
+                      child: _CartInputGroup(
+                        label: 'Diskon',
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: _StandardBox(
+                                child: ScrollableQtyField(
+                                  controller: _discountCtrl,
+                                  step: 1000,
+                                  onChanged: (v) => notifier.setItemDiscount(
+                                      item.id, v, item.discountType),
+                                  child: _InlineTextField(
+                                    key: ValueKey('discount_${item.id}'),
+                                    controller: _discountCtrl,
+                                    focusNode: _discountFocus,
+                                    initialValue:
+                                        item.discountValue.toStringAsFixed(0),
+                                    onChanged: (v) => notifier.setItemDiscount(
+                                        item.id,
+                                        Formatters.parsePrice(v),
+                                        item.discountType),
+                                    isBare: true,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 2),
+                            _StandardBox(
+                              width: 32,
+                              child: DropdownButton<DiscountType>(
+                                value: item.discountType,
+                                underline: const SizedBox(),
+                                isDense: true,
+                                isExpanded: true,
+                                alignment: Alignment.center,
+                                icon: const SizedBox(),
+                                style: const TextStyle(
+                                    fontSize: 10,
+                                    color: AppTheme.accent,
+                                    fontWeight: FontWeight.bold),
+                                items: const [
+                                  DropdownMenuItem(
+                                      value: DiscountType.fixed,
+                                      child: Center(child: Text('Rp'))),
+                                  DropdownMenuItem(
+                                      value: DiscountType.percentage,
+                                      child: Center(child: Text('%'))),
+                                ],
+                                onChanged: (v) => notifier.setItemDiscount(
+                                    item.id, item.discountValue, v!),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Divider(height: 1, color: AppTheme.border),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _ProfitToggleIcon(
+                      item: item,
+                      isActive: _showProfit,
+                      onTap: _verifyPinAndShowProfit,
+                    ),
+                    Row(
+                      children: [
+                        if (item.totalDiscount > 0) ...[
+                          Text('-${Formatters.currency(item.totalDiscount)} ',
+                              style: const TextStyle(
+                                  color: AppTheme.success,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600)),
+                        ],
+                        const Text('Total: ',
+                            style: TextStyle(
+                                fontSize: 11, color: AppTheme.textSecondary)),
+                        Text(
+                          Formatters.currency(item.subtotal),
+                          style: const TextStyle(
+                              color: AppTheme.accent,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 15),
                         ),
                       ],
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 8), // Reduced spacing
+              ] else ...[
+                // ── Desktop 1-Row Horizontal Layout ──
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      flex: 4,
+                      child: Text(
+                        item.product.name,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(
+                                fontSize: 12, fontWeight: FontWeight.bold),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const SizedBox(
+                      height: 32,
+                      child: VerticalDivider(width: 1, color: AppTheme.border),
+                    ),
+                    const SizedBox(width: 6),
+                    _CartInputGroup(
+                      label: 'Unit',
+                      child: _StandardBox(
+                        width: 48,
+                        child: item.product.allUnits.length > 1
+                            ? DropdownButton<String>(
+                                value: item.selectedUnit.unitName,
+                                isDense: true,
+                                isExpanded: true,
+                                underline: const SizedBox(),
+                                dropdownColor: AppTheme.surfaceAlt,
+                                icon: const Icon(Icons.arrow_drop_down,
+                                    size: 14),
+                                style: const TextStyle(
+                                    color: AppTheme.accent,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600),
+                                items: item.product.allUnits
+                                    .map((u) => DropdownMenuItem(
+                                          value: u.unitName,
+                                          child: Text(u.unitName),
+                                        ))
+                                    .toList(),
+                                onChanged: (v) {
+                                  final u = item.product.allUnits
+                                      .firstWhere((u) => u.unitName == v);
+                                  notifier.updateUnit(item.id, u);
+                                },
+                              )
+                            : Center(
+                                child: Text(item.selectedUnit.unitName,
+                                    style: const TextStyle(
+                                        color: AppTheme.accent,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600)),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    _CartInputGroup(
+                      label: 'Qty',
+                      child: Row(
+                        children: [
+                          QtyButton(
+                              icon: Icons.remove,
+                              onTap: () {
+                                final q = item.quantity - 1;
+                                if (q >= 0) {
+                                  notifier.updateQuantity(item.id, q);
+                                  _qtyCtrl.text = q % 1 == 0
+                                      ? q.toInt().toString()
+                                      : q.toString();
+                                }
+                              }),
+                          const SizedBox(width: 2),
+                          _StandardBox(
+                            width: 38,
+                            child: ScrollableQtyField(
+                              controller: _qtyCtrl,
+                              onChanged: (v) {
+                                if (v >= 0) {
+                                  notifier.updateQuantity(item.id, v);
+                                }
+                              },
+                              child: TextField(
+                                controller: _qtyCtrl,
+                                focusNode: _qtyFocus,
+                                textAlign: TextAlign.center,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                        decimal: true),
+                                style: const TextStyle(
+                                    color: AppTheme.textPrimary,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600),
+                                decoration: const InputDecoration(
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                ),
+                                onChanged: (v) {
+                                  final qty = Formatters.parseQuantity(v);
+                                  if (qty >= 0) {
+                                    notifier.updateQuantity(item.id, qty);
+                                  }
+                                },
+                                onSubmitted: (v) => notifier.updateQuantity(
+                                    item.id,
+                                    Formatters.parseQuantity(v) >= 0
+                                        ? Formatters.parseQuantity(v)
+                                        : 0),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          QtyButton(
+                              icon: Icons.add,
+                              onTap: () {
+                                final q = item.quantity + 1;
+                                notifier.updateQuantity(item.id, q);
+                                _qtyCtrl.text = q % 1 == 0
+                                    ? q.toInt().toString()
+                                    : q.toString();
+                              }),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    _CartInputGroup(
+                      label: 'Harga Jual',
+                      child: _StandardBox(
+                        width: 85,
+                        child: ScrollableQtyField(
+                          controller: _priceCtrl,
+                          step: 1000,
+                          onChanged: (v) =>
+                              notifier.updateSoldPrice(item.id, v),
+                          child: _InlineTextField(
+                            key: ValueKey(
+                                'price_${item.id}_${item.selectedUnit.unitName}'),
+                            controller: _priceCtrl,
+                            focusNode: _priceFocus,
+                            initialValue: item.soldPrice.toStringAsFixed(0),
+                            onChanged: (v) => notifier.updateSoldPrice(
+                                item.id,
+                                Formatters.parsePrice(v) > 0
+                                    ? Formatters.parsePrice(v)
+                                    : item.originalPrice),
+                            prefixText: 'Rp ',
+                            isBare: true,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    _CartInputGroup(
+                      label: 'Diskon',
+                      child: Row(
+                        children: [
+                          _StandardBox(
+                            width: 50,
+                            child: ScrollableQtyField(
+                              controller: _discountCtrl,
+                              step: 1000,
+                              onChanged: (v) => notifier.setItemDiscount(
+                                  item.id, v, item.discountType),
+                              child: _InlineTextField(
+                                key: ValueKey('discount_${item.id}'),
+                                controller: _discountCtrl,
+                                focusNode: _discountFocus,
+                                initialValue:
+                                    item.discountValue.toStringAsFixed(0),
+                                onChanged: (v) => notifier.setItemDiscount(
+                                    item.id,
+                                    Formatters.parsePrice(v),
+                                    item.discountType),
+                                isBare: true,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          _StandardBox(
+                            width: 35,
+                            child: DropdownButton<DiscountType>(
+                              value: item.discountType,
+                              underline: const SizedBox(),
+                              isDense: true,
+                              isExpanded: true,
+                              alignment: Alignment.center,
+                              icon: const SizedBox(),
+                              style: const TextStyle(
+                                  fontSize: 10,
+                                  color: AppTheme.accent,
+                                  fontWeight: FontWeight.bold),
+                              items: const [
+                                DropdownMenuItem(
+                                    value: DiscountType.fixed,
+                                    child: Center(child: Text('Rp'))),
+                                DropdownMenuItem(
+                                    value: DiscountType.percentage,
+                                    child: Center(child: Text('%'))),
+                              ],
+                              onChanged: (v) => notifier.setItemDiscount(
+                                  item.id, item.discountValue, v!),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const SizedBox(
+                      height: 32,
+                      child: VerticalDivider(width: 1, color: AppTheme.border),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      flex: 4,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          const Text('Total Harga',
+                              style: TextStyle(
+                                  fontSize: 9, color: AppTheme.textMuted)),
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Expanded(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerRight,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      if (item.totalDiscount > 0)
+                                        Text(
+                                            '-${Formatters.currency(item.totalDiscount)}',
+                                            style: const TextStyle(
+                                                color: AppTheme.success,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w600)),
+                                      Text(Formatters.currency(item.subtotal),
+                                          style: const TextStyle(
+                                              color: AppTheme.accent,
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 15)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _ProfitToggleIcon(
+                                item: item,
+                                isActive: _showProfit,
+                                onTap: _verifyPinAndShowProfit,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const SizedBox(
+                      height: 32,
+                      child: VerticalDivider(width: 1, color: AppTheme.border),
+                    ),
+                    IconButton(
+                      onPressed: () => notifier.removeItem(item.id),
+                      icon: const Icon(Icons.close_rounded,
+                          size: 16, color: AppTheme.textMuted),
+                      padding: const EdgeInsets.only(left: 8),
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+              ],
 
-              // Divider before Remove Button
-              const SizedBox(
-                height: 32,
-                child: VerticalDivider(width: 1, color: AppTheme.border),
-              ),
-
-              // 6. Remove Button
-              IconButton(
-                onPressed: () => notifier.removeItem(item.id),
-                icon: const Icon(Icons.close_rounded,
-                    size: 16, color: AppTheme.textMuted),
-                padding: const EdgeInsets.only(left: 8),
-                constraints: const BoxConstraints(),
-              ),
+              // Expanded Profit Details
+              if (_showProfit) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.border),
+                  ),
+                  child: Column(
+                    children: [
+                      _ProfitDetailRow(
+                          label: 'Harga Modal Unit', value: item.costPrice),
+                      _ProfitDetailRow(
+                          label: 'Total Estimasi Untung',
+                          value: item.profit,
+                          isBold: true),
+                      _ProfitDetailRow(
+                          label: 'Margin Profit',
+                          value: (item.profit /
+                                  (item.subtotal > 0 ? item.subtotal : 1)) *
+                              100,
+                          isPercent: true),
+                    ],
+                  ),
+                ),
+              ],
             ],
-          ),
-
-          // Expanded Profit Details
-          if (_showProfit) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppTheme.surface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.border),
-              ),
-              child: Column(
-                children: [
-                  _ProfitDetailRow(
-                      label: 'Harga Modal Unit', value: item.costPrice),
-                  _ProfitDetailRow(
-                      label: 'Total Estimasi Untung',
-                      value: item.profit,
-                      isBold: true),
-                  _ProfitDetailRow(
-                      label: 'Margin Profit',
-                      value: (item.profit /
-                              (item.subtotal > 0 ? item.subtotal : 1)) *
-                          100,
-                      isPercent: true),
-                ],
-              ),
-            ),
-          ],
-        ],
+          );
+        },
       ),
     );
   }

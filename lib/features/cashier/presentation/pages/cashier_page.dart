@@ -141,33 +141,31 @@ class _CashierPageState extends ConsumerState<CashierPage> {
                       },
                     ),
                   ),
-                  if (supportsCameraScanner) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: AppTheme.accent.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: AppTheme.accent.withValues(alpha: 0.3)),
-                      ),
-                      child: IconButton(
-                        onPressed: () async {
-                          final scanned = await Navigator.push<bool>(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => const ScannerPage()),
-                          );
-                          if (scanned == true && mounted) {
-                            setState(() => _showCartOnCompact = true);
-                          }
-                        },
-                        icon: const Icon(Icons.qr_code_scanner_rounded,
-                            color: AppTheme.accent),
-                        tooltip: 'Buka Kamera Scanner',
-                      ),
+                  const SizedBox(width: 8),
+                  Container(
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: AppTheme.accent.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: AppTheme.accent.withValues(alpha: 0.3)),
                     ),
-                  ],
+                    child: IconButton(
+                      onPressed: () async {
+                        final scanned = await Navigator.push<bool>(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const ScannerPage()),
+                        );
+                        if (scanned == true && mounted) {
+                          setState(() => _showCartOnCompact = true);
+                        }
+                      },
+                      icon: const Icon(Icons.qr_code_scanner_rounded,
+                          color: AppTheme.accent),
+                      tooltip: 'Buka Kamera Scanner',
+                    ),
+                  ),
                 ],
               ),
             ),

@@ -44,7 +44,10 @@ class ScannerController extends Notifier<ScannerState> {
   ScannerState build() => ScannerState();
 
   /// Handles a scanned barcode. 
-  ScanResult onBarcodeScanned(String barcode) {
+  ScanResult onBarcodeScanned(String rawBarcode) {
+    final barcode = rawBarcode.trim();
+    if (barcode.isEmpty) return ScanResult.ignored;
+
     final now = DateTime.now();
     
     // Duplicate prevention / Cooldown logic
@@ -59,9 +62,25 @@ class ScannerController extends Notifier<ScannerState> {
       lastScanTime: now,
     );
 
-    // Optimized lookup using the map provider
+    // 1. First check map provider
     final productMap = ref.read(barcodeProductMapProvider);
-    final product = productMap[barcode];
+    var product = productMap[barcode];
+
+    // 2. Fallback flexible lookup
+    if (product == null) {
+      final products = ref.read(productsProvider).asData?.value ?? [];
+      final query = barcode.toLowerCase();
+      for (final p in products) {
+        if (p.barcode != null && p.barcode!.trim().toLowerCase() == query) {
+          product = p;
+          break;
+        }
+        if (p.id == barcode) {
+          product = p;
+          break;
+        }
+      }
+    }
 
     if (product != null) {
       ref.read(cartProvider.notifier).addProduct(product);

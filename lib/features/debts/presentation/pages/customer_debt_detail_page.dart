@@ -13,18 +13,54 @@ import '../../../payment/providers/transaction_provider.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../../shared/widgets/security_gate.dart';
 
-class CustomerDebtDetailPage extends ConsumerWidget {
+class CustomerDebtDetailPage extends ConsumerStatefulWidget {
   final Customer customer;
   const CustomerDebtDetailPage({required this.customer, super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // We watch the stream instead of using the passed object to get updates
+  ConsumerState<CustomerDebtDetailPage> createState() =>
+      _CustomerDebtDetailPageState();
+}
+
+class _CustomerDebtDetailPageState
+    extends ConsumerState<CustomerDebtDetailPage> {
+  int _selectedTab = 0; // 0 = Transaksi Piutang, 1 = Riwayat Pembayaran
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final isCompact = width < 800;
+
     final customersAsync = ref.watch(customersProvider);
-    final currentCustomer = customersAsync.asData?.value.firstWhere((c) => c.id == customer.id, orElse: () => customer) ?? customer;
-    
-    final debtsAsync = ref.watch(debtsProvider(customer.id));
-    final paymentsAsync = ref.watch(debtPaymentsProvider((customerId: customer.id, debtId: null)));
+    final currentCustomer = customersAsync.asData?.value.firstWhere(
+            (c) => c.id == widget.customer.id,
+            orElse: () => widget.customer) ??
+        widget.customer;
+
+    final debtsAsync = ref.watch(debtsProvider(widget.customer.id));
+    final paymentsAsync = ref.watch(
+        debtPaymentsProvider((customerId: widget.customer.id, debtId: null)));
+
+    Widget buildDebtsSection() => _buildSection(
+          title: 'Daftar Transaksi Piutang',
+          child: debtsAsync.when(
+            loading: () => const AppLoading(),
+            error: (e, _) => Center(child: Text('Error: $e')),
+            data: (debts) => _DebtList(
+              debts: debts,
+              onRecordPayment: (d) => _showPaymentForm(context, d),
+            ),
+          ),
+        );
+
+    Widget buildPaymentsSection() => _buildSection(
+          title: 'Riwayat Pembayaran',
+          child: paymentsAsync.when(
+            loading: () => const AppLoading(),
+            error: (e, _) => Center(child: Text('Error: $e')),
+            data: (payments) => _PaymentHistoryList(payments: payments),
+          ),
+        );
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -36,9 +72,11 @@ class CustomerDebtDetailPage extends ConsumerWidget {
           IconButton(
             onPressed: () async {
               final debts = debtsAsync.asData?.value ?? [];
-              await DebtReportHelper.exportCustomerDetailToExcel(currentCustomer, debts);
+              await DebtReportHelper.exportCustomerDetailToExcel(
+                  currentCustomer, debts);
             },
-            icon: const Icon(Icons.file_download_outlined, color: AppTheme.accent),
+            icon:
+                const Icon(Icons.file_download_outlined, color: AppTheme.accent),
             tooltip: 'Export Excel',
           ),
           const SizedBox(width: 8),
@@ -48,55 +86,104 @@ class CustomerDebtDetailPage extends ConsumerWidget {
         children: [
           // Summary Header
           Container(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(isCompact ? 16 : 24),
             color: AppTheme.surface,
-            child: Row(
-              children: [
-                Expanded(child: _infoBox(context, 'Total Piutang', Formatters.currency(currentCustomer.totalOutstanding), color: AppTheme.warning)),
-                const SizedBox(width: 16),
-                Expanded(child: _infoBox(context, 'Telepon', currentCustomer.phone)),
-                const SizedBox(width: 16),
-                Expanded(child: _infoBox(context, 'Alamat', currentCustomer.address ?? '—')),
-              ],
-            ),
+            child: isCompact
+                ? Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                              child: _infoBox(
+                                  context,
+                                  'Total Piutang',
+                                  Formatters.currency(
+                                      currentCustomer.totalOutstanding),
+                                  color: AppTheme.warning)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                              child: _infoBox(context, 'Telepon',
+                                  currentCustomer.phone)),
+                        ],
+                      ),
+                      if (currentCustomer.address != null &&
+                          currentCustomer.address!.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: _infoBox(context, 'Alamat',
+                              currentCustomer.address ?? '—'),
+                        ),
+                      ],
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(
+                          child: _infoBox(
+                              context,
+                              'Total Piutang',
+                              Formatters.currency(
+                                  currentCustomer.totalOutstanding),
+                              color: AppTheme.warning)),
+                      const SizedBox(width: 16),
+                      Expanded(
+                          child: _infoBox(
+                              context, 'Telepon', currentCustomer.phone)),
+                      const SizedBox(width: 16),
+                      Expanded(
+                          child: _infoBox(context, 'Alamat',
+                              currentCustomer.address ?? '—')),
+                    ],
+                  ),
           ),
 
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Debts List (Transactions) ────────────────────────────
-                Expanded(
-                  flex: 3,
-                  child: _buildSection(
-                    title: 'Daftar Transaksi Piutang',
-                    child: debtsAsync.when(
-                      loading: () => const AppLoading(),
-                      error: (e, _) => Center(child: Text('Error: $e')),
-                      data: (debts) => _DebtList(
-                        debts: debts,
-                        onRecordPayment: (d) => _showPaymentForm(context, d),
-                      ),
-                    ),
+          if (isCompact) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: AppTheme.surface,
+              child: SegmentedButton<int>(
+                segments: const [
+                  ButtonSegment(
+                    value: 0,
+                    label: Text('Transaksi Piutang',
+                        style: TextStyle(fontSize: 12)),
+                    icon: Icon(Icons.receipt_long_rounded, size: 16),
                   ),
-                ),
-
-                const VerticalDivider(width: 1, color: AppTheme.border),
-
-                // ── Payments History ──────────────────────────────────────
-                Expanded(
-                  flex: 2,
-                  child: _buildSection(
-                    title: 'Riwayat Pembayaran',
-                    child: paymentsAsync.when(
-                      loading: () => const AppLoading(),
-                      error: (e, _) => Center(child: Text('Error: $e')),
-                      data: (payments) => _PaymentHistoryList(payments: payments),
-                    ),
+                  ButtonSegment(
+                    value: 1,
+                    label: Text('Riwayat Bayar',
+                        style: TextStyle(fontSize: 12)),
+                    icon: Icon(Icons.history_rounded, size: 16),
                   ),
-                ),
-              ],
+                ],
+                selected: {_selectedTab},
+                onSelectionChanged: (s) =>
+                    setState(() => _selectedTab = s.first),
+              ),
             ),
+            const Divider(height: 1, color: AppTheme.border),
+          ],
+
+          Expanded(
+            child: isCompact
+                ? (_selectedTab == 0
+                    ? buildDebtsSection()
+                    : buildPaymentsSection())
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: buildDebtsSection(),
+                      ),
+                      const VerticalDivider(width: 1, color: AppTheme.border),
+                      Expanded(
+                        flex: 2,
+                        child: buildPaymentsSection(),
+                      ),
+                    ],
+                  ),
           ),
         ],
       ),

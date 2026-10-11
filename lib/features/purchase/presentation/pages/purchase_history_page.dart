@@ -30,99 +30,134 @@ class _PurchaseHistoryPageState extends ConsumerState<PurchaseHistoryPage> {
   @override
   Widget build(BuildContext context) {
     final purchasesAsync = ref.watch(purchasesProvider);
+    final width = MediaQuery.of(context).size.width;
+    final isCompact = width < 800;
 
-    return Scaffold(
-      backgroundColor: AppTheme.bg,
-      body: Row(
-        children: [
-          // ── Left: Purchase List ───────────────────────────────────────────
-          Expanded(
-            flex: 6,
-            child: Column(
-              children: [
-                PageHeader(
-                  title: 'Riwayat Pembelian',
-                  subtitle: 'Daftar semua nota barang masuk dari supplier',
-                  icon: Icons.history_edu_rounded,
-                  actions: [
-                    IconButton(
-                      onPressed: () => ref.refresh(purchasesProvider),
-                      icon: const Icon(Icons.refresh_rounded, color: AppTheme.accent),
-                    ),
-                  ],
-                ),
-
-                // Search Bar
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                  color: AppTheme.surface,
-                  child: AppSearchField(
-                    controller: _searchCtrl,
-                    hintText: 'Cari nomor nota atau supplier...',
-                    onChanged: (v) => setState(() => _search = v),
-                    onClear: () => setState(() {
-                      _search = '';
-                      _searchCtrl.clear();
-                    }),
-                  ),
-                ),
-
-                Expanded(
-                  child: purchasesAsync.when(
-                    data: (list) {
-                      final filtered = list.where((p) {
-                        final s = _search.toLowerCase();
-                        return p.invoiceNumber.toLowerCase().contains(s) ||
-                               (p.supplierName?.toLowerCase().contains(s) ?? false);
-                      }).toList();
-
-                      if (filtered.isEmpty) {
-                        return const EmptyState(
-                          icon: Icons.receipt_long_outlined,
-                          title: 'Belum ada riwayat pembelian',
-                        );
-                      }
-
-                      return ListView.separated(
-                        padding: const EdgeInsets.all(20),
-                        itemCount: filtered.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (context, i) {
-                          final p = filtered[i];
-                          final isSelected = _selected?.id == p.id;
-                          return _PurchaseCard(
-                            purchase: p,
-                            isSelected: isSelected,
-                            onTap: () => setState(() => _selected = isSelected ? null : p),
-                          );
-                        },
-                      );
-                    },
-                    loading: () => const AppLoading(),
-                    error: (e, _) => Center(child: Text('Error: $e')),
-                  ),
+    Widget buildListSection() => Column(
+          children: [
+            PageHeader(
+              title: 'Riwayat Pembelian',
+              subtitle: 'Daftar semua nota barang masuk dari supplier',
+              icon: Icons.history_edu_rounded,
+              actions: [
+                IconButton(
+                  onPressed: () => ref.refresh(purchasesProvider),
+                  icon: const Icon(Icons.refresh_rounded, color: AppTheme.accent),
                 ),
               ],
             ),
-          ),
 
-          // ── Right: Purchase Detail ────────────────────────────────────────
-          if (_selected != null)
-            SizedBox(
-              width: 450,
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: AppTheme.surface,
-                  border: Border(left: BorderSide(color: AppTheme.border)),
-                ),
-                child: _PurchaseDetailView(
-                  purchase: _selected!, 
-                  onClear: () => setState(() => _selected = null),
-                ),
+            // Search Bar
+            Container(
+              padding: EdgeInsets.symmetric(
+                  horizontal: isCompact ? 12 : 24, vertical: 12),
+              color: AppTheme.surface,
+              child: AppSearchField(
+                controller: _searchCtrl,
+                hintText: 'Cari nomor nota atau supplier...',
+                onChanged: (v) => setState(() => _search = v),
+                onClear: () => setState(() {
+                  _search = '';
+                  _searchCtrl.clear();
+                }),
               ),
             ),
-        ],
-      ),
+
+            Expanded(
+              child: purchasesAsync.when(
+                data: (list) {
+                  final filtered = list.where((p) {
+                    final s = _search.toLowerCase();
+                    return p.invoiceNumber.toLowerCase().contains(s) ||
+                        (p.supplierName?.toLowerCase().contains(s) ?? false);
+                  }).toList();
+
+                  if (filtered.isEmpty) {
+                    return const EmptyState(
+                      icon: Icons.receipt_long_outlined,
+                      title: 'Belum ada riwayat pembelian',
+                    );
+                  }
+
+                  return ListView.separated(
+                    padding: EdgeInsets.all(isCompact ? 12 : 20),
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (context, i) {
+                      final p = filtered[i];
+                      final isSelected = _selected?.id == p.id;
+                      return _PurchaseCard(
+                        purchase: p,
+                        isSelected: isSelected,
+                        onTap: () => setState(() => _selected = isSelected ? null : p),
+                      );
+                    },
+                  );
+                },
+                loading: () => const AppLoading(),
+                error: (e, _) => Center(child: Text('Error: $e')),
+              ),
+            ),
+          ],
+        );
+
+    Widget buildDetailView() => Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              color: AppTheme.surface,
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () => setState(() => _selected = null),
+                    icon: const Icon(Icons.arrow_back_rounded, color: AppTheme.accent),
+                    tooltip: 'Kembali ke Daftar',
+                  ),
+                  const SizedBox(width: 8),
+                  const Text('Detail Pembelian',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: AppTheme.border),
+            Expanded(
+              child: _PurchaseDetailView(
+                purchase: _selected!,
+                onClear: () => setState(() => _selected = null),
+              ),
+            ),
+          ],
+        );
+
+    return Scaffold(
+      backgroundColor: AppTheme.bg,
+      body: isCompact
+          ? (_selected != null ? buildDetailView() : buildListSection())
+          : Row(
+              children: [
+                // ── Left: Purchase List ───────────────────────────────────────────
+                Expanded(
+                  flex: 6,
+                  child: buildListSection(),
+                ),
+
+                // ── Right: Purchase Detail ────────────────────────────────────────
+                if (_selected != null)
+                  SizedBox(
+                    width: 450,
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        color: AppTheme.surface,
+                        border: Border(left: BorderSide(color: AppTheme.border)),
+                      ),
+                      child: _PurchaseDetailView(
+                        purchase: _selected!,
+                        onClear: () => setState(() => _selected = null),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
     );
   }
 }

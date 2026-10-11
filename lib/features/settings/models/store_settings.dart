@@ -51,8 +51,18 @@ class StoreSettings {
   final String printMethod;   
   final String? invoicePrinterUrl; 
   final String? labelPrinterUrl;
+
+  // Feature management toggles
+  final bool enableCashier;
+  final bool enableProducts;
+  final bool enablePurchase;
+  final bool enableTransactions;
+  final bool enableDebts;
+  final bool enableBills;
+  final bool enableBarcode;
+  final bool enableAnalytics;
   
-  // NEW: Tracking for persistence logic
+  // Tracking for persistence logic
   final bool isLoading;
 
   const StoreSettings({
@@ -78,6 +88,14 @@ class StoreSettings {
     this.printMethod = 'pdf',
     this.invoicePrinterUrl,
     this.labelPrinterUrl,
+    this.enableCashier = true,
+    this.enableProducts = true,
+    this.enablePurchase = true,
+    this.enableTransactions = true,
+    this.enableDebts = true,
+    this.enableBills = true,
+    this.enableBarcode = true,
+    this.enableAnalytics = true,
     this.isLoading = false,
   });
 
@@ -105,6 +123,14 @@ class StoreSettings {
       'print_method': printMethod,
       'invoice_printer_url': invoicePrinterUrl,
       'label_printer_url': labelPrinterUrl,
+      'enable_cashier': enableCashier,
+      'enable_products': enableProducts,
+      'enable_purchase': enablePurchase,
+      'enable_transactions': enableTransactions,
+      'enable_debts': enableDebts,
+      'enable_bills': enableBills,
+      'enable_barcode': enableBarcode,
+      'enable_analytics': enableAnalytics,
     };
   }
 
@@ -135,6 +161,14 @@ class StoreSettings {
       printMethod: map['print_method']?.toString() ?? map['printMethod']?.toString() ?? 'pdf',
       invoicePrinterUrl: map['invoice_printer_url']?.toString() ?? map['invoicePrinterUrl']?.toString(),
       labelPrinterUrl: map['label_printer_url']?.toString() ?? map['labelPrinterUrl']?.toString(),
+      enableCashier: (map['enable_cashier'] ?? map['enableCashier']) as bool? ?? true,
+      enableProducts: (map['enable_products'] ?? map['enableProducts']) as bool? ?? true,
+      enablePurchase: (map['enable_purchase'] ?? map['enablePurchase']) as bool? ?? true,
+      enableTransactions: (map['enable_transactions'] ?? map['enableTransactions']) as bool? ?? true,
+      enableDebts: (map['enable_debts'] ?? map['enableDebts']) as bool? ?? true,
+      enableBills: (map['enable_bills'] ?? map['enableBills']) as bool? ?? true,
+      enableBarcode: (map['enable_barcode'] ?? map['enableBarcode']) as bool? ?? true,
+      enableAnalytics: (map['enable_analytics'] ?? map['enableAnalytics']) as bool? ?? true,
       isLoading: isLoading,
     );
   }
@@ -166,6 +200,14 @@ class StoreSettings {
     String? printMethod,
     String? invoicePrinterUrl,
     String? labelPrinterUrl,
+    bool? enableCashier,
+    bool? enableProducts,
+    bool? enablePurchase,
+    bool? enableTransactions,
+    bool? enableDebts,
+    bool? enableBills,
+    bool? enableBarcode,
+    bool? enableAnalytics,
     bool? isLoading,
   }) {
     return StoreSettings(
@@ -191,6 +233,14 @@ class StoreSettings {
       printMethod: printMethod ?? this.printMethod,
       invoicePrinterUrl: invoicePrinterUrl ?? this.invoicePrinterUrl,
       labelPrinterUrl: labelPrinterUrl ?? this.labelPrinterUrl,
+      enableCashier: enableCashier ?? this.enableCashier,
+      enableProducts: enableProducts ?? this.enableProducts,
+      enablePurchase: enablePurchase ?? this.enablePurchase,
+      enableTransactions: enableTransactions ?? this.enableTransactions,
+      enableDebts: enableDebts ?? this.enableDebts,
+      enableBills: enableBills ?? this.enableBills,
+      enableBarcode: enableBarcode ?? this.enableBarcode,
+      enableAnalytics: enableAnalytics ?? this.enableAnalytics,
       isLoading: isLoading ?? this.isLoading,
     );
   }

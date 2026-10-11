@@ -24,6 +24,19 @@ class RestockDialog extends ConsumerStatefulWidget {
   const RestockDialog({super.key, required this.product, this.record});
 
   static Future<void> show(BuildContext context, Product product, {RestockRecord? record}) {
+    final isMobile = MediaQuery.of(context).size.width < 700;
+    if (isMobile) {
+      return Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => Scaffold(
+            backgroundColor: AppTheme.bg,
+            body: SafeArea(
+              child: RestockDialog(product: product, record: record),
+            ),
+          ),
+        ),
+      );
+    }
     return showDialog(
       context:            context,
       barrierDismissible: false,
@@ -220,6 +233,9 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final isCompact = width < 700;
+
     return Shortcuts(
       shortcuts: {
         LogicalKeySet(LogicalKeyboardKey.enter): const ActivateIntent(),
@@ -232,11 +248,11 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
           ),
         },
         child: Dialog(
-          insetPadding: const EdgeInsets.all(40),
+          insetPadding: isCompact ? EdgeInsets.zero : const EdgeInsets.all(40),
           child: PremiumGuard(
             featureName: 'Restock Stok (Premium)',
             child: SizedBox(
-              width: 740,
+              width: isCompact ? double.infinity : 740,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -278,12 +294,40 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                       const SizedBox(height: 24),
 
                       // Qty & Unit Selection
-                      Row(children: [
-                        Expanded(
-                          flex: 2,
-                          child: ScrollableQtyField(
+                      if (isCompact) ...[
+                        ScrollableQtyField(
+                          controller: _qty,
+                          onChanged: (_) => _calculateCost(),
+                          child: TextFormField(
                             controller: _qty,
+                            decoration: const InputDecoration(labelText: 'Jumlah Tambahan *'),
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             onChanged: (_) => _calculateCost(),
+                            validator: (v) => (Formatters.parseQuantity(v ?? '')) <= 0 ? 'Wajib diisi' : null,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          height: 48,
+                          child: DropdownButtonFormField<ProductUnit>(
+                            initialValue: _selectedUnit,
+                            isExpanded: true,
+                            decoration: const InputDecoration(labelText: 'Satuan Pembelian', isDense: true),
+                            dropdownColor: AppTheme.surfaceAlt,
+                            items: widget.product.allUnits.map((u) => DropdownMenuItem(value: u, child: Text(u.unitName))).toList(),
+                            onChanged: (v) {
+                              setState(() => _selectedUnit = v!);
+                              _calculateCost();
+                            },
+                          ),
+                        ),
+                      ] else ...[
+                        Row(children: [
+                          Expanded(
+                            flex: 2,
+                            child: ScrollableQtyField(
+                              controller: _qty,
+                              onChanged: (_) => _calculateCost(),
                               child: TextFormField(
                                 controller: _qty,
                                 decoration: const InputDecoration(labelText: 'Jumlah Tambahan *'),
@@ -291,28 +335,29 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                                 onChanged: (_) => _calculateCost(),
                                 validator: (v) => (Formatters.parseQuantity(v ?? '')) <= 0 ? 'Wajib diisi' : null,
                               ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          flex: 2,
-                          child: SizedBox(
-                            height: 48,
-                            child: DropdownButtonFormField<ProductUnit>(
-                              initialValue: _selectedUnit,
-                              isExpanded: true,
-                              decoration: const InputDecoration(labelText: 'Satuan Pembelian', isDense: true),
-                              dropdownColor: AppTheme.surfaceAlt,
-                              items: widget.product.allUnits.map((u) => DropdownMenuItem(value: u, child: Text(u.unitName))).toList(),
-                              onChanged: (v) {
-                                setState(() => _selectedUnit = v!);
-                                _calculateCost();
-                              },
                             ),
                           ),
-                        ),
-                        const Spacer(),
-                      ]),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            flex: 2,
+                            child: SizedBox(
+                              height: 48,
+                              child: DropdownButtonFormField<ProductUnit>(
+                                initialValue: _selectedUnit,
+                                isExpanded: true,
+                                decoration: const InputDecoration(labelText: 'Satuan Pembelian', isDense: true),
+                                dropdownColor: AppTheme.surfaceAlt,
+                                items: widget.product.allUnits.map((u) => DropdownMenuItem(value: u, child: Text(u.unitName))).toList(),
+                                onChanged: (v) {
+                                  setState(() => _selectedUnit = v!);
+                                  _calculateCost();
+                                },
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                        ]),
+                      ],
                       const SizedBox(height: 24),
 
                       // ── Section: Biaya & Supplier ──────────────────
@@ -370,104 +415,184 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                             const Divider(height: 32),
                             
                             if (!_isManualCost) ...[
+                              if (isCompact) ...[
+                                TextFormField(
+                                  controller: _supplierPrice,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Harga Total Supplier (Rp)',
+                                    prefixText: 'Rp ',
+                                    isDense: true,
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [CurrencyInputFormatter()],
+                                  onChanged: (v) {
+                                    _calculateCost();
+                                    if (Formatters.parsePrice(v) > 0 && _supplierPaymentStatus == PaymentStatus.notApplicable) {
+                                      setState(() => _supplierPaymentStatus = PaymentStatus.unpaid);
+                                    }
+                                  },
+                                ),
+                                const SizedBox(height: 16),
+                                TextFormField(
+                                  controller: _supplierShippingCost,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Total Ongkos Kirim (Rp)',
+                                    prefixText: 'Rp ',
+                                    isDense: true,
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [CurrencyInputFormatter()],
+                                  onChanged: (v) {
+                                    _calculateCost();
+                                    if (Formatters.parsePrice(v) > 0 && _shippingPaymentStatus == PaymentStatus.notApplicable) {
+                                      setState(() => _shippingPaymentStatus = PaymentStatus.unpaid);
+                                    }
+                                  },
+                                ),
+                              ] else ...[
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller: _supplierPrice,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Harga Total Supplier (Rp)',
+                                          prefixText: 'Rp ',
+                                          isDense: true,
+                                        ),
+                                        keyboardType: TextInputType.number,
+                                        inputFormatters: [CurrencyInputFormatter()],
+                                        onChanged: (v) {
+                                          _calculateCost();
+                                          if (Formatters.parsePrice(v) > 0 && _supplierPaymentStatus == PaymentStatus.notApplicable) {
+                                            setState(() => _supplierPaymentStatus = PaymentStatus.unpaid);
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller: _supplierShippingCost,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Total Ongkos Kirim (Rp)',
+                                          prefixText: 'Rp ',
+                                          isDense: true,
+                                        ),
+                                        keyboardType: TextInputType.number,
+                                        inputFormatters: [CurrencyInputFormatter()],
+                                        onChanged: (v) {
+                                          _calculateCost();
+                                          if (Formatters.parsePrice(v) > 0 && _shippingPaymentStatus == PaymentStatus.notApplicable) {
+                                            setState(() => _shippingPaymentStatus = PaymentStatus.unpaid);
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                              const SizedBox(height: 16),
+                            ],
+
+                            if (isCompact) ...[
+                              TextFormField(
+                                controller: _totalCostPerUnit,
+                                readOnly: !_isManualCost,
+                                decoration: InputDecoration(
+                                  labelText: 'Total Modal per Unit (Rp) *',
+                                  prefixText: 'Rp ',
+                                  fillColor: !_isManualCost ? AppTheme.bg.withValues(alpha: 0.5) : null,
+                                  filled: !_isManualCost,
+                                  helperText: !_isManualCost ? 'Dihitung otomatis: (Beli+Ongkir)/Qty' : 'Input harga modal akhir per unit',
+                                ),
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [CurrencyInputFormatter()],
+                                onChanged: (_) => setState(() {}),
+                                validator: (v) {
+                                  final val = Formatters.parsePrice(v ?? '');
+                                  if (val == 0 && (v ?? '').isNotEmpty && (v ?? '') != '0') return 'Format salah';
+                                  if (val == 0 && (v ?? '').isEmpty) return 'Wajib diisi';
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              TextFormField(
+                                controller: _basePrice,
+                                decoration: InputDecoration(
+                                  labelText: 'Harga Jual per Unit (Rp) *',
+                                  prefixText: 'Rp ',
+                                  suffixIcon: IconButton(
+                                    icon: const Icon(Icons.lightbulb_outline_rounded, color: AppTheme.warning, size: 20),
+                                    tooltip: 'Saran Harga (+10%)',
+                                    onPressed: _suggestPrice,
+                                  ),
+                                ),
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [CurrencyInputFormatter()],
+                                onChanged: (_) => setState(() {}),
+                                validator: (v) {
+                                  final sell = Formatters.parsePrice(v ?? '');
+                                  final cost = Formatters.parsePrice(_totalCostPerUnit.text);
+                                  if (sell <= 0) return 'Wajib diisi';
+                                  if (sell < cost) return 'Harga jual di bawah modal';
+                                  return null;
+                                },
+                              ),
+                            ] else ...[
                               Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Expanded(
                                     child: TextFormField(
-                                      controller: _supplierPrice,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Harga Total Supplier (Rp)',
+                                      controller: _totalCostPerUnit,
+                                      readOnly: !_isManualCost,
+                                      decoration: InputDecoration(
+                                        labelText: 'Total Modal per Unit (Rp) *',
                                         prefixText: 'Rp ',
-                                        isDense: true,
+                                        fillColor: !_isManualCost ? AppTheme.bg.withValues(alpha: 0.5) : null,
+                                        filled: !_isManualCost,
+                                        helperText: !_isManualCost ? 'Dihitung otomatis: (Beli+Ongkir)/Qty' : 'Input harga modal akhir per unit',
                                       ),
                                       keyboardType: TextInputType.number,
                                       inputFormatters: [CurrencyInputFormatter()],
-                                      onChanged: (v) {
-                                        _calculateCost();
-                                        // Auto-transition status from N/A to Unpaid if price > 0
-                                        if (Formatters.parsePrice(v) > 0 && _supplierPaymentStatus == PaymentStatus.notApplicable) {
-                                          setState(() => _supplierPaymentStatus = PaymentStatus.unpaid);
-                                        }
+                                      onChanged: (_) => setState(() {}),
+                                      validator: (v) {
+                                        final val = Formatters.parsePrice(v ?? '');
+                                        if (val == 0 && (v ?? '').isNotEmpty && (v ?? '') != '0') return 'Format salah';
+                                        if (val == 0 && (v ?? '').isEmpty) return 'Wajib diisi';
+                                        return null;
                                       },
                                     ),
                                   ),
                                   const SizedBox(width: 16),
                                   Expanded(
                                     child: TextFormField(
-                                      controller: _supplierShippingCost,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Total Ongkos Kirim (Rp)',
+                                      controller: _basePrice,
+                                      decoration: InputDecoration(
+                                        labelText: 'Harga Jual per Unit (Rp) *',
                                         prefixText: 'Rp ',
-                                        isDense: true,
+                                        suffixIcon: IconButton(
+                                          icon: const Icon(Icons.lightbulb_outline_rounded, color: AppTheme.warning, size: 20),
+                                          tooltip: 'Saran Harga (+10%)',
+                                          onPressed: _suggestPrice,
+                                        ),
                                       ),
                                       keyboardType: TextInputType.number,
                                       inputFormatters: [CurrencyInputFormatter()],
-                                      onChanged: (v) {
-                                        _calculateCost();
-                                        // Auto-transition status from N/A to Unpaid if cost > 0
-                                        if (Formatters.parsePrice(v) > 0 && _shippingPaymentStatus == PaymentStatus.notApplicable) {
-                                          setState(() => _shippingPaymentStatus = PaymentStatus.unpaid);
-                                        }
+                                      onChanged: (_) => setState(() {}),
+                                      validator: (v) {
+                                        final sell = Formatters.parsePrice(v ?? '');
+                                        final cost = Formatters.parsePrice(_totalCostPerUnit.text);
+                                        if (sell <= 0) return 'Wajib diisi';
+                                        if (sell < cost) return 'Harga jual di bawah modal';
+                                        return null;
                                       },
                                     ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 16),
                             ],
-
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: TextFormField(
-                                    controller: _totalCostPerUnit,
-                                    readOnly: !_isManualCost,
-                                    decoration: InputDecoration(
-                                      labelText: 'Total Modal per Unit (Rp) *',
-                                      prefixText: 'Rp ',
-                                      fillColor: !_isManualCost ? AppTheme.bg.withValues(alpha: 0.5) : null,
-                                      filled: !_isManualCost,
-                                      helperText: !_isManualCost ? 'Dihitung otomatis: (Beli+Ongkir)/Qty' : 'Input harga modal akhir per unit',
-                                    ),
-                                    keyboardType: TextInputType.number,
-                                    inputFormatters: [CurrencyInputFormatter()],
-                                    onChanged: (_) => setState(() {}),
-                                    validator: (v) {
-                                      final val = Formatters.parsePrice(v ?? '');
-                                      if (val == 0 && (v ?? '').isNotEmpty && (v ?? '') != '0') return 'Format salah';
-                                      if (val == 0 && (v ?? '').isEmpty) return 'Wajib diisi';
-                                      return null;
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: TextFormField(
-                                    controller: _basePrice,
-                                    decoration: InputDecoration(
-                                      labelText: 'Harga Jual per Unit (Rp) *',
-                                      prefixText: 'Rp ',
-                                      suffixIcon: IconButton(
-                                        icon: const Icon(Icons.lightbulb_outline_rounded, color: AppTheme.warning, size: 20),
-                                        tooltip: 'Saran Harga (+10%)',
-                                        onPressed: _suggestPrice,
-                                      ),
-                                    ),
-                                    keyboardType: TextInputType.number,
-                                    inputFormatters: [CurrencyInputFormatter()],
-                                    onChanged: (_) => setState(() {}),
-                                    validator: (v) {
-                                      final sell = Formatters.parsePrice(v ?? '');
-                                      final cost = Formatters.parsePrice(_totalCostPerUnit.text);
-                                      if (sell <= 0) return 'Wajib diisi';
-                                      if (sell < cost) return 'Harga jual di bawah modal';
-                                      return null;
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
                             
                             const SizedBox(height: 12),
                             Container(
@@ -496,179 +621,339 @@ class _RestockDialogState extends ConsumerState<RestockDialog> {
                       const SizedBox(height: 24),
 
                       // ── Section: Pengiriman & Supplier (Detail) ─────
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Informasi Supplier', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                const SizedBox(height: 12),
-                                ref.watch(suppliersProvider).when(
-                                  data: (list) => Column(
-                                    children: [
-                                      SizedBox(
-                                        height: 48,
-                                        child: DropdownButtonFormField<String?>(
-                                          initialValue: _selectedSupplierId,
-                                          isExpanded: true,
-                                          decoration: const InputDecoration(labelText: 'Pilih Supplier', isDense: true),
-                                          dropdownColor: AppTheme.surfaceAlt,
-                                          items: [
-                                            const DropdownMenuItem(value: null, child: Text('Belum Dipilih', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic))),
-                                            ...list.map((s) => DropdownMenuItem(
-                                              value: s.id,
-                                              child: Text(s.name, style: const TextStyle(fontSize: 12)),
-                                            )),
-                                          ],
-                                          onChanged: (v) => setState(() => _selectedSupplierId = v),
-                                          validator: (v) {
-                                            // Mandatory if Price > 0 in Auto mode
-                                            if (!_isManualCost && Formatters.parsePrice(_supplierPrice.text) > 0 && v == null) {
-                                              return 'Wajib pilih supplier';
-                                            }
-                                            return null;
-                                          },
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      SizedBox(
-                                        width: double.infinity,
-                                        child: OutlinedButton.icon(
-                                          onPressed: () => _showQuickAddSupplier(context),
-                                          icon: const Icon(Icons.add_business_rounded, size: 16),
-                                          label: const Text('Daftarkan Supplier Baru', style: TextStyle(fontSize: 11)),
-                                          style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
-                                        ),
-                                      ),
-                                    ],
+                      if (isCompact) ...[
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Informasi Supplier', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            const SizedBox(height: 12),
+                            ref.watch(suppliersProvider).when(
+                              data: (list) => Column(
+                                children: [
+                                  SizedBox(
+                                    height: 48,
+                                    child: DropdownButtonFormField<String?>(
+                                      initialValue: _selectedSupplierId,
+                                      isExpanded: true,
+                                      decoration: const InputDecoration(labelText: 'Pilih Supplier', isDense: true),
+                                      dropdownColor: AppTheme.surfaceAlt,
+                                      items: [
+                                        const DropdownMenuItem(value: null, child: Text('Belum Dipilih', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic))),
+                                        ...list.map((s) => DropdownMenuItem(
+                                          value: s.id,
+                                          child: Text(s.name, style: const TextStyle(fontSize: 12)),
+                                        )),
+                                      ],
+                                      onChanged: (v) => setState(() => _selectedSupplierId = v),
+                                      validator: (v) {
+                                        if (!_isManualCost && Formatters.parsePrice(_supplierPrice.text) > 0 && v == null) {
+                                          return 'Wajib pilih supplier';
+                                        }
+                                        return null;
+                                      },
+                                    ),
                                   ),
-                                  loading: () => const AppLoading(),
-                                  error: (_, __) => const Text('Gagal memuat'),
-                                ),
-                                const SizedBox(height: 12),
-                                _paymentStatusDropdown(
-                                  label: 'Status Bayar Barang',
-                                  value: _supplierPaymentStatus,
-                                  onChanged: (v) {
-                                    setState(() {
-                                      _supplierPaymentStatus = v!;
-                                      if (v == PaymentStatus.paid) {
-                                        _supplierPaidAmount.text = _supplierPrice.text.isEmpty ? '0' : _supplierPrice.text;
-                                      } else {
-                                        _supplierPaidAmount.text = '0';
-                                      }
-                                    });
-                                  },
-                                  validator: (v) {
-                                    // Mandatory if Price > 0 in Auto mode
-                                    if (!_isManualCost && Formatters.parsePrice(_supplierPrice.text) > 0 && (v == null || v == PaymentStatus.notApplicable)) {
-                                      return 'Pilih status bayar';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                                if (_supplierPaymentStatus == PaymentStatus.partial) ...[
                                   const SizedBox(height: 8),
-                                  TextFormField(
-                                    controller: _supplierPaidAmount,
-                                    decoration: const InputDecoration(labelText: 'Jumlah Cicilan Awal (Rp) *', prefixText: 'Rp ', isDense: true),
-                                    keyboardType: TextInputType.number,
-                                    inputFormatters: [CurrencyInputFormatter()],
-                                    validator: (v) => Formatters.parsePrice(v ?? '') <= 0 ? 'Wajib diisi untuk status Cicilan' : null,
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: OutlinedButton.icon(
+                                      onPressed: () => _showQuickAddSupplier(context),
+                                      icon: const Icon(Icons.add_business_rounded, size: 16),
+                                      label: const Text('Daftarkan Supplier Baru', style: TextStyle(fontSize: 11)),
+                                      style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                                    ),
                                   ),
                                 ],
-                              ],
+                              ),
+                              loading: () => const AppLoading(),
+                              error: (_, __) => const Text('Gagal memuat'),
                             ),
-                          ),
-                          const SizedBox(width: 24),
-                          if (!_isManualCost)
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Informasi Ekspedisi / Kurir', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                const SizedBox(height: 12),
-                                ref.watch(shippingServicesProvider).when(
-                                  data: (list) => Column(
-                                    children: [
-                                      SizedBox(
-                                        height: 48,
-                                        child: DropdownButtonFormField<String?>(
-                                          initialValue: _selectedShippingId,
-                                          isExpanded: true,
-                                          decoration: const InputDecoration(labelText: 'Pilih Ekspedisi', isDense: true),
-                                          dropdownColor: AppTheme.surfaceAlt,
-                                          items: [
-                                            const DropdownMenuItem(value: null, child: Text('Belum Dipilih', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic))),
-                                            ...list.map((s) => DropdownMenuItem(
-                                              value: s.id,
-                                              child: Text(s.name, style: const TextStyle(fontSize: 12)),
-                                            )),
-                                          ],
-                                          onChanged: (v) => setState(() => _selectedShippingId = v),
-                                          validator: (v) {
-                                            // Mandatory if Shipping Cost > 0
-                                            if (Formatters.parsePrice(_supplierShippingCost.text) > 0 && v == null) {
-                                              return 'Wajib pilih ekspedisi';
-                                            }
-                                            return null;
-                                          },
-                                        ),
+                            const SizedBox(height: 12),
+                            _paymentStatusDropdown(
+                              label: 'Status Bayar Barang',
+                              value: _supplierPaymentStatus,
+                              onChanged: (v) {
+                                setState(() {
+                                  _supplierPaymentStatus = v!;
+                                  if (v == PaymentStatus.paid) {
+                                    _supplierPaidAmount.text = _supplierPrice.text.isEmpty ? '0' : _supplierPrice.text;
+                                  } else {
+                                    _supplierPaidAmount.text = '0';
+                                  }
+                                });
+                              },
+                              validator: (v) {
+                                if (!_isManualCost && Formatters.parsePrice(_supplierPrice.text) > 0 && (v == null || v == PaymentStatus.notApplicable)) {
+                                  return 'Pilih status bayar';
+                                }
+                                return null;
+                              },
+                            ),
+                            if (_supplierPaymentStatus == PaymentStatus.partial) ...[
+                              const SizedBox(height: 8),
+                              TextFormField(
+                                controller: _supplierPaidAmount,
+                                decoration: const InputDecoration(labelText: 'Jumlah Cicilan Awal (Rp) *', prefixText: 'Rp ', isDense: true),
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [CurrencyInputFormatter()],
+                                validator: (v) => Formatters.parsePrice(v ?? '') <= 0 ? 'Wajib diisi untuk status Cicilan' : null,
+                              ),
+                            ],
+                          ],
+                        ),
+                        if (!_isManualCost) ...[
+                          const SizedBox(height: 24),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Informasi Ekspedisi / Kurir', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              const SizedBox(height: 12),
+                              ref.watch(shippingServicesProvider).when(
+                                data: (list) => Column(
+                                  children: [
+                                    SizedBox(
+                                      height: 48,
+                                      child: DropdownButtonFormField<String?>(
+                                        initialValue: _selectedShippingId,
+                                        isExpanded: true,
+                                        decoration: const InputDecoration(labelText: 'Pilih Ekspedisi', isDense: true),
+                                        dropdownColor: AppTheme.surfaceAlt,
+                                        items: [
+                                          const DropdownMenuItem(value: null, child: Text('Belum Dipilih', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic))),
+                                          ...list.map((s) => DropdownMenuItem(
+                                            value: s.id,
+                                            child: Text(s.name, style: const TextStyle(fontSize: 12)),
+                                          )),
+                                        ],
+                                        onChanged: (v) => setState(() => _selectedShippingId = v),
+                                        validator: (v) {
+                                          if (Formatters.parsePrice(_supplierShippingCost.text) > 0 && v == null) {
+                                            return 'Wajib pilih ekspedisi';
+                                          }
+                                          return null;
+                                        },
                                       ),
-                                      const SizedBox(height: 8),
-                                      SizedBox(
-                                        width: double.infinity,
-                                        child: OutlinedButton.icon(
-                                          onPressed: () => _showQuickAddShipping(context),
-                                          icon: const Icon(Icons.local_shipping_rounded, size: 16),
-                                          label: const Text('Daftarkan Ekspedisi Baru', style: TextStyle(fontSize: 11)),
-                                          style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
-                                        ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: OutlinedButton.icon(
+                                        onPressed: () => _showQuickAddShipping(context),
+                                        icon: const Icon(Icons.local_shipping_rounded, size: 16),
+                                        label: const Text('Daftarkan Ekspedisi Baru', style: TextStyle(fontSize: 11)),
+                                        style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
                                       ),
-                                    ],
-                                  ),
-                                  loading: () => const AppLoading(),
-                                  error: (_, __) => const Text('Gagal memuat'),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(height: 12),
-                                _paymentStatusDropdown(
-                                  label: 'Status Bayar Ongkir',
-                                  value: _shippingPaymentStatus,
-                                  onChanged: (v) {
-                                    setState(() {
-                                      _shippingPaymentStatus = v!;
-                                      if (v == PaymentStatus.paid) {
-                                        _shippingPaidAmount.text = _supplierShippingCost.text.isEmpty ? '0' : _supplierShippingCost.text;
-                                      } else {
-                                        _shippingPaidAmount.text = '0';
-                                      }
-                                    });
-                                  },
-                                  validator: (v) {
-                                    // Mandatory if Shipping Cost > 0
-                                    if (Formatters.parsePrice(_supplierShippingCost.text) > 0 && (v == null || v == PaymentStatus.notApplicable)) {
-                                      return 'Pilih status bayar';
+                                loading: () => const AppLoading(),
+                                error: (_, __) => const Text('Gagal memuat'),
+                              ),
+                              const SizedBox(height: 12),
+                              _paymentStatusDropdown(
+                                label: 'Status Bayar Ongkir',
+                                value: _shippingPaymentStatus,
+                                onChanged: (v) {
+                                  setState(() {
+                                    _shippingPaymentStatus = v!;
+                                    if (v == PaymentStatus.paid) {
+                                      _shippingPaidAmount.text = _supplierShippingCost.text.isEmpty ? '0' : _supplierShippingCost.text;
+                                    } else {
+                                      _shippingPaidAmount.text = '0';
                                     }
-                                    return null;
-                                  },
+                                  });
+                                },
+                                validator: (v) {
+                                  if (Formatters.parsePrice(_supplierShippingCost.text) > 0 && (v == null || v == PaymentStatus.notApplicable)) {
+                                    return 'Pilih status bayar';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              if (_shippingPaymentStatus == PaymentStatus.partial) ...[
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  controller: _shippingPaidAmount,
+                                  decoration: const InputDecoration(labelText: 'Jumlah Cicilan Awal (Rp) *', prefixText: 'Rp ', isDense: true),
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [CurrencyInputFormatter()],
+                                  validator: (v) => Formatters.parsePrice(v ?? '') <= 0 ? 'Wajib diisi for status Cicilan' : null,
                                 ),
-                                if (_shippingPaymentStatus == PaymentStatus.partial) ...[
-                                  const SizedBox(height: 8),
-                                  TextFormField(
-                                    controller: _shippingPaidAmount,
-                                    decoration: const InputDecoration(labelText: 'Jumlah Cicilan Awal (Rp) *', prefixText: 'Rp ', isDense: true),
-                                    keyboardType: TextInputType.number,
-                                    inputFormatters: [CurrencyInputFormatter()],
-                                    validator: (v) => Formatters.parsePrice(v ?? '') <= 0 ? 'Wajib diisi for status Cicilan' : null,
-                                  ),
-                                ],
                               ],
-                            ),
+                            ],
                           ),
                         ],
-                      ),
+                      ] else ...[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Informasi Supplier', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                  const SizedBox(height: 12),
+                                  ref.watch(suppliersProvider).when(
+                                    data: (list) => Column(
+                                      children: [
+                                        SizedBox(
+                                          height: 48,
+                                          child: DropdownButtonFormField<String?>(
+                                            initialValue: _selectedSupplierId,
+                                            isExpanded: true,
+                                            decoration: const InputDecoration(labelText: 'Pilih Supplier', isDense: true),
+                                            dropdownColor: AppTheme.surfaceAlt,
+                                            items: [
+                                              const DropdownMenuItem(value: null, child: Text('Belum Dipilih', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic))),
+                                              ...list.map((s) => DropdownMenuItem(
+                                                value: s.id,
+                                                child: Text(s.name, style: const TextStyle(fontSize: 12)),
+                                              )),
+                                            ],
+                                            onChanged: (v) => setState(() => _selectedSupplierId = v),
+                                            validator: (v) {
+                                              if (!_isManualCost && Formatters.parsePrice(_supplierPrice.text) > 0 && v == null) {
+                                                return 'Wajib pilih supplier';
+                                              }
+                                              return null;
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: OutlinedButton.icon(
+                                            onPressed: () => _showQuickAddSupplier(context),
+                                            icon: const Icon(Icons.add_business_rounded, size: 16),
+                                            label: const Text('Daftarkan Supplier Baru', style: TextStyle(fontSize: 11)),
+                                            style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    loading: () => const AppLoading(),
+                                    error: (_, __) => const Text('Gagal memuat'),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _paymentStatusDropdown(
+                                    label: 'Status Bayar Barang',
+                                    value: _supplierPaymentStatus,
+                                    onChanged: (v) {
+                                      setState(() {
+                                        _supplierPaymentStatus = v!;
+                                        if (v == PaymentStatus.paid) {
+                                          _supplierPaidAmount.text = _supplierPrice.text.isEmpty ? '0' : _supplierPrice.text;
+                                        } else {
+                                          _supplierPaidAmount.text = '0';
+                                        }
+                                      });
+                                    },
+                                    validator: (v) {
+                                      if (!_isManualCost && Formatters.parsePrice(_supplierPrice.text) > 0 && (v == null || v == PaymentStatus.notApplicable)) {
+                                        return 'Pilih status bayar';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  if (_supplierPaymentStatus == PaymentStatus.partial) ...[
+                                    const SizedBox(height: 8),
+                                    TextFormField(
+                                      controller: _supplierPaidAmount,
+                                      decoration: const InputDecoration(labelText: 'Jumlah Cicilan Awal (Rp) *', prefixText: 'Rp ', isDense: true),
+                                      keyboardType: TextInputType.number,
+                                      inputFormatters: [CurrencyInputFormatter()],
+                                      validator: (v) => Formatters.parsePrice(v ?? '') <= 0 ? 'Wajib diisi untuk status Cicilan' : null,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 24),
+                            if (!_isManualCost)
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Informasi Ekspedisi / Kurir', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                  const SizedBox(height: 12),
+                                  ref.watch(shippingServicesProvider).when(
+                                    data: (list) => Column(
+                                      children: [
+                                        SizedBox(
+                                          height: 48,
+                                          child: DropdownButtonFormField<String?>(
+                                            initialValue: _selectedShippingId,
+                                            isExpanded: true,
+                                            decoration: const InputDecoration(labelText: 'Pilih Ekspedisi', isDense: true),
+                                            dropdownColor: AppTheme.surfaceAlt,
+                                            items: [
+                                              const DropdownMenuItem(value: null, child: Text('Belum Dipilih', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic))),
+                                              ...list.map((s) => DropdownMenuItem(
+                                                value: s.id,
+                                                child: Text(s.name, style: const TextStyle(fontSize: 12)),
+                                              )),
+                                            ],
+                                            onChanged: (v) => setState(() => _selectedShippingId = v),
+                                            validator: (v) {
+                                              if (Formatters.parsePrice(_supplierShippingCost.text) > 0 && v == null) {
+                                                return 'Wajib pilih ekspedisi';
+                                              }
+                                              return null;
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: OutlinedButton.icon(
+                                            onPressed: () => _showQuickAddShipping(context),
+                                            icon: const Icon(Icons.local_shipping_rounded, size: 16),
+                                            label: const Text('Daftarkan Ekspedisi Baru', style: TextStyle(fontSize: 11)),
+                                            style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    loading: () => const AppLoading(),
+                                    error: (_, __) => const Text('Gagal memuat'),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _paymentStatusDropdown(
+                                    label: 'Status Bayar Ongkir',
+                                    value: _shippingPaymentStatus,
+                                    onChanged: (v) {
+                                      setState(() {
+                                        _shippingPaymentStatus = v!;
+                                        if (v == PaymentStatus.paid) {
+                                          _shippingPaidAmount.text = _supplierShippingCost.text.isEmpty ? '0' : _supplierShippingCost.text;
+                                        } else {
+                                          _shippingPaidAmount.text = '0';
+                                        }
+                                      });
+                                    },
+                                    validator: (v) {
+                                      if (Formatters.parsePrice(_supplierShippingCost.text) > 0 && (v == null || v == PaymentStatus.notApplicable)) {
+                                        return 'Pilih status bayar';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  if (_shippingPaymentStatus == PaymentStatus.partial) ...[
+                                    const SizedBox(height: 8),
+                                    TextFormField(
+                                      controller: _shippingPaidAmount,
+                                      decoration: const InputDecoration(labelText: 'Jumlah Cicilan Awal (Rp) *', prefixText: 'Rp ', isDense: true),
+                                      keyboardType: TextInputType.number,
+                                      inputFormatters: [CurrencyInputFormatter()],
+                                      validator: (v) => Formatters.parsePrice(v ?? '') <= 0 ? 'Wajib diisi for status Cicilan' : null,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 24),
 
                       TextFormField(
