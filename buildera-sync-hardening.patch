@@ -1,0 +1,2124 @@
+From 7f6d7640d1494da1404a794d6a2a8dcd269fcd8e Mon Sep 17 00:00:00 2001
+From: Al <al@example.com>
+Date: Mon, 12 Oct 2026 04:28:00 +0000
+Subject: [PATCH] fix(sync): harden multi-device sync and settings sync
+
+Sync engine
+- delete propagates across devices via server-side tombstones
+- stock is applied as idempotent delta (adjust_stock RPC), never overwritten
+- updated_at set by DB trigger; checkpoint = max server updated_at (no clock skew)
+- queue ordered by (createdAt, seq); failed docs no longer block the queue;
+  permanent failures go to dead-letter after 5 tries
+- realtime: no dropped signals while fetching, auto-resubscribe, 60s poll fallback
+- sync_metadata table + RLS + realtime publication in migration
+
+Settings
+- empty remote values are respected (no resurrection from signup metadata)
+- device-specific fields (printer, receipt, images) stay local
+- offline edits kept as pending patch and flushed on reconnect
+- diff-only upserts, echo/stale realtime events ignored
+- notifier no longer resets to defaults on auth token refresh
+
+Security
+- PIN stored as salted PBKDF2 hash (legacy plaintext auto-migrated)
+- forgot-password uses verify_reset_identity RPC instead of anon SELECT
+---
+ lib/core/sync/models/sync_task.dart           |   8 +
+ lib/core/sync/providers/sync_provider.dart    | 715 ++++++++++++------
+ lib/core/sync/services/local_database.dart    |   2 +-
+ lib/core/utils/pin_hasher.dart                |  77 ++
+ .../presentation/pages/setup_pin_page.dart    |   3 +-
+ .../auth/providers/auth_provider.dart         |  15 +-
+ .../presentation/widgets/cart_panel.dart      |   6 +-
+ .../products/providers/product_provider.dart  |  81 +-
+ .../settings/models/store_settings.dart       |  24 +
+ .../presentation/pages/settings_page.dart     |  16 +-
+ .../settings/providers/settings_provider.dart | 347 ++++++---
+ lib/shared/widgets/security_gate.dart         |   8 +-
+ pubspec.yaml                                  |   1 +
+ .../20261012000000_sync_hardening.sql         | 155 ++++
+ test/pin_hasher_test.dart                     |  36 +
+ 15 files changed, 1079 insertions(+), 415 deletions(-)
+ create mode 100644 lib/core/utils/pin_hasher.dart
+ create mode 100644 supabase/migrations/20261012000000_sync_hardening.sql
+ create mode 100644 test/pin_hasher_test.dart
+
+diff --git a/lib/core/sync/models/sync_task.dart b/lib/core/sync/models/sync_task.dart
+index fdc9502..4823ad4 100644
+--- a/lib/core/sync/models/sync_task.dart
++++ b/lib/core/sync/models/sync_task.dart
+@@ -10,6 +10,9 @@ class SyncTask {
+   final int retryCount;
+   final String? lastError;
+ 
++  /// Urutan monoton untuk tie-break saat createdAt sama (presisi ms di web).
++  final int seq;
++
+   const SyncTask({
+     required this.id,
+     required this.collection,
+@@ -19,6 +22,7 @@ class SyncTask {
+     required this.createdAt,
+     this.retryCount = 0,
+     this.lastError,
++    this.seq = 0,
+   });
+ 
+   Map<String, dynamic> toMap() {
+@@ -31,6 +35,7 @@ class SyncTask {
+       'created_at': createdAt.toIso8601String(),
+       'retry_count': retryCount,
+       'last_error': lastError,
++      'seq': seq,
+     };
+   }
+ 
+@@ -44,6 +49,7 @@ class SyncTask {
+       createdAt: DateTime.parse(m['created_at'] as String),
+       retryCount: m['retry_count'] as int? ?? 0,
+       lastError: m['last_error'] as String?,
++      seq: m['seq'] as int? ?? 0,
+     );
+   }
+ 
+@@ -51,6 +57,7 @@ class SyncTask {
+     int? retryCount,
+     String? lastError,
+     bool clearLastError = false,
++    int? seq,
+   }) {
+     return SyncTask(
+       id: id,
+@@ -61,6 +68,7 @@ class SyncTask {
+       createdAt: createdAt,
+       retryCount: retryCount ?? this.retryCount,
+       lastError: clearLastError ? null : (lastError ?? this.lastError),
++      seq: seq ?? this.seq,
+     );
+   }
+ }
+diff --git a/lib/core/sync/providers/sync_provider.dart b/lib/core/sync/providers/sync_provider.dart
+index 180eec6..ff9a957 100644
+--- a/lib/core/sync/providers/sync_provider.dart
++++ b/lib/core/sync/providers/sync_provider.dart
+@@ -13,12 +13,14 @@ import 'connectivity_provider.dart';
+ 
+ class SyncState {
+   final int pendingCount;
++  final int deadLetterCount;
+   final bool isSyncing;
+   final DateTime? lastSyncAt;
+   final String? lastError;
+ 
+   const SyncState({
+     this.pendingCount = 0,
++    this.deadLetterCount = 0,
+     this.isSyncing = false,
+     this.lastSyncAt,
+     this.lastError,
+@@ -26,6 +28,7 @@ class SyncState {
+ 
+   SyncState copyWith({
+     int? pendingCount,
++    int? deadLetterCount,
+     bool? isSyncing,
+     DateTime? lastSyncAt,
+     String? lastError,
+@@ -33,12 +36,36 @@ class SyncState {
+   }) =>
+       SyncState(
+         pendingCount: pendingCount ?? this.pendingCount,
++        deadLetterCount: deadLetterCount ?? this.deadLetterCount,
+         isSyncing: isSyncing ?? this.isSyncing,
+         lastSyncAt: lastSyncAt ?? this.lastSyncAt,
+         lastError: clearLastError ? null : (lastError ?? this.lastError),
+       );
+ }
+ 
++/// Koleksi yang ditarik secara delta (updated_at) + tombstone untuk delete.
++const _updatedCollections = [
++  'products',
++  'customers',
++  'debts',
++  'debt_payments',
++  'transactions',
++  'purchases',
++];
++
++/// Koleksi tanpa updated_at yang andal: ditarik sebagai snapshot penuh.
++const _snapshotCollections = [
++  'suppliers',
++  'shipping_services',
++  'restock_history',
++  'bill_payments',
++  'barcode_history',
++];
++
++/// Task yang gagal permanen (RLS/skema/validasi) dipindah ke dead-letter
++/// setelah sejumlah percobaan agar tidak memblokir antrean selamanya.
++const _maxRetries = 5;
++
+ // ── Notifier ──────────────────────────────────────────────────────────────
+ 
+ final syncProvider =
+@@ -46,29 +73,42 @@ final syncProvider =
+ 
+ class SyncNotifier extends Notifier<SyncState> {
+   Box? _queueBox;
++  String? _queueBoxUid;
++  Future<Box>? _queueOpening;
++  String? _queueOpeningUid;
++
+   String? _uid;
+   Timer? _syncTimer;
++  int _tick = 0;
++
+   RealtimeChannel? _signalChannel;
++  String? _signalUid;
++  Timer? _signalRetry;
++
+   final String _sessionId = const Uuid().v4();
+   bool _isFetchingDeltas = false;
+-  Future<Box>? _queueOpening;
+-  String? _queueOpeningUid;
++  bool _refetchRequested = false;
++  bool _isCurrentlyProcessing = false;
++  bool _metaDirty = false;
++  int _lastSeq = 0;
+ 
+   @override
+   SyncState build() {
+-    final auth = ref.watch(authStateProvider).value;
++    // select(): hanya rebuild saat uid berubah, bukan tiap token refresh.
++    final uid = ref.watch(authStateProvider.select((a) => a.value?.uid));
+     final isOnline = ref.watch(isOnlineProvider);
+ 
+-    _uid = auth?.uid;
+-
+-    if (_uid != null) {
+-      _initQueue();
+-    } else {
+-      _closeQueue();
++    if (uid != _uid) {
+       _stopSignalListener();
++      _closeQueue();
++    }
++    _uid = uid;
++
++    if (uid != null) {
++      unawaited(_ensureQueueBox());
+     }
+ 
+-    if (isOnline && _uid != null) {
++    if (isOnline && uid != null) {
+       _startSync();
+       _startSignalListener();
+     } else {
+@@ -78,18 +118,23 @@ class SyncNotifier extends Notifier<SyncState> {
+ 
+     ref.onDispose(() {
+       _syncTimer?.cancel();
+-      _signalChannel?.unsubscribe();
++      _syncTimer = null;
++      _stopSignalListener();
+     });
+ 
+     return const SyncState();
+   }
+ 
++  // ── Queue box ────────────────────────────────────────────────────────────
++
+   Future<Box?> _ensureQueueBox() async {
+     final uid = _uid;
+     if (uid == null) return null;
+ 
+     final existing = _queueBox;
+-    if (existing != null && existing.isOpen) return existing;
++    if (existing != null && existing.isOpen && _queueBoxUid == uid) {
++      return existing;
++    }
+ 
+     if (_queueOpening != null && _queueOpeningUid == uid) {
+       return _queueOpening;
+@@ -102,7 +147,10 @@ class SyncNotifier extends Notifier<SyncState> {
+       final box = await opening;
+       if (_uid == uid) {
+         _queueBox = box;
+-        state = state.copyWith(pendingCount: box.length);
++        _queueBoxUid = uid;
++        final dead = await LocalDatabase.openBox(uid, 'sync_dead_letter');
++        state = state.copyWith(
++            pendingCount: box.length, deadLetterCount: dead.length);
+       }
+       return box;
+     } finally {
+@@ -113,21 +161,29 @@ class SyncNotifier extends Notifier<SyncState> {
+     }
+   }
+ 
+-  Future<void> _initQueue() async {
+-    await _ensureQueueBox();
+-  }
+-
+   void _closeQueue() {
+-    _queueBox?.close();
++    final box = _queueBox;
+     _queueBox = null;
+-    state = const SyncState();
++    _queueBoxUid = null;
++    if (box != null && box.isOpen) {
++      unawaited(box.close());
++    }
+   }
+ 
+   void _startSync() {
+     _syncTimer?.cancel();
+-    _syncTimer =
+-        Timer.periodic(const Duration(seconds: 15), (_) => processQueue());
+-    Future.microtask(() => processQueue());
++    _tick = 0;
++    _syncTimer = Timer.periodic(const Duration(seconds: 15), (_) {
++      _tick++;
++      unawaited(processQueue());
++      // Fallback: kalau sinyal realtime terlewat, tarik perubahan tiap ~60 dtk.
++      if (_tick % 4 == 0) unawaited(fetchDeltas());
++      if (_metaDirty) unawaited(_signalOthers());
++    });
++    Future.microtask(() async {
++      await processQueue();
++      await fetchDeltas(); // kejar perubahan yang terlewat saat offline/mati
++    });
+   }
+ 
+   void _stopSync() {
+@@ -135,12 +191,18 @@ class SyncNotifier extends Notifier<SyncState> {
+     _syncTimer = null;
+   }
+ 
++  // ── Realtime signal ─────────────────────────────────────────────────────
++
+   void _startSignalListener() {
+-    if (_signalChannel != null || _uid == null) return;
++    final uid = _uid;
++    if (uid == null) return;
++    if (_signalChannel != null && _signalUid == uid) return;
++    _stopSignalListener();
+ 
++    _signalUid = uid;
+     final client = ref.read(supabaseClientProvider);
+     _signalChannel = client
+-        .channel('public:sync_metadata:$_uid')
++        .channel('public:sync_metadata:$uid')
+         .onPostgresChanges(
+           event: PostgresChangeEvent.all,
+           schema: 'public',
+@@ -148,40 +210,59 @@ class SyncNotifier extends Notifier<SyncState> {
+           filter: PostgresChangeFilter(
+             type: PostgresChangeFilterType.eq,
+             column: 'user_id',
+-            value: _uid!,
++            value: uid,
+           ),
+-          callback: (payload) async {
++          callback: (payload) {
+             final data = payload.newRecord;
+             if (data.isEmpty) return;
+-
+-            final lastUpdateBy = data['updated_by_session'] as String?;
+-            if (lastUpdateBy == _sessionId) return;
+-
+-            final remoteLastUpdateStr = data['last_update'] as String?;
+-            if (remoteLastUpdateStr == null) return;
+-            final remoteLastUpdate = DateTime.parse(remoteLastUpdateStr);
+-
+-            final localLastSyncRaw =
+-                await LocalDatabase.getMetadata(_uid!, 'last_remote_sync');
+-            final localLastSync = localLastSyncRaw != null
+-                ? DateTime.parse(localLastSyncRaw as String)
+-                : DateTime(2000);
+-
+-            if (remoteLastUpdate
+-                .isAfter(localLastSync.subtract(const Duration(seconds: 1)))) {
+-              await fetchDeltas(remoteLastUpdate);
+-            }
++            if (data['updated_by_session'] == _sessionId) return;
++            // Jam device lain tidak dipercaya: cukup tarik delta dari checkpoint.
++            unawaited(fetchDeltas());
+           },
+         )
+-        .subscribe();
++        .subscribe((status, error) {
++      if (status == RealtimeSubscribeStatus.subscribed) {
++        unawaited(fetchDeltas()); // kejar sinyal yang terlewat saat putus
++      } else if (status == RealtimeSubscribeStatus.channelError ||
++          status == RealtimeSubscribeStatus.timedOut) {
++        debugPrint('Sync signal channel $status: $error');
++        _stopSignalListener();
++        _signalRetry?.cancel();
++        _signalRetry = Timer(const Duration(seconds: 10), () {
++          if (_uid != null && ref.read(isOnlineProvider)) {
++            _startSignalListener();
++          }
++        });
++      }
++    });
+   }
+ 
+   void _stopSignalListener() {
++    _signalRetry?.cancel();
++    _signalRetry = null;
+     _signalChannel?.unsubscribe();
+     _signalChannel = null;
++    _signalUid = null;
+   }
+ 
+-  // ── Actions ──────────────────────────────────────────────────────────────
++  Future<void> _signalOthers() async {
++    final uid = _uid;
++    if (uid == null) return;
++    try {
++      await ref.read(supabaseClientProvider).from('sync_metadata').upsert({
++        'user_id': uid,
++        'last_update': DateTime.now().toUtc().toIso8601String(),
++        'updated_by_session': _sessionId,
++      });
++      _metaDirty = false;
++    } catch (e) {
++      // Tidak fatal (ada polling cadangan), tapi dicoba lagi di tick berikutnya.
++      _metaDirty = true;
++      debugPrint('sync_metadata signal failed: $e');
++    }
++  }
++
++  // ── Enqueue ─────────────────────────────────────────────────────────────
+ 
+   Future<void> addToQueue({
+     required String collection,
+@@ -205,9 +286,13 @@ class SyncNotifier extends Notifier<SyncState> {
+     final queue = await _ensureQueueBox();
+     if (queue == null) return;
+ 
+-    final Map<dynamic, dynamic> entries = {};
++    final entries = <dynamic, dynamic>{};
+     for (final task in tasks) {
+-      entries[task.id] = task.toMap();
++      // Urutan antrean ditentukan (createdAt, seq), BUKAN urutan key Hive
++      // (key string di Hive terurut leksikografis, jadi UUID acak).
++      final now = DateTime.now().microsecondsSinceEpoch;
++      _lastSeq = now > _lastSeq ? now : _lastSeq + 1;
++      entries[task.id] = task.copyWith(seq: _lastSeq).toMap();
+     }
+ 
+     await queue.putAll(entries);
+@@ -218,268 +303,396 @@ class SyncNotifier extends Notifier<SyncState> {
+     }
+   }
+ 
+-  bool _isCurrentlyProcessing = false;
++  // ── Pull (delta) ────────────────────────────────────────────────────────
++
++  Set<String> _pendingDocKeys() {
++    final queue = _queueBox;
++    if (queue == null || !queue.isOpen) return <String>{};
++    final keys = <String>{};
++    for (final raw in queue.values) {
++      final m = raw as Map;
++      keys.add('${m['collection']}:${m['document_id']}');
++    }
++    return keys;
++  }
+ 
+-  Future<bool> fetchDeltas(DateTime remoteTimestamp) async {
++  /// [hint] dipertahankan demi kompatibilitas pemanggil lama; tidak dipakai.
++  /// Checkpoint kini = updated_at terbesar dari SERVER yang sudah diterapkan.
++  Future<bool> fetchDeltas([DateTime? hint]) async {
+     final uid = _uid;
+-    if (uid == null || _isFetchingDeltas || !ref.read(isOnlineProvider)) {
++    if (uid == null || !ref.read(isOnlineProvider)) return false;
++    if (_isFetchingDeltas) {
++      _refetchRequested = true; // jangan buang sinyal yang datang saat fetch
+       return false;
+     }
+ 
+     _isFetchingDeltas = true;
++    var ok = false;
++    try {
++      ok = await _pullOnce(uid);
++    } catch (error) {
++      state = state.copyWith(lastError: 'Delta sync gagal: $error');
++      debugPrint('Supabase Delta Fetch Error: $error');
++    } finally {
++      _isFetchingDeltas = false;
++    }
++
++    if (_refetchRequested) {
++      _refetchRequested = false;
++      unawaited(fetchDeltas());
++    }
++    return ok;
++  }
++
++  Future<bool> _pullOnce(String uid) async {
+     final client = ref.read(supabaseClientProvider);
+-    final failures = <String>[];
+ 
+-    try {
+-      final localLastSyncRaw =
+-          await LocalDatabase.getMetadata(uid, 'last_remote_sync');
+-      final localLastSync = localLastSyncRaw != null
+-          ? DateTime.parse(localLastSyncRaw as String)
+-          : DateTime(2000);
+-      final queryTimestamp = localLastSync.subtract(const Duration(seconds: 1));
+-
+-      final pendingKeys = _queueBox?.values.map((entry) {
+-            final task = Map<String, dynamic>.from(entry as Map);
+-            return '${task['collection']}:${task['document_id']}';
+-          }).toSet() ??
+-          <String>{};
+-
+-      Future<void> pullUpdatedCollection(String collection) async {
+-        try {
+-          final select = collection == 'transactions'
+-              ? '*, items:transaction_items(*)'
+-              : '*';
+-          final response = await client
+-              .from(collection)
+-              .select(select)
+-              .eq('user_id', uid)
+-              .gt('updated_at', queryTimestamp.toIso8601String());
+-          final box = await LocalDatabase.openBox(uid, collection);
+-
+-          for (final row in response) {
+-            final data =
+-                LocalDatabase.sanitize(Map<String, dynamic>.from(row as Map));
+-            final id = data['id']?.toString();
+-            if (id == null || pendingKeys.contains('$collection:$id')) continue;
+-
+-            final localRaw = box.get(id);
+-            if (localRaw != null) {
+-              final local = Map<String, dynamic>.from(localRaw as Map);
+-              final localUpdated =
+-                  DateTime.tryParse(local['updated_at']?.toString() ?? '') ??
+-                      DateTime(2000);
+-              final remoteUpdated =
+-                  DateTime.tryParse(data['updated_at']?.toString() ?? '') ??
+-                      DateTime(2000);
+-              if (!remoteUpdated.isAfter(localUpdated)) continue;
+-            }
+-            await box.put(id, data);
++    // Jangan tarik apa pun sebelum unduhan awal selesai (tampil di AuthGate).
++    final syncMeta = await LocalDatabase.openBox(uid, 'sync_meta');
++    if (syncMeta.get('initial_sync_done') != true) return false;
++
++    final raw = await LocalDatabase.getMetadata(uid, 'last_remote_sync');
++    final checkpoint = raw != null
++        ? DateTime.parse(raw as String).toUtc()
++        : DateTime.utc(2000);
++    // Overlap 2 detik: transaksi yang commit terlambat tetap tertangkap.
++    final lowerIso =
++        checkpoint.subtract(const Duration(seconds: 2)).toIso8601String();
++
++    var maxSeen = checkpoint;
++    final failures = <String>[];
++    final updatedStamps = <String, DateTime>{}; // 'koleksi:id' -> updated_at
++
++    Future<void> pullUpdated(String collection) async {
++      try {
++        final select = collection == 'transactions'
++            ? '*, items:transaction_items(*)'
++            : '*';
++        final response = await client
++            .from(collection)
++            .select(select)
++            .eq('user_id', uid)
++            .gt('updated_at', lowerIso);
++
++        final box = await LocalDatabase.openBox(uid, collection);
++        final pending = _pendingDocKeys(); // dihitung SETELAH network selesai
++        final batch = <String, dynamic>{};
++
++        for (final row in response) {
++          final data =
++              LocalDatabase.sanitize(Map<String, dynamic>.from(row as Map));
++          final id = data['id']?.toString();
++          if (id == null) continue;
++
++          final ts = DateTime.tryParse(data['updated_at']?.toString() ?? '')
++              ?.toUtc();
++          if (ts != null) {
++            updatedStamps['$collection:$id'] = ts;
++            if (ts.isAfter(maxSeen)) maxSeen = ts;
+           }
+-        } catch (error) {
+-          failures.add('$collection: $error');
+-          debugPrint('Delta Fetch Error for $collection: $error');
++          // Perubahan lokal yang belum terkirim menang (akan di-push & LWW di server).
++          if (pending.contains('$collection:$id')) continue;
++          batch[id] = data;
+         }
++        if (batch.isNotEmpty) await box.putAll(batch);
++      } catch (error) {
++        failures.add('$collection: $error');
++        debugPrint('Delta Fetch Error for $collection: $error');
+       }
++    }
+ 
+-      Future<void> pullSnapshotCollection(String collection) async {
+-        try {
+-          final response =
+-              await client.from(collection).select().eq('user_id', uid);
+-          final box = await LocalDatabase.openBox(uid, collection);
+-          final remoteEntries = <String, Map<String, dynamic>>{};
+-
+-          for (final row in response) {
+-            final data =
+-                LocalDatabase.sanitize(Map<String, dynamic>.from(row as Map));
+-            final id = data['id']?.toString();
+-            if (id != null && id.isNotEmpty) remoteEntries[id] = data;
+-          }
++    Future<void> pullSnapshot(String collection) async {
++      try {
++        final response =
++            await client.from(collection).select().eq('user_id', uid);
++        final box = await LocalDatabase.openBox(uid, collection);
++        final pending = _pendingDocKeys();
++        final remote = <String, Map<String, dynamic>>{};
++
++        for (final row in response) {
++          final data =
++              LocalDatabase.sanitize(Map<String, dynamic>.from(row as Map));
++          final id = data['id']?.toString();
++          if (id != null && id.isNotEmpty) remote[id] = data;
++        }
+ 
+-          for (final entry in remoteEntries.entries) {
+-            if (!pendingKeys.contains('$collection:${entry.key}')) {
+-              await box.put(entry.key, entry.value);
+-            }
+-          }
++        final batch = <String, dynamic>{};
++        for (final e in remote.entries) {
++          if (!pending.contains('$collection:${e.key}')) batch[e.key] = e.value;
++        }
++        if (batch.isNotEmpty) await box.putAll(batch);
+ 
+-          // These collections have no reliable updated_at field. A full snapshot
+-          // is needed to observe edits and deletions from another device.
+-          for (final localKey in box.keys.toList()) {
+-            final id = localKey.toString();
+-            if (!remoteEntries.containsKey(id) &&
+-                !pendingKeys.contains('$collection:$id')) {
+-              await box.delete(localKey);
+-            }
++        for (final localKey in box.keys.toList()) {
++          final id = localKey.toString();
++          if (!remote.containsKey(id) && !pending.contains('$collection:$id')) {
++            await box.delete(localKey);
+           }
+-        } catch (error) {
+-          failures.add('$collection: $error');
+-          debugPrint('Snapshot Fetch Error for $collection: $error');
+         }
++      } catch (error) {
++        failures.add('$collection: $error');
++        debugPrint('Snapshot Fetch Error for $collection: $error');
+       }
++    }
+ 
+-      const updatedCollections = [
+-        'products',
+-        'customers',
+-        'debts',
+-        'debt_payments',
+-        'transactions',
+-        'purchases',
+-      ];
+-      const snapshotCollections = [
+-        'suppliers',
+-        'shipping_services',
+-        'restock_history',
+-        'bill_payments',
+-        'barcode_history',
+-      ];
+-
+-      await Future.wait([
+-        ...updatedCollections.map(pullUpdatedCollection),
+-        ...snapshotCollections.map(pullSnapshotCollection),
+-      ]);
+-
+-      if (failures.isNotEmpty) {
+-        state = state.copyWith(
+-          lastError:
+-              'Sinkronisasi belum lengkap: ${failures.take(3).join(' | ')}',
+-        );
+-        return false;
+-      }
++    await Future.wait([
++      ..._updatedCollections.map(pullUpdated),
++      ..._snapshotCollections.map(pullSnapshot),
++    ]);
++
++    // Delete dari device lain (tombstone dicatat trigger di server).
++    try {
++      final tombs = await client
++          .from('sync_tombstones')
++          .select('collection, doc_id, deleted_at')
++          .eq('user_id', uid)
++          .gt('deleted_at', lowerIso);
++      final pending = _pendingDocKeys();
++
++      for (final t in tombs) {
++        final col = t['collection']?.toString();
++        final id = t['doc_id']?.toString();
++        final del = DateTime.tryParse(t['deleted_at']?.toString() ?? '')?.toUtc();
++        if (col == null || id == null || !_updatedCollections.contains(col)) {
++          continue;
++        }
++        if (del != null && del.isAfter(maxSeen)) maxSeen = del;
+ 
+-      await LocalDatabase.setMetadata(
+-          uid, 'last_remote_sync', remoteTimestamp.toIso8601String());
+-      state = state.copyWith(clearLastError: true, lastSyncAt: DateTime.now());
+-      return true;
++        final key = '$col:$id';
++        if (pending.contains(key)) continue;
++        final upd = updatedStamps[key];
++        if (upd != null && del != null && upd.isAfter(del)) continue; // dibuat ulang
++
++        final box = await LocalDatabase.openBox(uid, col);
++        if (box.containsKey(id)) await box.delete(id);
++      }
++    } on PostgrestException catch (e) {
++      // Migrasi belum diterapkan: jangan melumpuhkan seluruh sync.
++      if (e.code == '42P01' || e.code == 'PGRST205') {
++        debugPrint('sync_tombstones belum ada — jalankan migrasi sync_hardening.');
++      } else {
++        failures.add('tombstones: ${e.message}');
++      }
+     } catch (error) {
+-      state = state.copyWith(lastError: 'Delta sync gagal: $error');
+-      debugPrint('Supabase Delta Fetch Error: $error');
++      failures.add('tombstones: $error');
++    }
++
++    if (failures.isNotEmpty) {
++      // Checkpoint TIDAK maju agar tidak ada data yang terlewat.
++      state = state.copyWith(
++        lastError: 'Sinkronisasi belum lengkap: ${failures.take(3).join(' | ')}',
++      );
+       return false;
+-    } finally {
+-      _isFetchingDeltas = false;
+     }
++
++    await LocalDatabase.setMetadata(
++        uid, 'last_remote_sync', maxSeen.toUtc().toIso8601String());
++    state = state.copyWith(clearLastError: true, lastSyncAt: DateTime.now());
++    return true;
++  }
++
++  // ── Push (queue) ────────────────────────────────────────────────────────
++
++  List<MapEntry<dynamic, SyncTask>> _sortedEntries(Box queue) {
++    final out = <MapEntry<dynamic, SyncTask>>[];
++    for (final key in queue.keys.toList()) {
++      final raw = queue.get(key);
++      if (raw == null) continue;
++      try {
++        out.add(MapEntry(
++            key, SyncTask.fromMap(Map<String, dynamic>.from(raw as Map))));
++      } catch (e) {
++        debugPrint('Dropping corrupt sync task $key: $e');
++        unawaited(queue.delete(key));
++      }
++    }
++    out.sort((a, b) {
++      final c = a.value.createdAt.compareTo(b.value.createdAt);
++      return c != 0 ? c : a.value.seq.compareTo(b.value.seq);
++    });
++    return out;
++  }
++
++  /// Gangguan jaringan / server sementara → tunda semua, jangan hitung retry.
++  bool _isTransient(PostgrestException e) {
++    final code = e.code ?? '';
++    return code.startsWith('5') || code.startsWith('PGRST30');
+   }
+ 
+   Future<void> processQueue() async {
+     if (_isCurrentlyProcessing || !ref.read(isOnlineProvider)) return;
+     final queue = await _ensureQueueBox();
+-    if (queue == null || queue.isEmpty) return;
++    if (queue == null) return;
++    if (queue.isEmpty) {
++      if (_metaDirty) await _signalOthers();
++      return;
++    }
+ 
+     _isCurrentlyProcessing = true;
+     state = state.copyWith(isSyncing: true, clearLastError: true);
+ 
+     final client = ref.read(supabaseClientProvider);
++    final failedThisRun = <dynamic>{};
++    final blockedDocs = <String>{}; // jaga urutan per-dokumen
++    var hasChanges = false;
+ 
+     try {
+-      bool hasChanges = false;
+-
+-      while (queue.isNotEmpty && ref.read(isOnlineProvider)) {
+-        final keys = queue.keys.take(50).toList();
+-        final processedKeys = <dynamic>[];
+-        var batchFailed = false;
+-
+-        for (final key in keys) {
+-          final raw = queue.get(key);
+-          if (raw == null) {
+-            processedKeys.add(key);
+-            continue;
+-          }
++      var progress = true;
++      while (progress && ref.read(isOnlineProvider)) {
++        progress = false;
++        final batch = _sortedEntries(queue)
++            .where((e) =>
++                !failedThisRun.contains(e.key) &&
++                !blockedDocs.contains(
++                    '${e.value.collection}:${e.value.documentId}'))
++            .take(50)
++            .toList();
++        if (batch.isEmpty) break;
++
++        final done = <dynamic>[];
++        var stop = false;
++
++        for (final entry in batch) {
++          final task = entry.value;
++          final docKey = '${task.collection}:${task.documentId}';
++          if (blockedDocs.contains(docKey)) continue;
+ 
+-          SyncTask? task;
+           try {
+-            task = SyncTask.fromMap(Map<String, dynamic>.from(raw as Map));
+-            final table = task.collection;
+-
+-            // ENSURE ID IS PRESENT (Fixes PGRST 23502)
+-            final Map<String, dynamic> finalData = Map.from(task.data);
+-            if (!finalData.containsKey('id')) {
+-              finalData['id'] = task.documentId;
+-            }
+-            await _prepareRemotePayload(task, finalData, client);
+-
+-            switch (task.action) {
+-              case SyncAction.create:
+-              case SyncAction.update:
+-              case SyncAction.increment:
+-                await client.from(table).upsert({
+-                  'user_id': _uid,
+-                  ...finalData,
+-                });
+-                break;
+-              case SyncAction.delete:
+-                await client
+-                    .from(table)
+-                    .delete()
+-                    .eq('id', task.documentId)
+-                    .eq('user_id', _uid!);
+-                break;
++            await _execute(client, task);
++            done.add(entry.key);
++          } on PostgrestException catch (e) {
++            if (_isTransient(e)) {
++              state = state.copyWith(
++                  lastError: 'Sync ${task.collection} tertunda: ${e.message}');
++              stop = true;
++              break;
+             }
+-            processedKeys.add(key);
++            // Gagal permanen: lanjutkan dokumen lain, blokir hanya dokumen ini.
++            blockedDocs.add(docKey);
++            failedThisRun.add(entry.key);
++            progress = true;
++            await _recordPermanentFailure(queue, entry.key, task, e);
+           } catch (e) {
+-            debugPrint('Sync Task Process Error for key $key: $e');
+-            batchFailed = true;
+-            final failedTask = task;
+-            if (failedTask != null) {
+-              try {
+-                await queue.put(
+-                  key,
+-                  failedTask
+-                      .copyWith(
+-                        retryCount: failedTask.retryCount + 1,
+-                        lastError: e.toString(),
+-                      )
+-                      .toMap(),
+-                );
+-              } catch (queueError) {
+-                debugPrint('Could not persist sync retry state: $queueError');
+-              }
+-            }
+-            state = state.copyWith(
+-              lastError: 'Sync ${task?.collection ?? 'task'} gagal: $e',
+-            );
++            // Jaringan/timeout: hentikan, coba lagi di siklus berikutnya.
++            debugPrint('Sync network error for ${task.collection}: $e');
++            state = state.copyWith(lastError: 'Sync ${task.collection} tertunda: $e');
++            stop = true;
++            break;
+           }
+         }
+ 
+-        if (processedKeys.isNotEmpty) {
+-          await queue.deleteAll(processedKeys);
++        if (done.isNotEmpty) {
++          await queue.deleteAll(done);
+           hasChanges = true;
++          progress = true;
+           state = state.copyWith(
+-            pendingCount: queue.length,
+-            lastSyncAt: DateTime.now(),
+-          );
++              pendingCount: queue.length, lastSyncAt: DateTime.now());
+         }
+-
+-        // Keep failed tasks queued and wait for the next sync cycle instead of
+-        // immediately retrying the same schema/network failure in a tight loop.
+-        if (batchFailed) break;
++        if (stop) break;
+       }
+ 
+-      if (hasChanges) {
+-        try {
+-          await client.from('sync_metadata').upsert({
+-            'user_id': _uid,
+-            'last_update': DateTime.now().toIso8601String(),
+-            'updated_by_session': _sessionId,
+-          });
+-        } catch (_) {}
+-      }
++      if (hasChanges || _metaDirty) await _signalOthers();
+     } catch (e) {
+       debugPrint('Sync Batch FATAL Error: $e');
+       state = state.copyWith(lastError: e.toString());
+     } finally {
+       _isCurrentlyProcessing = false;
+-      state = state.copyWith(isSyncing: false);
++      state = state.copyWith(isSyncing: false, pendingCount: queue.length);
++    }
++  }
++
++  Future<void> _execute(SupabaseClient client, SyncTask task) async {
++    final uid = _uid;
++    if (uid == null) throw StateError('No session');
++    final table = task.collection;
++
++    switch (task.action) {
++      case SyncAction.create:
++      case SyncAction.update:
++        final data = Map<String, dynamic>.from(task.data);
++        data.putIfAbsent('id', () => task.documentId);
++        _prepareRemotePayload(task, data);
++        await client.from(table).upsert({'user_id': uid, ...data});
++        break;
++      case SyncAction.increment:
++        // Delta diterapkan di server (atomik + idempoten per task.id),
++        // bukan menimpa nilai absolut.
++        await client.rpc('adjust_stock', params: {
++          'p_product_id': task.documentId,
++          'p_delta': (task.data['delta'] as num).toDouble(),
++          'p_op_id': task.id,
++        });
++        break;
++      case SyncAction.delete:
++        await client
++            .from(table)
++            .delete()
++            .eq('id', task.documentId)
++            .eq('user_id', uid);
++        break;
+     }
+   }
+ 
+-  Future<void> _prepareRemotePayload(
++  Future<void> _recordPermanentFailure(
++    Box queue,
++    dynamic key,
+     SyncTask task,
+-    Map<String, dynamic> data,
+-    SupabaseClient client,
++    PostgrestException e,
+   ) async {
+-    // Keep image files strictly device-local to conserve cloud resources.
+-    // Local image paths (e.g. C:\... or /data/user/...) are stripped from cloud payload.
++    final retries = task.retryCount + 1;
++    final message = 'Sync ${task.collection} gagal: ${e.message}';
++    state = state.copyWith(lastError: message);
++
++    if (retries >= _maxRetries) {
++      final uid = _uid;
++      if (uid != null) {
++        final dead = await LocalDatabase.openBox(uid, 'sync_dead_letter');
++        await dead.put(task.id, {
++          ...task.copyWith(retryCount: retries, lastError: e.toString()).toMap(),
++          'failed_at': DateTime.now().toIso8601String(),
++        });
++        await queue.delete(key);
++        state = state.copyWith(
++            pendingCount: queue.length, deadLetterCount: dead.length);
++        debugPrint('Sync task ${task.id} -> dead-letter: $e');
++      }
++      return;
++    }
++
++    try {
++      await queue.put(
++          key, task.copyWith(retryCount: retries, lastError: e.toString()).toMap());
++    } catch (queueError) {
++      debugPrint('Could not persist sync retry state: $queueError');
++    }
++  }
++
++  /// Kembalikan task dead-letter ke antrean (mis. setelah skema diperbaiki).
++  Future<void> retryDeadLetters() async {
++    final uid = _uid;
++    final queue = await _ensureQueueBox();
++    if (uid == null || queue == null) return;
++    final dead = await LocalDatabase.openBox(uid, 'sync_dead_letter');
++    for (final key in dead.keys.toList()) {
++      final raw = dead.get(key);
++      if (raw == null) continue;
++      final task = SyncTask.fromMap(Map<String, dynamic>.from(raw as Map))
++          .copyWith(retryCount: 0, clearLastError: true);
++      await addBatchToQueue([task]);
++      await dead.delete(key);
++    }
++    state = state.copyWith(deadLetterCount: dead.length);
++  }
++
++  void _prepareRemotePayload(SyncTask task, Map<String, dynamic> data) {
++    // Gambar lokal tidak diunggah (hemat resource cloud).
+     final imagePath = data['image_path']?.toString();
+     if (imagePath != null && !imagePath.startsWith('http')) {
+       data.remove('image_path');
+     }
++    // Stok bukan nilai yang boleh ditimpa oleh edit biasa: stok hanya berubah
++    // lewat `increment` (adjust_stock). `create` membawa stok awal.
++    if (task.collection == 'products' && task.action == SyncAction.update) {
++      data.remove('stock');
++    }
+   }
+ }
+diff --git a/lib/core/sync/services/local_database.dart b/lib/core/sync/services/local_database.dart
+index 03b4570..9a0de01 100644
+--- a/lib/core/sync/services/local_database.dart
++++ b/lib/core/sync/services/local_database.dart
+@@ -81,7 +81,7 @@ class LocalDatabase {
+   }
+ 
+   static Future<void> clearUserCache(String uid) async {
+-    final collections = ['products', 'transactions', 'customers', 'debts', 'debt_payments', 'settings', 'sync_queue', 'suppliers', 'shipping_services', 'restock_history', 'metadata', 'print_profiles', 'sync_meta', 'barcode_history'];
++    final collections = ['products', 'transactions', 'customers', 'debts', 'debt_payments', 'settings', 'sync_queue', 'sync_dead_letter', 'suppliers', 'shipping_services', 'restock_history', 'metadata', 'print_profiles', 'sync_meta', 'barcode_history'];
+     
+     final dbPath = kIsWeb ? null : await _getDatabasePath(uid);
+ 
+diff --git a/lib/core/utils/pin_hasher.dart b/lib/core/utils/pin_hasher.dart
+new file mode 100644
+index 0000000..2291931
+--- /dev/null
++++ b/lib/core/utils/pin_hasher.dart
+@@ -0,0 +1,77 @@
++import 'dart:convert';
++import 'dart:math';
++import 'package:crypto/crypto.dart';
++
++/// Hash PIN dengan PBKDF2-HMAC-SHA256 + salt acak.
++///
++/// Format tersimpan: `v1$<panjangPin>$<salt>$<hash>` (base64url).
++/// Nilai tanpa awalan `v1$` dianggap PIN lama (plaintext) dan dimigrasi
++/// otomatis oleh SettingsNotifier saat settings dimuat.
++class PinHasher {
++  PinHasher._();
++
++  static const _sep = r'$';
++  static const _version = 'v1';
++  static const _iterations = 20000;
++
++  static bool isHashed(String? stored) =>
++      stored != null && stored.startsWith('$_version$_sep');
++
++  static String hash(String pin, {List<int>? salt}) {
++    final rng = Random.secure();
++    final s = salt ?? List<int>.generate(16, (_) => rng.nextInt(256));
++    final derived = _pbkdf2(utf8.encode(pin), s);
++    return [
++      _version,
++      pin.length.toString(),
++      base64Url.encode(s),
++      base64Url.encode(derived),
++    ].join(_sep);
++  }
++
++  static bool verify(String entered, String? stored) {
++    if (stored == null || stored.isEmpty) return false;
++    if (!isHashed(stored)) return _constantTimeEquals(utf8.encode(entered), utf8.encode(stored));
++
++    final parts = stored.split(_sep);
++    if (parts.length != 4) return false;
++    try {
++      final salt = base64Url.decode(parts[2]);
++      final expected = base64Url.decode(parts[3]);
++      return _constantTimeEquals(_pbkdf2(utf8.encode(entered), salt), expected);
++    } catch (_) {
++      return false;
++    }
++  }
++
++  /// Panjang PIN untuk menggambar kotak input (4 jika tidak diketahui).
++  static int? lengthOf(String? stored) {
++    if (stored == null || stored.isEmpty) return null;
++    if (!isHashed(stored)) return stored.length;
++    final parts = stored.split(_sep);
++    return parts.length == 4 ? int.tryParse(parts[1]) : null;
++  }
++
++  // PBKDF2 satu blok (output 32 byte = panjang SHA-256).
++  static List<int> _pbkdf2(List<int> password, List<int> salt) {
++    final hmac = Hmac(sha256, password);
++    var u = hmac.convert([...salt, 0, 0, 0, 1]).bytes;
++    final t = List<int>.from(u);
++    for (var i = 1; i < _iterations; i++) {
++      u = hmac.convert(u).bytes;
++      for (var j = 0; j < t.length; j++) {
++        t[j] ^= u[j];
++      }
++    }
++    return t;
++  }
++
++  static bool _constantTimeEquals(List<int> a, List<int> b) {
++    if (a.length != b.length) return false;
++    var diff = 0;
++    for (var i = 0; i < a.length; i++) {
++      diff |= a[i] ^ b[i];
++    }
++    return diff == 0;
++  }
++}
+diff --git a/lib/features/auth/presentation/pages/setup_pin_page.dart b/lib/features/auth/presentation/pages/setup_pin_page.dart
+index 1a6285f..b99f2ee 100644
+--- a/lib/features/auth/presentation/pages/setup_pin_page.dart
++++ b/lib/features/auth/presentation/pages/setup_pin_page.dart
+@@ -1,3 +1,4 @@
++import '../../../../core/utils/pin_hasher.dart';
+ import 'package:flutter/material.dart';
+ import 'package:flutter/services.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+@@ -64,7 +65,7 @@ class _SetupPinPageState extends ConsumerState<SetupPinPage> {
+       final settings = ref.read(settingsProvider);
+       // Explicitly update both securityPin and businessName (temporary) to bypass AuthGate
+       final updated = settings.copyWith(
+-        securityPin: _pinCtrl.text,
++        securityPin: PinHasher.hash(_pinCtrl.text),
+         businessName: settings.businessName.isEmpty ? 'Toko Saya' : settings.businessName,
+       );
+       
+diff --git a/lib/features/auth/providers/auth_provider.dart b/lib/features/auth/providers/auth_provider.dart
+index f35d9f7..3abbe03 100644
+--- a/lib/features/auth/providers/auth_provider.dart
++++ b/lib/features/auth/providers/auth_provider.dart
+@@ -146,14 +146,13 @@ class AuthRepository {
+   Future<void> verifyAndSendPasswordReset(
+       {required String email, required String phone}) async {
+     // FIX: Using Case-Insensitive (ilike) and robust trimming for search
+-    final response = await _client
+-        .from('users')
+-        .select('id, login_email, phone')
+-        .ilike('login_email', email.trim())
+-        .eq('phone', phone.trim())
+-        .maybeSingle();
+-
+-    if (response == null) {
++    // RPC security-definer: role anon tidak perlu SELECT langsung ke public.users.
++    final response = await _client.rpc('verify_reset_identity', params: {
++      'p_email': email.trim(),
++      'p_phone': phone.trim(),
++    });
++
++    if (response != true) {
+       throw 'Data tidak ditemukan atau tidak cocok dengan sistem kami.\nPastikan Email dan No HP Pemilik sudah benar.';
+     }
+ 
+diff --git a/lib/features/cashier/presentation/widgets/cart_panel.dart b/lib/features/cashier/presentation/widgets/cart_panel.dart
+index 5ce03f3..5e0b7f0 100644
+--- a/lib/features/cashier/presentation/widgets/cart_panel.dart
++++ b/lib/features/cashier/presentation/widgets/cart_panel.dart
+@@ -679,7 +679,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
+     }
+ 
+     final settings = ref.read(settingsProvider);
+-    final correctPin = settings.securityPin ?? '1234';
++    bool pinOk(String v) => settings.hasPin ? settings.verifyPin(v) : v == '1234';
+ 
+     final pinController = TextEditingController();
+     final ok = await showDialog<bool>(
+@@ -705,7 +705,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
+                 prefixIcon: Icon(Icons.lock_outline, size: 20),
+               ),
+               onSubmitted: (_) {
+-                if (pinController.text == correctPin) {
++                if (pinOk(pinController.text)) {
+                   Navigator.pop(context, true);
+                 } else {
+                   ScaffoldMessenger.of(context).showSnackBar(
+@@ -721,7 +721,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
+               child: const Text('Batal')),
+           ElevatedButton(
+             onPressed: () {
+-              if (pinController.text == correctPin) {
++              if (pinOk(pinController.text)) {
+                 Navigator.pop(context, true);
+               } else {
+                 ScaffoldMessenger.of(context)
+diff --git a/lib/features/products/providers/product_provider.dart b/lib/features/products/providers/product_provider.dart
+index dc14cef..1a9dada 100644
+--- a/lib/features/products/providers/product_provider.dart
++++ b/lib/features/products/providers/product_provider.dart
+@@ -97,14 +97,12 @@ class ProductRepository {
+     );
+     final data = finalProduct.toMap();
+ 
++    final oldRaw = box.get(product.id);
+     await box.put(product.id, data);
+ 
+-    await _ref.read(syncProvider.notifier).addToQueue(
+-      collection: 'products',
+-      documentId: product.id,
+-      action: SyncAction.update,
+-      data: data,
+-    );
++    await _ref
++        .read(syncProvider.notifier)
++        .addBatchToQueue(_productWriteTasks(oldRaw, finalProduct, data));
+ 
+     if (product.barcode != null && product.barcode!.isNotEmpty) {
+       await _historyRepo.logBarcode(product.barcode!, product.name, product.id);
+@@ -173,16 +171,10 @@ class ProductRepository {
+       final data = p.toMap();
+       data['units'] = p.units.map((u) => u.toMap()).toList();
+ 
++      final oldRaw = box.get(p.id);
+       await box.put(p.id, data);
+-      
+-      tasks.add(SyncTask(
+-        id: _uuid.v4(),
+-        collection: 'products',
+-        documentId: p.id,
+-        action: SyncAction.update,
+-        data: data,
+-        createdAt: DateTime.now(),
+-      ));
++
++      tasks.addAll(_productWriteTasks(oldRaw, p, data));
+ 
+       if (p.barcode != null && p.barcode!.isNotEmpty) {
+         barcodeLogItems.add((barcode: p.barcode!, name: p.name, id: p.id));
+@@ -206,16 +198,10 @@ class ProductRepository {
+       final data = p.toMap();
+       data['units'] = p.units.map((u) => u.toMap()).toList();
+       
++      final oldRaw = box.get(p.id);
+       await box.put(p.id, data);
+-      
+-      tasks.add(SyncTask(
+-        id: _uuid.v4(),
+-        collection: 'products',
+-        documentId: p.id,
+-        action: SyncAction.update,
+-        data: data,
+-        createdAt: DateTime.now(),
+-      ));
++
++      tasks.addAll(_productWriteTasks(oldRaw, p, data));
+     }
+ 
+     await _ref.read(syncProvider.notifier).addBatchToQueue(tasks);
+@@ -317,14 +303,57 @@ class ProductRepository {
+ 
+     await box.put(productId, updated.toMap());
+ 
++    // Kirim DELTA, bukan nilai akhir: dua device yang menjual produk yang sama
++    // secara bersamaan tidak lagi saling menimpa stok.
+     await _ref.read(syncProvider.notifier).addToQueue(
+       collection: 'products',
+       documentId: productId,
+-      action: SyncAction.update,
+-      data: updated.toMap(),
++      action: SyncAction.increment,
++      data: {'delta': delta},
+     );
+   }
+ 
++  /// Produk baru -> `create` (membawa stok awal). Produk lama -> `update`
++  /// tanpa stok (dibuang saat push) + `increment` bila stok diubah manual.
++  List<SyncTask> _productWriteTasks(
++      dynamic oldRaw, Product p, Map<String, dynamic> data) {
++    final now = DateTime.now();
++    if (oldRaw == null) {
++      return [
++        SyncTask(
++          id: _uuid.v4(),
++          collection: 'products',
++          documentId: p.id,
++          action: SyncAction.create,
++          data: data,
++          createdAt: now,
++        ),
++      ];
++    }
++    final oldStock =
++        ((oldRaw as Map)['stock'] as num?)?.toDouble() ?? 0.0;
++    final delta = p.stock - oldStock;
++    return [
++      SyncTask(
++        id: _uuid.v4(),
++        collection: 'products',
++        documentId: p.id,
++        action: SyncAction.update,
++        data: data,
++        createdAt: now,
++      ),
++      if (delta.abs() > 1e-9)
++        SyncTask(
++          id: _uuid.v4(),
++          collection: 'products',
++          documentId: p.id,
++          action: SyncAction.increment,
++          data: {'delta': delta},
++          createdAt: now,
++        ),
++    ];
++  }
++
+   Future<void> dismissInitialBill(Product p, {required bool isSupplier}) async {
+     final box = await _getBox();
+     final updated = p.copyWith(
+diff --git a/lib/features/settings/models/store_settings.dart b/lib/features/settings/models/store_settings.dart
+index 1f09617..5dba92c 100644
+--- a/lib/features/settings/models/store_settings.dart
++++ b/lib/features/settings/models/store_settings.dart
+@@ -1,4 +1,5 @@
+ import 'dart:convert';
++import '../../../core/utils/pin_hasher.dart';
+ 
+ class BankAccount {
+   final String bankName;
+@@ -173,6 +174,29 @@ class StoreSettings {
+     );
+   }
+ 
++  /// Field yang bergantung pada hardware/perangkat: JANGAN disinkronkan.
++  /// Mengganti printer di PC tidak boleh menimpa pengaturan di HP.
++  static const Set<String> deviceLocalKeys = {
++    'logo_url',
++    'qris_image_path',
++    'receipt_width',
++    'receipt_margin',
++    'use_fast_print',
++    'printer_transport',
++    'print_method',
++    'invoice_printer_url',
++    'label_printer_url',
++  };
++
++  /// Hanya field yang dibagi antar device (dikirim ke public.users).
++  Map<String, dynamic> toRemoteMap() =>
++      toMap()..removeWhere((k, _) => deviceLocalKeys.contains(k));
++
++  // PIN (disimpan sebagai hash; PIN lama plaintext tetap terbaca sampai dimigrasi)
++  bool get hasPin => (securityPin ?? '').isNotEmpty;
++  int get pinLength => PinHasher.lengthOf(securityPin) ?? 4;
++  bool verifyPin(String entered) => PinHasher.verify(entered, securityPin);
++
+   String toJson() => json.encode(toMap());
+ 
+   factory StoreSettings.fromJson(String source) => StoreSettings.fromMap(json.decode(source));
+diff --git a/lib/features/settings/presentation/pages/settings_page.dart b/lib/features/settings/presentation/pages/settings_page.dart
+index 2021563..2bcb3cf 100644
+--- a/lib/features/settings/presentation/pages/settings_page.dart
++++ b/lib/features/settings/presentation/pages/settings_page.dart
+@@ -1,3 +1,4 @@
++import '../../../../core/utils/pin_hasher.dart';
+ import 'dart:io';
+ import 'package:flutter/material.dart';
+ import 'package:flutter/services.dart';
+@@ -1136,8 +1137,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
+ 
+   Widget _buildSecuritySection() {
+     final settings = ref.watch(settingsProvider);
+-    final hasPin =
+-        settings.securityPin != null && settings.securityPin!.length >= 4;
++    final hasPin = settings.hasPin;
+ 
+     return AppCard(
+       child: Column(
+@@ -1207,8 +1207,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
+ 
+   Future<void> _updatePageLock(StoreSettings Function() updater) async {
+     final current = ref.read(settingsProvider);
+-    final expectedPin = current.securityPin;
+-    if (expectedPin == null || expectedPin.length < 4) {
++    if (!current.hasPin) {
+       showError(
+           context, 'Atur PIN keamanan sebelum mengubah proteksi halaman.');
+       return;
+@@ -1249,7 +1248,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
+     pinController.dispose();
+ 
+     if (!mounted || enteredPin == null) return;
+-    if (enteredPin != expectedPin) {
++    if (!current.verifyPin(enteredPin)) {
+       showError(context, 'PIN keamanan salah. Pengaturan tidak diubah.');
+       return;
+     }
+@@ -1337,8 +1336,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
+                 if (!formKey.currentState!.validate()) return;
+ 
+                 if (step == 0) {
+-                  final currentPin = ref.read(settingsProvider).securityPin;
+-                  if (oldPinCtrl.text != currentPin) {
++                  if (!ref
++                      .read(settingsProvider)
++                      .verifyPin(oldPinCtrl.text)) {
+                     showError(context, 'PIN lama salah!');
+                     return;
+                   }
+@@ -1352,7 +1352,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
+                   }
+                   final settings = ref
+                       .read(settingsProvider)
+-                      .copyWith(securityPin: newPinCtrl.text);
++                      .copyWith(securityPin: PinHasher.hash(newPinCtrl.text));
+                   ref.read(settingsProvider.notifier).updateSettings(settings);
+                   Navigator.pop(context);
+                   showSuccess(context, 'PIN berhasil diperbarui');
+diff --git a/lib/features/settings/providers/settings_provider.dart b/lib/features/settings/providers/settings_provider.dart
+index 4fb1423..1837605 100644
+--- a/lib/features/settings/providers/settings_provider.dart
++++ b/lib/features/settings/providers/settings_provider.dart
+@@ -1,48 +1,121 @@
+ import 'dart:async';
++import 'dart:convert';
+ import 'package:supabase_flutter/supabase_flutter.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:hive_flutter/hive_flutter.dart';
+ import 'package:flutter/foundation.dart';
+ import '../../auth/providers/auth_provider.dart';
+ import '../models/store_settings.dart';
++import '../../../core/sync/providers/connectivity_provider.dart';
+ import '../../../core/sync/services/local_database.dart';
++import '../../../core/utils/pin_hasher.dart';
+ 
+ final settingsProvider =
+     NotifierProvider<SettingsNotifier, StoreSettings>(SettingsNotifier.new);
+ 
++/// Sinkronisasi pengaturan toko lewat `public.users`.
++///
++/// Aturan:
++///  * Server (baris `users`) adalah sumber kebenaran; nilai kosong dari server
++///    TIDAK diabaikan (user memang bisa mengosongkan alamat, dll).
++///  * Hanya field yang berubah yang dikirim (patch), disimpan di Hive sampai
++///    sukses terkirim, sehingga edit saat offline tidak hilang.
++///  * Field hardware/perangkat (printer, lebar struk, gambar) tetap lokal.
+ class SettingsNotifier extends Notifier<StoreSettings> {
+-  String? _initializedUid;
+-  String? _settingsChannelUid;
+-  RealtimeChannel? _settingsChannel;
++  static const _patchKey = 'pending_patch';
++
++  String? _uid;
++  RealtimeChannel? _channel;
++  String? _channelUid;
++  DateTime? _lastServerStamp; // updated_at terakhir yang kita tahu (utc)
++  bool _flushing = false;
++  bool _flushAgain = false;
++  Timer? _retryTimer;
+ 
+   @override
+   StoreSettings build() {
+-    final user = ref.watch(authStateProvider).value;
+-    if (user != null && _initializedUid != user.uid) {
+-      _initializedUid = user.uid;
+-      Future.microtask(() {
+-        _listenForRemoteSettings(user.uid);
+-        _loadSettings(user.uid);
+-      });
+-      return const StoreSettings(isLoading: true);
+-    } else if (user == null) {
+-      _initializedUid = null;
+-      _settingsChannel?.unsubscribe();
+-      _settingsChannel = null;
+-      _settingsChannelUid = null;
+-    }
+-    ref.onDispose(() => _settingsChannel?.unsubscribe());
++    // listen (bukan watch): build() tidak dijalankan ulang tiap token refresh,
++    // jadi state tidak ter-reset ke default.
++    ref.listen<String?>(
++      authStateProvider.select((a) => a.value?.uid),
++      (prev, next) => _onUidChanged(next),
++      fireImmediately: true,
++    );
++    ref.listen<bool>(isOnlineProvider, (prev, next) {
++      final uid = _uid;
++      if (next && uid != null) unawaited(_flushPending(uid));
++    });
++    ref.onDispose(() {
++      _retryTimer?.cancel();
++      _teardownChannel();
++    });
+     return const StoreSettings();
+   }
+ 
+   SupabaseClient get _supabase => ref.read(supabaseClientProvider);
+   Future<Box> _getBox(String uid) => LocalDatabase.openBox(uid, 'settings');
+ 
++  void _onUidChanged(String? uid) {
++    if (uid == _uid) return;
++    _teardownChannel();
++    _retryTimer?.cancel();
++    _uid = uid;
++    _lastServerStamp = null;
++
++    Future.microtask(() {
++      if (_uid != uid) return;
++      if (uid == null) {
++        state = const StoreSettings();
++        return;
++      }
++      state = const StoreSettings(isLoading: true);
++      _listenForRemoteSettings(uid);
++      unawaited(_loadSettings(uid));
++    });
++  }
++
++  void _teardownChannel() {
++    _channel?.unsubscribe();
++    _channel = null;
++    _channelUid = null;
++  }
++
++  // ── Helpers ──────────────────────────────────────────────────────────────
++
++  bool _same(dynamic a, dynamic b) => jsonEncode(a) == jsonEncode(b);
++
++  Future<Map<String, dynamic>> _readPatch(Box box) async {
++    final raw = box.get(_patchKey);
++    return raw == null ? <String, dynamic>{} : Map<String, dynamic>.from(raw as Map);
++  }
++
++  /// Gabungkan nilai remote ke [local]: field remote menimpa (termasuk string
++  /// kosong), KECUALI field yang masih punya perubahan lokal belum terkirim
++  /// dan field khusus perangkat.
++  Map<String, dynamic> _mergeRemote(
++    Map<String, dynamic> local,
++    Map<String, dynamic> remote,
++    Map<String, dynamic> pendingPatch,
++  ) {
++    final merged = Map<String, dynamic>.from(local);
++    for (final key in const StoreSettings().toRemoteMap().keys) {
++      if (!remote.containsKey(key)) continue;
++      if (pendingPatch.containsKey(key)) continue;
++      merged[key] = remote[key];
++    }
++    return merged;
++  }
++
++  DateTime? _stampOf(Map<String, dynamic> row) =>
++      DateTime.tryParse(row['updated_at']?.toString() ?? '')?.toUtc();
++
++  // ── Realtime ─────────────────────────────────────────────────────────────
++
+   void _listenForRemoteSettings(String uid) {
+-    if (_settingsChannelUid == uid) return;
+-    _settingsChannel?.unsubscribe();
+-    _settingsChannelUid = uid;
+-    _settingsChannel = _supabase
++    if (_channelUid == uid) return;
++    _teardownChannel();
++    _channelUid = uid;
++    _channel = _supabase
+         .channel('store_settings:$uid')
+         .onPostgresChanges(
+           event: PostgresChangeEvent.all,
+@@ -54,7 +127,7 @@ class SettingsNotifier extends Notifier<StoreSettings> {
+             value: uid,
+           ),
+           callback: (payload) {
+-            if (payload.newRecord.isEmpty || _initializedUid != uid) return;
++            if (payload.newRecord.isEmpty || _uid != uid) return;
+             unawaited(_applyRemoteSettings(uid, payload.newRecord));
+           },
+         )
+@@ -63,37 +136,44 @@ class SettingsNotifier extends Notifier<StoreSettings> {
+ 
+   Future<void> _applyRemoteSettings(
+       String uid, Map<String, dynamic> remoteRow) async {
+-    final merged = Map<String, dynamic>.from(state.toMap())
+-      ..addAll(LocalDatabase.sanitize(remoteRow));
+-    // Brand images are device-local and must not be overwritten by remote rows.
+-    merged['logo_url'] = state.logoUrl;
+-    merged['qris_image_path'] = state.qrisImagePath;
++    // Abaikan echo tulisan kita sendiri dan event usang.
++    final stamp = _stampOf(remoteRow);
++    final last = _lastServerStamp;
++    if (stamp != null && last != null && !stamp.isAfter(last)) return;
++
++    final box = await _getBox(uid);
++    if (_uid != uid) return;
++    final pending = await _readPatch(box);
++
++    final merged = _mergeRemote(
++      state.toMap(),
++      LocalDatabase.sanitize(remoteRow),
++      pending,
++    );
+     final settings = StoreSettings.fromMap(merged, isLoading: false);
+     state = settings;
+-    final box = await _getBox(uid);
+     await box.put('store_settings', settings.toMap());
++    if (stamp != null) _lastServerStamp = stamp;
+   }
+ 
+-
++  // ── Load ─────────────────────────────────────────────────────────────────
+ 
+   Future<void> _loadSettings(String uid) async {
+-    StoreSettings? cachedSettings;
++    StoreSettings? cached;
+ 
+-    // 1. Instant load from Hive
++    // 1. Tampilkan cache lokal secepatnya.
+     try {
+       final box = await _getBox(uid);
+-      final cached = box.get('store_settings');
+-      if (cached != null) {
+-        cachedSettings = StoreSettings.fromMap(
+-          Map<String, dynamic>.from(cached as Map),
+-        );
+-        state = cachedSettings.copyWith(isLoading: true);
++      final raw = box.get('store_settings');
++      if (raw != null) {
++        cached = StoreSettings.fromMap(Map<String, dynamic>.from(raw as Map));
++        state = cached.copyWith(isLoading: true);
+       }
+     } catch (e) {
+       debugPrint('Hive Load Error: $e');
+     }
+ 
+-    // 2. Use auth metadata as a recovery source for registration details.
++    // 2. Metadata auth: hanya fallback kalau baris `users` BELUM ada.
+     Map<String, dynamic> metadata = {};
+     try {
+       final authUser = _supabase.auth.currentUser;
+@@ -105,8 +185,12 @@ class SettingsNotifier extends Notifier<StoreSettings> {
+       debugPrint('Auth metadata load error: $e');
+     }
+ 
+-    // 3. Background load from Supabase with retry logic
+-    int retries = 3;
++    // 3. Kirim dulu perubahan lokal yang tertunda (jangan ditimpa data remote).
++    await _flushPending(uid);
++    if (_uid != uid) return;
++
++    // 4. Tarik dari Supabase (dengan retry).
++    var retries = 3;
+     while (retries > 0) {
+       try {
+         final response = await _supabase
+@@ -115,77 +199,48 @@ class SettingsNotifier extends Notifier<StoreSettings> {
+             .eq('id', uid)
+             .maybeSingle()
+             .timeout(const Duration(seconds: 5));
++        if (_uid != uid) return;
+ 
+-        if (response != null) {
+-          final data = Map<String, dynamic>.from(metadata);
+-          final remoteData = LocalDatabase.sanitize(response);
+-          for (final entry in remoteData.entries) {
+-            final value = entry.value;
+-            if (value != null &&
+-                (value is! String || value.trim().isNotEmpty)) {
+-              data[entry.key] = value;
+-            }
+-          }
+-
+-          if (cachedSettings?.logoUrl != null) {
+-            data['logo_url'] = cachedSettings!.logoUrl;
+-          }
+-          if (cachedSettings?.qrisImagePath != null) {
+-            data['qris_image_path'] = cachedSettings!.qrisImagePath;
+-          }
++        final box = await _getBox(uid);
++        final pending = await _readPatch(box);
++        final base = cached?.toMap() ?? const StoreSettings().toMap();
+ 
+-          final settings = StoreSettings.fromMap(data, isLoading: false);
++        if (response != null) {
++          final remote = LocalDatabase.sanitize(response);
++          final merged = _mergeRemote(base, remote, pending);
++          final settings = StoreSettings.fromMap(merged, isLoading: false);
+           state = settings;
+-
+-          final box = await _getBox(uid);
+           await box.put('store_settings', settings.toMap());
+-          return;
++          final stamp = _stampOf(remote);
++          if (stamp != null) _lastServerStamp = stamp;
+         } else {
+-          final settingsMap = Map<String, dynamic>.from(metadata);
+-          if (cachedSettings?.logoUrl != null) {
+-            settingsMap['logo_url'] = cachedSettings!.logoUrl;
+-          }
+-          if (cachedSettings?.qrisImagePath != null) {
+-            settingsMap['qris_image_path'] = cachedSettings!.qrisImagePath;
+-          }
+-
+-          final settings = StoreSettings.fromMap(settingsMap, isLoading: false);
+-          state = settings;
+-
+-          final box = await _getBox(uid);
+-          await box.put('store_settings', settings.toMap());
+-
++          // Baris belum ada: seed dari metadata registrasi.
++          final seeded = StoreSettings.fromMap(
++              {...base, ...metadata}, isLoading: false);
++          state = seeded;
++          await box.put('store_settings', seeded.toMap());
+           if (metadata.isNotEmpty) {
+-            final remoteSettings = settings.toMap()
+-              ..remove('logo_url')
+-              ..remove('qris_image_path');
+             try {
+               await _supabase.from('users').upsert({
+                 'id': uid,
+-                ...remoteSettings,
+-                'updated_at': DateTime.now().toIso8601String(),
++                ...seeded.toRemoteMap(),
++                'updated_at': DateTime.now().toUtc().toIso8601String(),
+               }).timeout(const Duration(seconds: 10));
+             } catch (e) {
+               debugPrint('Could not seed public.users from auth metadata: $e');
+             }
+           }
+-          return;
+         }
++
++        await _upgradeLegacyPin();
++        return;
+       } catch (e) {
+         retries--;
+         if (retries == 0) {
+           debugPrint('Supabase Settings Fatal Error: $e');
+-          final fallbackData = Map<String, dynamic>.from(metadata);
+-          if (cachedSettings?.logoUrl != null) {
+-            fallbackData['logo_url'] = cachedSettings!.logoUrl;
+-          }
+-          if (cachedSettings?.qrisImagePath != null) {
+-            fallbackData['qris_image_path'] = cachedSettings!.qrisImagePath;
+-          }
+           final fallback = StoreSettings.fromMap(
+-            fallbackData,
+-            isLoading: false,
+-          );
++              {...(cached?.toMap() ?? const StoreSettings().toMap()), ...metadata},
++              isLoading: false);
+           state = fallback;
+           try {
+             final box = await _getBox(uid);
+@@ -193,46 +248,114 @@ class SettingsNotifier extends Notifier<StoreSettings> {
+           } catch (cacheError) {
+             debugPrint('Settings fallback cache error: $cacheError');
+           }
++        } else {
++          await Future.delayed(const Duration(seconds: 2));
+         }
+-        await Future.delayed(const Duration(seconds: 2));
+       }
+     }
+   }
+ 
+   Future<void> refreshFromRemote() async {
+-    final user = ref.read(authStateProvider).value;
+-    if (user == null) return;
+-    _initializedUid = user.uid;
+-    await _loadSettings(user.uid);
++    final uid = ref.read(authStateProvider).value?.uid;
++    if (uid == null) return;
++    _uid = uid;
++    await _loadSettings(uid);
+   }
+ 
++  /// PIN lama (plaintext) di-hash sekali; hasilnya ikut tersinkron.
++  Future<void> _upgradeLegacyPin() async {
++    final pin = state.securityPin;
++    if (pin == null || pin.isEmpty || PinHasher.isHashed(pin)) return;
++    await updateSettings(state.copyWith(securityPin: PinHasher.hash(pin)));
++  }
++
++  // ── Write ────────────────────────────────────────────────────────────────
++
+   Future<void> updateSettings(StoreSettings settings, {String? uid}) async {
+     final targetUid = uid ?? ref.read(authStateProvider).value?.uid;
+     if (targetUid == null) throw 'User session not found';
+ 
+-    // 1. Update local Riverpod state IMMEDIATELY
+-    state = settings.copyWith(isLoading: false);
++    final previous = state;
+ 
+-    // 2. Persist to local Hive Cache IMMEDIATELY
++    // 1. State + cache lokal LANGSUNG.
++    state = settings.copyWith(isLoading: false);
++    final box = await _getBox(targetUid);
+     try {
+-      final box = await _getBox(targetUid);
+       await box.put('store_settings', settings.toMap());
+     } catch (e) {
+       debugPrint('Hive Settings Cache Error: $e');
+     }
+ 
+-    // 3. Persist to Remote (Supabase) - fail-soft on schema/network issues
++    // 2. Hitung diff field yang dibagi antar device.
++    final oldMap = previous.toRemoteMap();
++    final newMap = settings.toRemoteMap();
++    final changed = <String, dynamic>{
++      for (final e in newMap.entries)
++        if (!_same(oldMap[e.key], e.value)) e.key: e.value,
++    };
++    if (changed.isEmpty) return; // mis. hanya field printer/gambar (lokal)
++
++    // 3. Simpan sebagai patch tertunda, lalu coba kirim.
++    final patch = await _readPatch(box)
++      ..addAll(changed);
++    await box.put(_patchKey, patch);
++    await _flushPending(targetUid);
++  }
++
++  Future<void> _flushPending(String uid) async {
++    if (_flushing) {
++      _flushAgain = true;
++      return;
++    }
++    _flushing = true;
+     try {
+-      final remoteSettings = settings.toMap()
+-        ..remove('logo_url')
+-        ..remove('qris_image_path');
+-      await _supabase.from('users').upsert({
+-        'id': targetUid,
+-        ...remoteSettings,
+-        'updated_at': DateTime.now().toIso8601String(),
+-      }).timeout(const Duration(seconds: 5));
+-    } catch (e) {
+-      debugPrint('Supabase Remote Settings Sync Exception: $e');
++      do {
++        _flushAgain = false;
++        final box = await _getBox(uid);
++        final patch = await _readPatch(box);
++        if (patch.isEmpty) return;
++        if (!ref.read(isOnlineProvider)) return;
++
++        try {
++          final res = await _supabase
++              .from('users')
++              .upsert({
++                'id': uid,
++                ...patch,
++                // Server (trigger) menimpa ini; fallback bila trigger belum ada.
++                'updated_at': DateTime.now().toUtc().toIso8601String(),
++              })
++              .select('updated_at')
++              .single()
++              .timeout(const Duration(seconds: 10));
++
++          final stamp = _stampOf(Map<String, dynamic>.from(res));
++          if (stamp != null) _lastServerStamp = stamp;
++
++          // Hapus hanya field yang nilainya persis yang barusan terkirim
++          // (edit baru selama request berjalan tetap tertunda).
++          final current = await _readPatch(box);
++          for (final e in patch.entries) {
++            if (current.containsKey(e.key) && _same(current[e.key], e.value)) {
++              current.remove(e.key);
++            }
++          }
++          if (current.isEmpty) {
++            await box.delete(_patchKey);
++          } else {
++            await box.put(_patchKey, current);
++            _flushAgain = true;
++          }
++        } catch (e) {
++          debugPrint('Settings flush failed, will retry: $e');
++          _retryTimer?.cancel();
++          _retryTimer =
++              Timer(const Duration(seconds: 30), () => _flushPending(uid));
++          return;
++        }
++      } while (_flushAgain);
++    } finally {
++      _flushing = false;
+     }
+   }
+ }
+diff --git a/lib/shared/widgets/security_gate.dart b/lib/shared/widgets/security_gate.dart
+index 0196dce..f73dcde 100644
+--- a/lib/shared/widgets/security_gate.dart
++++ b/lib/shared/widgets/security_gate.dart
+@@ -208,7 +208,7 @@ class _PinPromptOverlayState extends ConsumerState<_PinPromptOverlay> {
+ 
+   void _onChanged(String value, int index) {
+     final settings = ref.read(settingsProvider);
+-    final pinLength = settings.securityPin?.length ?? 4;
++    final pinLength = settings.pinLength;
+ 
+     if (value.length == 1) {
+       if (index < pinLength - 1) {
+@@ -221,9 +221,7 @@ class _PinPromptOverlayState extends ConsumerState<_PinPromptOverlay> {
+ 
+   void _verify() {
+     final enteredPin = _controllers.map((c) => c.text).join();
+-    final correctPin = ref.read(settingsProvider).securityPin;
+-
+-    if (enteredPin == correctPin) {
++    if (ref.read(settingsProvider).verifyPin(enteredPin)) {
+       widget.onSuccess();
+     } else {
+       setState(() {
+@@ -239,7 +237,7 @@ class _PinPromptOverlayState extends ConsumerState<_PinPromptOverlay> {
+   @override
+   Widget build(BuildContext context) {
+     final settings = ref.watch(settingsProvider);
+-    final pinLength = settings.securityPin?.length ?? 4;
++    final pinLength = settings.pinLength;
+ 
+     return Container(
+       constraints:
+diff --git a/pubspec.yaml b/pubspec.yaml
+index 87ac6a8..69f1f96 100644
+--- a/pubspec.yaml
++++ b/pubspec.yaml
+@@ -15,6 +15,7 @@ dependencies:
+   flutter_riverpod: ^3.3.1
+   intl: ^0.20.2
+   uuid: ^4.4.0
++  crypto: ^3.0.3
+   google_fonts: ^6.2.1
+   fl_chart: 1.0.0
+   collection: ^1.18.0
+diff --git a/supabase/migrations/20261012000000_sync_hardening.sql b/supabase/migrations/20261012000000_sync_hardening.sql
+new file mode 100644
+index 0000000..7c66952
+--- /dev/null
++++ b/supabase/migrations/20261012000000_sync_hardening.sql
+@@ -0,0 +1,155 @@
++-- =====================================================================
++-- Sync hardening (BuildEra)
++-- Idempotent: aman dijalankan ulang.
++--  1. Trigger updated_at di server (bukan jam device)
++--  2. Tombstone untuk delete lintas device
++--  3. sync_metadata: tabel, RLS, realtime
++--  4. adjust_stock(): stok berbasis delta + idempotensi
++--  5. verify_reset_identity(): lupa password tanpa buka SELECT ke anon
++-- =====================================================================
++
++-- 1. Fungsi trigger updated_at ----------------------------------------
++CREATE OR REPLACE FUNCTION public.set_updated_at()
++RETURNS trigger LANGUAGE plpgsql AS $$
++BEGIN
++  NEW.updated_at := now();
++  RETURN NEW;
++END $$;
++
++-- 2. Tombstone ---------------------------------------------------------
++CREATE TABLE IF NOT EXISTS public.sync_tombstones (
++  user_id    uuid        NOT NULL,
++  collection text        NOT NULL,
++  doc_id     text        NOT NULL,
++  deleted_at timestamptz NOT NULL DEFAULT now(),
++  PRIMARY KEY (user_id, collection, doc_id)
++);
++CREATE INDEX IF NOT EXISTS sync_tombstones_user_deleted_idx
++  ON public.sync_tombstones (user_id, deleted_at);
++
++ALTER TABLE public.sync_tombstones ENABLE ROW LEVEL SECURITY;
++DROP POLICY IF EXISTS "Users read own tombstones" ON public.sync_tombstones;
++CREATE POLICY "Users read own tombstones" ON public.sync_tombstones
++  FOR SELECT TO authenticated USING (user_id = auth.uid());
++
++CREATE OR REPLACE FUNCTION public.record_tombstone()
++RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
++BEGIN
++  INSERT INTO public.sync_tombstones (user_id, collection, doc_id, deleted_at)
++  VALUES (OLD.user_id::text::uuid, TG_TABLE_NAME, OLD.id::text, now())
++  ON CONFLICT (user_id, collection, doc_id)
++  DO UPDATE SET deleted_at = EXCLUDED.deleted_at;
++  RETURN OLD;
++END $$;
++
++-- 3. Pasang trigger pada semua tabel yang disinkronkan -----------------
++DO $$
++DECLARE
++  t text;
++  all_tables  text[] := ARRAY['products','customers','debts','debt_payments',
++    'transactions','purchases','suppliers','shipping_services',
++    'restock_history','bill_payments','barcode_history'];
++  delta_tables text[] := ARRAY['products','customers','debts','debt_payments',
++    'transactions','purchases'];
++BEGIN
++  FOREACH t IN ARRAY all_tables LOOP
++    IF to_regclass('public.' || t) IS NOT NULL THEN
++      EXECUTE format('ALTER TABLE public.%I ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now()', t);
++      EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON public.%I (user_id, updated_at)', t || '_user_updated_idx', t);
++      EXECUTE format('DROP TRIGGER IF EXISTS trg_set_updated_at ON public.%I', t);
++      EXECUTE format('CREATE TRIGGER trg_set_updated_at BEFORE INSERT OR UPDATE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()', t);
++    END IF;
++  END LOOP;
++
++  FOREACH t IN ARRAY delta_tables LOOP
++    IF to_regclass('public.' || t) IS NOT NULL THEN
++      EXECUTE format('DROP TRIGGER IF EXISTS trg_record_tombstone ON public.%I', t);
++      EXECUTE format('CREATE TRIGGER trg_record_tombstone AFTER DELETE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.record_tombstone()', t);
++    END IF;
++  END LOOP;
++
++  IF to_regclass('public.users') IS NOT NULL THEN
++    DROP TRIGGER IF EXISTS trg_set_updated_at ON public.users;
++    CREATE TRIGGER trg_set_updated_at BEFORE INSERT OR UPDATE ON public.users
++      FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
++  END IF;
++END $$;
++
++-- 4. sync_metadata (sinyal realtime antar device) ----------------------
++CREATE TABLE IF NOT EXISTS public.sync_metadata (
++  user_id            uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
++  last_update        timestamptz NOT NULL DEFAULT now(),
++  updated_by_session text
++);
++ALTER TABLE public.sync_metadata ADD COLUMN IF NOT EXISTS updated_by_session text;
++
++ALTER TABLE public.sync_metadata ENABLE ROW LEVEL SECURITY;
++DROP POLICY IF EXISTS "sync_metadata select own" ON public.sync_metadata;
++CREATE POLICY "sync_metadata select own" ON public.sync_metadata
++  FOR SELECT TO authenticated USING (user_id = auth.uid());
++DROP POLICY IF EXISTS "sync_metadata insert own" ON public.sync_metadata;
++CREATE POLICY "sync_metadata insert own" ON public.sync_metadata
++  FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid());
++DROP POLICY IF EXISTS "sync_metadata update own" ON public.sync_metadata;
++CREATE POLICY "sync_metadata update own" ON public.sync_metadata
++  FOR UPDATE TO authenticated USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
++
++DO $$
++BEGIN
++  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables
++                 WHERE pubname = 'supabase_realtime' AND schemaname = 'public'
++                   AND tablename = 'sync_metadata') THEN
++    ALTER PUBLICATION supabase_realtime ADD TABLE public.sync_metadata;
++  END IF;
++END $$;
++
++-- 5. Stok berbasis delta (idempoten per op_id) -------------------------
++CREATE TABLE IF NOT EXISTS public.sync_applied_ops (
++  op_id      text PRIMARY KEY,
++  user_id    uuid NOT NULL,
++  applied_at timestamptz NOT NULL DEFAULT now()
++);
++ALTER TABLE public.sync_applied_ops ENABLE ROW LEVEL SECURITY;  -- tanpa policy: hanya via fungsi
++
++CREATE OR REPLACE FUNCTION public.adjust_stock(
++  p_product_id text, p_delta numeric, p_op_id text)
++RETURNS numeric LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
++DECLARE
++  v_uid  uuid := auth.uid();
++  v_rows int;
++  v_stock numeric;
++BEGIN
++  IF v_uid IS NULL THEN
++    RAISE EXCEPTION 'not authenticated' USING ERRCODE = '42501';
++  END IF;
++
++  INSERT INTO public.sync_applied_ops (op_id, user_id)
++  VALUES (p_op_id, v_uid) ON CONFLICT (op_id) DO NOTHING;
++  GET DIAGNOSTICS v_rows = ROW_COUNT;
++
++  IF v_rows = 0 THEN   -- operasi ini sudah pernah diterapkan (retry)
++    SELECT stock INTO v_stock FROM public.products
++     WHERE id::text = p_product_id AND user_id::text = v_uid::text;
++    RETURN v_stock;
++  END IF;
++
++  UPDATE public.products
++     SET stock = COALESCE(stock, 0) + p_delta
++   WHERE id::text = p_product_id AND user_id::text = v_uid::text
++   RETURNING stock INTO v_stock;
++  RETURN v_stock;
++END $$;
++
++REVOKE ALL ON FUNCTION public.adjust_stock(text, numeric, text) FROM PUBLIC, anon;
++GRANT EXECUTE ON FUNCTION public.adjust_stock(text, numeric, text) TO authenticated;
++
++-- 6. Lupa password: cek identitas tanpa membuka SELECT ke anon ---------
++CREATE OR REPLACE FUNCTION public.verify_reset_identity(p_email text, p_phone text)
++RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
++  SELECT EXISTS (
++    SELECT 1 FROM public.users
++     WHERE lower(login_email) = lower(trim(p_email))
++       AND phone = trim(p_phone));
++$$;
++REVOKE ALL ON FUNCTION public.verify_reset_identity(text, text) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION public.verify_reset_identity(text, text) TO anon, authenticated;
+diff --git a/test/pin_hasher_test.dart b/test/pin_hasher_test.dart
+new file mode 100644
+index 0000000..543808c
+--- /dev/null
++++ b/test/pin_hasher_test.dart
+@@ -0,0 +1,36 @@
++import 'package:flutter_test/flutter_test.dart';
++import 'package:buildera/core/utils/pin_hasher.dart';
++
++void main() {
++  group('PinHasher', () {
++    test('hash lalu verify berhasil, PIN salah gagal', () {
++      final h = PinHasher.hash('1234');
++      expect(PinHasher.isHashed(h), isTrue);
++      expect(h.contains('1234'), isFalse);
++      expect(PinHasher.verify('1234', h), isTrue);
++      expect(PinHasher.verify('1235', h), isFalse);
++    });
++
++    test('salt acak: hash PIN yang sama berbeda', () {
++      expect(PinHasher.hash('1234'), isNot(PinHasher.hash('1234')));
++    });
++
++    test('panjang PIN terbaca dari hash', () {
++      expect(PinHasher.lengthOf(PinHasher.hash('123456')), 6);
++      expect(PinHasher.lengthOf(PinHasher.hash('1234')), 4);
++    });
++
++    test('PIN lama plaintext tetap terverifikasi (sebelum dimigrasi)', () {
++      expect(PinHasher.isHashed('1234'), isFalse);
++      expect(PinHasher.verify('1234', '1234'), isTrue);
++      expect(PinHasher.verify('0000', '1234'), isFalse);
++      expect(PinHasher.lengthOf('1234'), 4);
++    });
++
++    test('nilai kosong/rusak tidak pernah lolos', () {
++      expect(PinHasher.verify('1234', null), isFalse);
++      expect(PinHasher.verify('1234', ''), isFalse);
++      expect(PinHasher.verify('1234', r'v1$4$bad'), isFalse);
++    });
++  });
++}
+-- 
+2.43.0
+
