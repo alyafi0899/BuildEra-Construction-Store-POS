@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/image_helper.dart';
+import '../../../../core/utils/backup_helper.dart';
+import '../../../../core/sync/services/local_database.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../../models/store_settings.dart';
@@ -11,6 +13,12 @@ import '../../providers/settings_provider.dart';
 import '../widgets/printing_settings_widget.dart';
 import '../../../subscription/presentation/pages/subscription_page.dart';
 import '../../../subscription/providers/subscription_provider.dart';
+import '../../../../shared/widgets/security_gate.dart';
+import '../../../products/providers/product_provider.dart';
+import '../../../payment/providers/transaction_provider.dart';
+import '../../../inventory/providers/restock_provider.dart';
+import '../../../inventory/providers/bill_payment_provider.dart';
+import '../../../debts/providers/debt_repository.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -106,6 +114,143 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
+  Future<void> _handleBackupExcel() async {
+    requirePin(context, ref, () async {
+      try {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Mengambil data untuk Master Backup Excel...'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+
+        final products = ref.read(productsProvider).asData?.value ?? [];
+        final transactions = ref.read(transactionsProvider).asData?.value ?? [];
+        final customers = ref.read(customersProvider).asData?.value ?? [];
+        final restocks = ref.read(restockHistoryProvider).asData?.value ?? [];
+        final billPayments = ref.read(billPaymentsProvider).asData?.value ?? [];
+
+        final debtRepo = ref.read(debtRepositoryProvider);
+        final customerDebts = await debtRepo.getDebts();
+        final customerPayments = await debtRepo.getPayments();
+
+        final settings = ref.read(settingsProvider);
+
+        if (!mounted) return;
+        await BackupHelper.performFullBackup(
+          context: context,
+          products: products,
+          restocks: restocks,
+          billPayments: billPayments,
+          customers: customers,
+          customerDebts: customerDebts,
+          customerPayments: customerPayments,
+          transactions: transactions,
+          settings: settings,
+        );
+      } catch (e) {
+        if (mounted) showError(context, 'Gagal menyusun backup: $e');
+      }
+    });
+  }
+
+  Future<void> _handleResetAllData() async {
+    final settings = ref.read(settingsProvider);
+    final hasPin =
+        settings.securityPin != null && settings.securityPin!.isNotEmpty;
+
+    if (!hasPin) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Atur PIN Keamanan terlebih dahulu sebelum mereset data toko!'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+      setState(() => _selectedCategory = 4);
+      return;
+    }
+
+    requirePin(context, ref, () async {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: AppTheme.surface,
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: AppTheme.danger, size: 28),
+              SizedBox(width: 10),
+              Text('HAPUS SEMUA DATA?'),
+            ],
+          ),
+          content: const Text(
+            'Tindakan ini akan menghapus SELURUH data operasional toko (produk, transaksi, piutang, restock, dll.) dari cache lokal dan server secara permanen!\n\nYakin ingin melanjutkan?',
+            style: TextStyle(color: AppTheme.textSecondary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Batal'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.danger,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Iya, Hapus Seluruh Data'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm == true && mounted) {
+        try {
+          final user = ref.read(authStateProvider).value;
+          if (user != null) {
+            // 1. Clear Local Hive Database
+            await LocalDatabase.clearUserCache(user.uid);
+
+            // 2. Clear Remote Data if Online
+            final supabase = ref.read(supabaseClientProvider);
+            final collections = [
+              'products',
+              'transactions',
+              'customers',
+              'debts',
+              'debt_payments',
+              'suppliers',
+              'shipping_services',
+              'restock_history',
+              'bill_payments',
+              'barcode_history'
+            ];
+            for (final col in collections) {
+              try {
+                await supabase.from(col).delete().eq('user_id', user.uid);
+              } catch (_) {}
+            }
+
+            // 3. Refresh Settings and Providers
+            await ref.read(settingsProvider.notifier).refreshFromRemote();
+
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Seluruh data operasional berhasil di-reset.'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            }
+          }
+        } catch (e) {
+          if (mounted) showError(context, 'Gagal menghapus data: $e');
+        }
+      }
+    });
+  }
+
   void _handleLogout(BuildContext context) {
     showDialog(
       context: context,
@@ -175,7 +320,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 title: 'Manajemen Fitur POS',
                 subtitle:
                     'Aktifkan atau nonaktifkan menu Kasir, Produk, Pembelian, Piutang, Tagihan, Barcode, & Analitik',
-                onTap: () => setState(() => _selectedCategory = 0),
+                onTap: () {
+                  requirePin(context, ref, () {
+                    setState(() => _selectedCategory = 0);
+                  });
+                },
               ),
               const SizedBox(height: 20),
 
@@ -231,7 +380,31 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 trailingBadge: ref.watch(isPremiumProvider) ? 'PREMIUM' : 'GRATIS',
                 onTap: () => setState(() => _selectedCategory = 5),
               ),
+              const SizedBox(height: 20),
+
+              _categoryGroupHeader('PEMELIHARAAN & DATA'),
+              _CategoryCard(
+                icon: Icons.table_chart_rounded,
+                iconColor: Colors.green,
+                title: 'Backup Data ke Excel',
+                subtitle:
+                    'Ekspor seluruh data produk, transaksi, piutang, & restock ke 1 file Master Excel',
+                onTap: _handleBackupExcel,
+              ),
+              const SizedBox(height: 20),
+
+              _categoryGroupHeader('AREA BAHAYA'),
+              _CategoryCard(
+                icon: Icons.delete_forever_rounded,
+                iconColor: AppTheme.danger,
+                title: 'Reset & Hapus Seluruh Data Toko',
+                subtitle:
+                    'Hapus seluruh data produk, transaksi, piutang, dan riwayat operasional secara permanen',
+                isDanger: true,
+                onTap: _handleResetAllData,
+              ),
               const SizedBox(height: 10),
+
               _CategoryCard(
                 icon: Icons.logout_rounded,
                 iconColor: AppTheme.danger,
@@ -350,9 +523,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           subtitle: 'Modul transaksi kasir, scanner barcode, keranjang, & pembayaran',
           icon: Icons.point_of_sale_rounded,
           value: settings.enableCashier,
-          onChanged: (v) async {
-            await ref.read(settingsProvider.notifier).updateSettings(
-                settings.copyWith(enableCashier: v));
+          onChanged: (v) {
+            requirePin(context, ref, () async {
+              await ref.read(settingsProvider.notifier).updateSettings(
+                  settings.copyWith(enableCashier: v));
+            });
           },
         ),
         const SizedBox(height: 12),
@@ -361,9 +536,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           subtitle: 'Katalog barang, kategori, harga jual/modal, & penyesuaian stok',
           icon: Icons.inventory_2_rounded,
           value: settings.enableProducts,
-          onChanged: (v) async {
-            await ref.read(settingsProvider.notifier).updateSettings(
-                settings.copyWith(enableProducts: v));
+          onChanged: (v) {
+            requirePin(context, ref, () async {
+              await ref.read(settingsProvider.notifier).updateSettings(
+                  settings.copyWith(enableProducts: v));
+            });
           },
         ),
         const SizedBox(height: 12),
@@ -372,9 +549,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           subtitle: 'Pencatatan barang masuk dari supplier, ongkir, & riwayat restok',
           icon: Icons.local_shipping_rounded,
           value: settings.enablePurchase,
-          onChanged: (v) async {
-            await ref.read(settingsProvider.notifier).updateSettings(
-                settings.copyWith(enablePurchase: v));
+          onChanged: (v) {
+            requirePin(context, ref, () async {
+              await ref.read(settingsProvider.notifier).updateSettings(
+                  settings.copyWith(enablePurchase: v));
+            });
           },
         ),
         const SizedBox(height: 12),
@@ -383,9 +562,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           subtitle: 'Daftar semua nota transaksi selesai, cetak ulang, & refund',
           icon: Icons.receipt_long_rounded,
           value: settings.enableTransactions,
-          onChanged: (v) async {
-            await ref.read(settingsProvider.notifier).updateSettings(
-                settings.copyWith(enableTransactions: v));
+          onChanged: (v) {
+            requirePin(context, ref, () async {
+              await ref.read(settingsProvider.notifier).updateSettings(
+                  settings.copyWith(enableTransactions: v));
+            });
           },
         ),
         const SizedBox(height: 12),
@@ -394,9 +575,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           subtitle: 'Pencatatan bon piutang, riwayat cicilan, & data pelanggan',
           icon: Icons.account_balance_wallet_rounded,
           value: settings.enableDebts,
-          onChanged: (v) async {
-            await ref.read(settingsProvider.notifier).updateSettings(
-                settings.copyWith(enableDebts: v));
+          onChanged: (v) {
+            requirePin(context, ref, () async {
+              await ref.read(settingsProvider.notifier).updateSettings(
+                  settings.copyWith(enableDebts: v));
+            });
           },
         ),
         const SizedBox(height: 12),
@@ -405,9 +588,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           subtitle: 'Pencatatan pengeluaran operasional toko, listrik, gaji, & sewa',
           icon: Icons.receipt_rounded,
           value: settings.enableBills,
-          onChanged: (v) async {
-            await ref.read(settingsProvider.notifier).updateSettings(
-                settings.copyWith(enableBills: v));
+          onChanged: (v) {
+            requirePin(context, ref, () async {
+              await ref.read(settingsProvider.notifier).updateSettings(
+                  settings.copyWith(enableBills: v));
+            });
           },
         ),
         const SizedBox(height: 12),
@@ -416,9 +601,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           subtitle: 'Desain & pencetakan label barcode produk ke printer thermal/label',
           icon: Icons.qr_code_2_rounded,
           value: settings.enableBarcode,
-          onChanged: (v) async {
-            await ref.read(settingsProvider.notifier).updateSettings(
-                settings.copyWith(enableBarcode: v));
+          onChanged: (v) {
+            requirePin(context, ref, () async {
+              await ref.read(settingsProvider.notifier).updateSettings(
+                  settings.copyWith(enableBarcode: v));
+            });
           },
         ),
         const SizedBox(height: 12),
@@ -427,9 +614,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           subtitle: 'Grafik omset, laba rugi, barang terlaris, & laporan keuangan',
           icon: Icons.bar_chart_rounded,
           value: settings.enableAnalytics,
-          onChanged: (v) async {
-            await ref.read(settingsProvider.notifier).updateSettings(
-                settings.copyWith(enableAnalytics: v));
+          onChanged: (v) {
+            requirePin(context, ref, () async {
+              await ref.read(settingsProvider.notifier).updateSettings(
+                  settings.copyWith(enableAnalytics: v));
+            });
           },
         ),
       ],

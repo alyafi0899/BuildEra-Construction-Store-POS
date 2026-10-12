@@ -1,3 +1,4 @@
+-- 1. Tambah kolom Store Settings jika belum ada (Safe & Idempotent)
 ALTER TABLE public.users
   ADD COLUMN IF NOT EXISTS business_name TEXT NOT NULL DEFAULT '',
   ADD COLUMN IF NOT EXISTS owner_name TEXT NOT NULL DEFAULT '',
@@ -19,4 +20,40 @@ ALTER TABLE public.users
   ADD COLUMN IF NOT EXISTS print_method TEXT NOT NULL DEFAULT 'pdf',
   ADD COLUMN IF NOT EXISTS invoice_printer_url TEXT,
   ADD COLUMN IF NOT EXISTS label_printer_url TEXT,
+  ADD COLUMN IF NOT EXISTS enable_cashier BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS enable_products BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS enable_purchase BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS enable_transactions BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS enable_debts BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS enable_bills BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS enable_barcode BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS enable_analytics BOOLEAN NOT NULL DEFAULT TRUE,
   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+-- 2. Aktifkan Realtime Publication untuk tabel users (Pengecekan Idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND schemaname = 'public'
+      AND tablename = 'users'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.users;
+  END IF;
+END $$;
+
+-- 3. Kebijakan Row Level Security (RLS) untuk tabel users
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view own record" ON public.users;
+CREATE POLICY "Users can view own record" ON public.users
+  FOR SELECT TO authenticated USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can update own record" ON public.users;
+CREATE POLICY "Users can update own record" ON public.users
+  FOR UPDATE TO authenticated USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can insert own record" ON public.users;
+CREATE POLICY "Users can insert own record" ON public.users
+  FOR INSERT TO authenticated WITH CHECK (auth.uid() = id);

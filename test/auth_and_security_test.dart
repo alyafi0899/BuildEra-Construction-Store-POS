@@ -50,5 +50,27 @@ void main() {
       expect(defaultSettings.securityPin, isNull);
       expect(defaultSettings.businessName, isEmpty);
     });
+
+    test('StoreSettings feature toggle copyWith and map serialization', () {
+      const settings = StoreSettings(
+        securityPin: '888888',
+        enableCashier: true,
+        enableAnalytics: true,
+        enablePurchase: false,
+      );
+
+      final toggled = settings.copyWith(enablePurchase: true, enableAnalytics: false);
+      expect(toggled.enablePurchase, isTrue);
+      expect(toggled.enableAnalytics, isFalse);
+      expect(toggled.securityPin, equals('888888'));
+
+      final map = toggled.toMap();
+      expect(map['enable_purchase'], isTrue);
+      expect(map['enable_analytics'], isFalse);
+
+      final restored = StoreSettings.fromMap(map);
+      expect(restored.enablePurchase, isTrue);
+      expect(restored.enableAnalytics, isFalse);
+    });
   });
 }

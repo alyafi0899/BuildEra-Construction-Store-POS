@@ -882,6 +882,87 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
               .toList(),
         ),
       ],
+      if (_method == AppConstants.paymentQris) ...[
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceAlt,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppTheme.border),
+          ),
+          child: Column(
+            children: [
+              const Text(
+                'Scan QRIS Toko',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: AppTheme.accent),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Total: ${Formatters.currency(finalTotal)}',
+                style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 22,
+                    color: Colors.white),
+              ),
+              const SizedBox(height: 16),
+              FutureBuilder<String?>(
+                future: ImageHelper.resolveLocalPath(settings.qrisImagePath),
+                builder: (context, snapshot) {
+                  final resolvedPath = snapshot.data;
+                  final hasQris = resolvedPath != null &&
+                      resolvedPath.isNotEmpty &&
+                      File(resolvedPath).existsSync();
+
+                  if (hasQris) {
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.file(
+                        File(resolvedPath),
+                        width: 260,
+                        height: 260,
+                        fit: BoxFit.contain,
+                      ),
+                    );
+                  }
+
+                  return Container(
+                    width: 220,
+                    height: 220,
+                    decoration: BoxDecoration(
+                      color: AppTheme.bg,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.border),
+                    ),
+                    child: const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.qr_code_2_rounded,
+                            size: 64, color: AppTheme.textMuted),
+                        SizedBox(height: 8),
+                        Text(
+                          'Foto QRIS Belum Diunggah',
+                          style: TextStyle(
+                              color: AppTheme.textMuted, fontSize: 12),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Atur di Pengaturan > Metode Pembayaran',
+                          style: TextStyle(
+                              color: AppTheme.textMuted, fontSize: 10),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
       if (_method == AppConstants.paymentTransfer) ...[
         // ... (existing transfer panel code, but maybe slightly adjusted for right side)
         const SizedBox(height: 16),
