@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../../../core/utils/pin_hasher.dart';
 
 class BankAccount {
   final String bankName;
@@ -172,6 +173,29 @@ class StoreSettings {
       isLoading: isLoading,
     );
   }
+
+  /// Field yang bergantung pada hardware/perangkat: JANGAN disinkronkan.
+  /// Mengganti printer di PC tidak boleh menimpa pengaturan di HP.
+  static const Set<String> deviceLocalKeys = {
+    'logo_url',
+    'qris_image_path',
+    'receipt_width',
+    'receipt_margin',
+    'use_fast_print',
+    'printer_transport',
+    'print_method',
+    'invoice_printer_url',
+    'label_printer_url',
+  };
+
+  /// Hanya field yang dibagi antar device (dikirim ke public.users).
+  Map<String, dynamic> toRemoteMap() =>
+      toMap()..removeWhere((k, _) => deviceLocalKeys.contains(k));
+
+  // PIN (disimpan sebagai hash; PIN lama plaintext tetap terbaca sampai dimigrasi)
+  bool get hasPin => (securityPin ?? '').isNotEmpty;
+  int get pinLength => PinHasher.lengthOf(securityPin) ?? 4;
+  bool verifyPin(String entered) => PinHasher.verify(entered, securityPin);
 
   String toJson() => json.encode(toMap());
 

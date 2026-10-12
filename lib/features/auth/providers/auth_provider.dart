@@ -146,14 +146,13 @@ class AuthRepository {
   Future<void> verifyAndSendPasswordReset(
       {required String email, required String phone}) async {
     // FIX: Using Case-Insensitive (ilike) and robust trimming for search
-    final response = await _client
-        .from('users')
-        .select('id, login_email, phone')
-        .ilike('login_email', email.trim())
-        .eq('phone', phone.trim())
-        .maybeSingle();
+    // RPC security-definer: role anon tidak perlu SELECT langsung ke public.users.
+    final response = await _client.rpc('verify_reset_identity', params: {
+      'p_email': email.trim(),
+      'p_phone': phone.trim(),
+    });
 
-    if (response == null) {
+    if (response != true) {
       throw 'Data tidak ditemukan atau tidak cocok dengan sistem kami.\nPastikan Email dan No HP Pemilik sudah benar.';
     }
 

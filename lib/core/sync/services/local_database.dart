@@ -81,7 +81,7 @@ class LocalDatabase {
   }
 
   static Future<void> clearUserCache(String uid) async {
-    final collections = ['products', 'transactions', 'customers', 'debts', 'debt_payments', 'settings', 'sync_queue', 'suppliers', 'shipping_services', 'restock_history', 'metadata', 'print_profiles', 'sync_meta', 'barcode_history'];
+    final collections = ['products', 'transactions', 'customers', 'debts', 'debt_payments', 'settings', 'sync_queue', 'sync_dead_letter', 'suppliers', 'shipping_services', 'restock_history', 'metadata', 'print_profiles', 'sync_meta', 'barcode_history'];
     
     final dbPath = kIsWeb ? null : await _getDatabasePath(uid);
 

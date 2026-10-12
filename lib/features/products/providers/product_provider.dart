@@ -97,14 +97,12 @@ class ProductRepository {
     );
     final data = finalProduct.toMap();
 
+    final oldRaw = box.get(product.id);
     await box.put(product.id, data);
 
-    await _ref.read(syncProvider.notifier).addToQueue(
-      collection: 'products',
-      documentId: product.id,
-      action: SyncAction.update,
-      data: data,
-    );
+    await _ref
+        .read(syncProvider.notifier)
+        .addBatchToQueue(_productWriteTasks(oldRaw, finalProduct, data));
 
     if (product.barcode != null && product.barcode!.isNotEmpty) {
       await _historyRepo.logBarcode(product.barcode!, product.name, product.id);
@@ -173,16 +171,10 @@ class ProductRepository {
       final data = p.toMap();
       data['units'] = p.units.map((u) => u.toMap()).toList();
 
+      final oldRaw = box.get(p.id);
       await box.put(p.id, data);
-      
-      tasks.add(SyncTask(
-        id: _uuid.v4(),
-        collection: 'products',
-        documentId: p.id,
-        action: SyncAction.update,
-        data: data,
-        createdAt: DateTime.now(),
-      ));
+
+      tasks.addAll(_productWriteTasks(oldRaw, p, data));
 
       if (p.barcode != null && p.barcode!.isNotEmpty) {
         barcodeLogItems.add((barcode: p.barcode!, name: p.name, id: p.id));
@@ -206,16 +198,10 @@ class ProductRepository {
       final data = p.toMap();
       data['units'] = p.units.map((u) => u.toMap()).toList();
       
+      final oldRaw = box.get(p.id);
       await box.put(p.id, data);
-      
-      tasks.add(SyncTask(
-        id: _uuid.v4(),
-        collection: 'products',
-        documentId: p.id,
-        action: SyncAction.update,
-        data: data,
-        createdAt: DateTime.now(),
-      ));
+
+      tasks.addAll(_productWriteTasks(oldRaw, p, data));
     }
 
     await _ref.read(syncProvider.notifier).addBatchToQueue(tasks);
@@ -317,12 +303,55 @@ class ProductRepository {
 
     await box.put(productId, updated.toMap());
 
+    // Kirim DELTA, bukan nilai akhir: dua device yang menjual produk yang sama
+    // secara bersamaan tidak lagi saling menimpa stok.
     await _ref.read(syncProvider.notifier).addToQueue(
       collection: 'products',
       documentId: productId,
-      action: SyncAction.update,
-      data: updated.toMap(),
+      action: SyncAction.increment,
+      data: {'delta': delta},
     );
+  }
+
+  /// Produk baru -> `create` (membawa stok awal). Produk lama -> `update`
+  /// tanpa stok (dibuang saat push) + `increment` bila stok diubah manual.
+  List<SyncTask> _productWriteTasks(
+      dynamic oldRaw, Product p, Map<String, dynamic> data) {
+    final now = DateTime.now();
+    if (oldRaw == null) {
+      return [
+        SyncTask(
+          id: _uuid.v4(),
+          collection: 'products',
+          documentId: p.id,
+          action: SyncAction.create,
+          data: data,
+          createdAt: now,
+        ),
+      ];
+    }
+    final oldStock =
+        ((oldRaw as Map)['stock'] as num?)?.toDouble() ?? 0.0;
+    final delta = p.stock - oldStock;
+    return [
+      SyncTask(
+        id: _uuid.v4(),
+        collection: 'products',
+        documentId: p.id,
+        action: SyncAction.update,
+        data: data,
+        createdAt: now,
+      ),
+      if (delta.abs() > 1e-9)
+        SyncTask(
+          id: _uuid.v4(),
+          collection: 'products',
+          documentId: p.id,
+          action: SyncAction.increment,
+          data: {'delta': delta},
+          createdAt: now,
+        ),
+    ];
   }
 
   Future<void> dismissInitialBill(Product p, {required bool isSupplier}) async {

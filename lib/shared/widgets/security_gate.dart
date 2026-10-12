@@ -208,7 +208,7 @@ class _PinPromptOverlayState extends ConsumerState<_PinPromptOverlay> {
 
   void _onChanged(String value, int index) {
     final settings = ref.read(settingsProvider);
-    final pinLength = settings.securityPin?.length ?? 4;
+    final pinLength = settings.pinLength;
 
     if (value.length == 1) {
       if (index < pinLength - 1) {
@@ -221,9 +221,7 @@ class _PinPromptOverlayState extends ConsumerState<_PinPromptOverlay> {
 
   void _verify() {
     final enteredPin = _controllers.map((c) => c.text).join();
-    final correctPin = ref.read(settingsProvider).securityPin;
-
-    if (enteredPin == correctPin) {
+    if (ref.read(settingsProvider).verifyPin(enteredPin)) {
       widget.onSuccess();
     } else {
       setState(() {
@@ -239,7 +237,7 @@ class _PinPromptOverlayState extends ConsumerState<_PinPromptOverlay> {
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
-    final pinLength = settings.securityPin?.length ?? 4;
+    final pinLength = settings.pinLength;
 
     return Container(
       constraints:

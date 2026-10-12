@@ -10,6 +10,9 @@ class SyncTask {
   final int retryCount;
   final String? lastError;
 
+  /// Urutan monoton untuk tie-break saat createdAt sama (presisi ms di web).
+  final int seq;
+
   const SyncTask({
     required this.id,
     required this.collection,
@@ -19,6 +22,7 @@ class SyncTask {
     required this.createdAt,
     this.retryCount = 0,
     this.lastError,
+    this.seq = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -31,6 +35,7 @@ class SyncTask {
       'created_at': createdAt.toIso8601String(),
       'retry_count': retryCount,
       'last_error': lastError,
+      'seq': seq,
     };
   }
 
@@ -44,6 +49,7 @@ class SyncTask {
       createdAt: DateTime.parse(m['created_at'] as String),
       retryCount: m['retry_count'] as int? ?? 0,
       lastError: m['last_error'] as String?,
+      seq: m['seq'] as int? ?? 0,
     );
   }
 
@@ -51,6 +57,7 @@ class SyncTask {
     int? retryCount,
     String? lastError,
     bool clearLastError = false,
+    int? seq,
   }) {
     return SyncTask(
       id: id,
@@ -61,6 +68,7 @@ class SyncTask {
       createdAt: createdAt,
       retryCount: retryCount ?? this.retryCount,
       lastError: clearLastError ? null : (lastError ?? this.lastError),
+      seq: seq ?? this.seq,
     );
   }
 }

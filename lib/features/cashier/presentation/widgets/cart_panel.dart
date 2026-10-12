@@ -679,7 +679,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
     }
 
     final settings = ref.read(settingsProvider);
-    final correctPin = settings.securityPin ?? '1234';
+    bool pinOk(String v) => settings.hasPin ? settings.verifyPin(v) : v == '1234';
 
     final pinController = TextEditingController();
     final ok = await showDialog<bool>(
@@ -705,7 +705,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                 prefixIcon: Icon(Icons.lock_outline, size: 20),
               ),
               onSubmitted: (_) {
-                if (pinController.text == correctPin) {
+                if (pinOk(pinController.text)) {
                   Navigator.pop(context, true);
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -721,7 +721,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
               child: const Text('Batal')),
           ElevatedButton(
             onPressed: () {
-              if (pinController.text == correctPin) {
+              if (pinOk(pinController.text)) {
                 Navigator.pop(context, true);
               } else {
                 ScaffoldMessenger.of(context)

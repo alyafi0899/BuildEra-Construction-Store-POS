@@ -1,3 +1,4 @@
+import '../../../../core/utils/pin_hasher.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1136,8 +1137,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   Widget _buildSecuritySection() {
     final settings = ref.watch(settingsProvider);
-    final hasPin =
-        settings.securityPin != null && settings.securityPin!.length >= 4;
+    final hasPin = settings.hasPin;
 
     return AppCard(
       child: Column(
@@ -1207,8 +1207,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   Future<void> _updatePageLock(StoreSettings Function() updater) async {
     final current = ref.read(settingsProvider);
-    final expectedPin = current.securityPin;
-    if (expectedPin == null || expectedPin.length < 4) {
+    if (!current.hasPin) {
       showError(
           context, 'Atur PIN keamanan sebelum mengubah proteksi halaman.');
       return;
@@ -1249,7 +1248,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     pinController.dispose();
 
     if (!mounted || enteredPin == null) return;
-    if (enteredPin != expectedPin) {
+    if (!current.verifyPin(enteredPin)) {
       showError(context, 'PIN keamanan salah. Pengaturan tidak diubah.');
       return;
     }
@@ -1337,8 +1336,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 if (!formKey.currentState!.validate()) return;
 
                 if (step == 0) {
-                  final currentPin = ref.read(settingsProvider).securityPin;
-                  if (oldPinCtrl.text != currentPin) {
+                  if (!ref
+                      .read(settingsProvider)
+                      .verifyPin(oldPinCtrl.text)) {
                     showError(context, 'PIN lama salah!');
                     return;
                   }
@@ -1352,7 +1352,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   }
                   final settings = ref
                       .read(settingsProvider)
-                      .copyWith(securityPin: newPinCtrl.text);
+                      .copyWith(securityPin: PinHasher.hash(newPinCtrl.text));
                   ref.read(settingsProvider.notifier).updateSettings(settings);
                   Navigator.pop(context);
                   showSuccess(context, 'PIN berhasil diperbarui');
