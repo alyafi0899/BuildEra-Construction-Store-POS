@@ -150,11 +150,20 @@ class _SyncPromptDialog extends ConsumerWidget {
         ],
       ),
       actions: [
-        if (!syncState.isSyncing && !syncState.isInitialSyncDone)
+        if (!syncState.isSyncing && !syncState.isInitialSyncDone) ...[
+          if (syncState.error != null)
+            TextButton(
+              onPressed: () async {
+                await ref.read(initialSyncProvider.notifier).markAsDone();
+                if (context.mounted) Navigator.of(context).pop();
+              },
+              child: const Text('LEWATI & LANJUTKAN', style: TextStyle(color: AppTheme.textMuted)),
+            ),
           TextButton(
             onPressed: () => ref.read(initialSyncProvider.notifier).performInitialSync(),
             child: const Text('UNDUH SEKARANG', style: TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold)),
           ),
+        ],
         if (syncState.isInitialSyncDone)
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(),

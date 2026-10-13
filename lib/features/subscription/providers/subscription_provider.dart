@@ -1,27 +1,63 @@
+import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/subscription.dart';
 import '../models/subscription_history.dart';
 import '../repositories/subscription_repository.dart';
+import '../services/play_billing_service.dart';
 import '../../payment/providers/transaction_provider.dart';
 
 final subscriptionRepositoryProvider = Provider<SubscriptionRepository>((ref) {
   return SubscriptionRepository(ref.watch(supabaseClientProvider));
 });
 
+final playBillingServiceProvider = Provider<PlayBillingService>((ref) {
+  final repository = ref.watch(subscriptionRepositoryProvider);
+  final service = PlayBillingService(repository);
+  ref.onDispose(() => service.dispose());
+  return service;
+});
+
+final playBillingProductsProvider = FutureProvider<List<ProductDetails>>((ref) async {
+  final service = ref.watch(playBillingServiceProvider);
+  final user = ref.watch(authStateProvider).value;
+  if (user != null) {
+    await service.initialize(
+      userId: user.uid,
+      onSubscriptionUpdated: () {
+        ref.read(subscriptionStateProvider.notifier).refresh();
+      },
+      onError: (error) {
+        debugPrint('Play Billing error notice: $error');
+      },
+    );
+  }
+  return service.products;
+});
+
 final subscriptionStateProvider = NotifierProvider<SubscriptionNotifier, AsyncValue<Subscription?>>(SubscriptionNotifier.new);
 
 class SubscriptionNotifier extends Notifier<AsyncValue<Subscription?>> {
   SubscriptionRepository get _repository => ref.read(subscriptionRepositoryProvider);
+  RealtimeChannel? _subscriptionChannel;
+  String? _listeningUid;
 
   @override
   AsyncValue<Subscription?> build() {
+    ref.onDispose(() => _subscriptionChannel?.unsubscribe());
+
     // Listen to Auth changes
     ref.listen(authStateProvider, (previous, next) {
       final user = next.value;
       if (user != null) {
+        _listenToSubscriptionChanges(user.uid);
         refresh();
       } else {
+        _subscriptionChannel?.unsubscribe();
+        _subscriptionChannel = null;
+        _listeningUid = null;
         state = const AsyncValue.data(null);
       }
     });
@@ -30,10 +66,37 @@ class SubscriptionNotifier extends Notifier<AsyncValue<Subscription?>> {
     final user = ref.read(authStateProvider).value;
     if (user != null) {
       // Use Future.microtask to avoid state modification during build
-      Future.microtask(() => refresh());
+      Future.microtask(() {
+        _listenToSubscriptionChanges(user.uid);
+        refresh();
+      });
     }
 
     return const AsyncValue.loading();
+  }
+
+  void _listenToSubscriptionChanges(String uid) {
+    if (_listeningUid == uid) return;
+    _subscriptionChannel?.unsubscribe();
+    _listeningUid = uid;
+
+    final client = ref.read(supabaseClientProvider);
+    _subscriptionChannel = client
+        .channel('public:subscriptions:$uid')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'subscriptions',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: uid,
+          ),
+          callback: (payload) {
+            refresh();
+          },
+        )
+        .subscribe();
   }
 
   Future<void> refresh() async {
@@ -85,8 +148,18 @@ class SubscriptionNotifier extends Notifier<AsyncValue<Subscription?>> {
     }
   }
 
+  Future<void> buyPlayStoreSubscription(ProductDetails product) async {
+    final service = ref.read(playBillingServiceProvider);
+    await service.buySubscription(product);
+  }
+
+  Future<void> restorePlayStorePurchases() async {
+    final service = ref.read(playBillingServiceProvider);
+    await service.restorePurchases();
+    await refresh();
+  }
+
   Future<void> cancelPending() async {
-    // In production, we might just refresh to see if it's still pending or paid
     await refresh();
   }
 }

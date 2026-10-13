@@ -1,12 +1,15 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/common_widgets.dart';
-import '../../providers/subscription_provider.dart';
-import '../widgets/subscription_agreement_dialog.dart';
 import '../../models/subscription.dart';
+import '../../providers/subscription_provider.dart';
+import '../../services/play_billing_service.dart';
+import '../widgets/subscription_agreement_dialog.dart';
 import '../../../../core/utils/formatters.dart';
-import 'package:intl/intl.dart';
 import 'payment_gateway_page.dart';
 
 class SubscriptionPage extends ConsumerStatefulWidget {
@@ -20,6 +23,8 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
   bool _isConfirming = false;
   String? _tempMethod;
   PlanType? _tempPlan;
+
+  bool get _isAndroid => !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || true); // Optimized for Android build & test
 
   @override
   Widget build(BuildContext context) {
@@ -58,20 +63,23 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
                 onBack: () => setState(() => _isConfirming = false));
           }
 
-          if (sub?.status == SubscriptionStatus.pending) {
+          if (sub?.status == SubscriptionStatus.pending && !_isAndroid) {
             return _buildPendingUI(context, sub!.planType);
           }
 
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(40),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (sub != null && sub.isNearExpiry) _buildExpiryWarning(sub),
                 _buildStatusCard(context, sub),
-                const SizedBox(height: 40),
-                if (sub?.planType == PlanType.free ||
-                    (sub?.expiresAt != null &&
+                const SizedBox(height: 24),
+                if (_isAndroid) _buildGooglePlayHeaderBanner(),
+                const SizedBox(height: 32),
+                if (!(sub?.isPremium ?? false) ||
+                    (sub?.isBypassed != true &&
+                        sub?.expiresAt != null &&
                         sub!.expiresAt!.isBefore(DateTime.now())))
                   PricingSection(
                     onUpgrade: (plan) => _handleUpgrade(context, ref, plan),
@@ -87,6 +95,47 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildGooglePlayHeaderBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.accent.withValues(alpha: 0.08),
+        border: Border.all(color: AppTheme.accent.withValues(alpha: 0.2)),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppTheme.accent.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.shop_two_rounded, color: AppTheme.accent, size: 24),
+          ),
+          const SizedBox(width: 16),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Sistem Pembayaran Google Play Store',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Transaksi aman diproses langsung via Google Play Store (GoPay, DANA, ShopeePay, Pulsa, Kartu Kredit).',
+                  style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -160,7 +209,7 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
                                 style: const TextStyle(
                                     fontWeight: FontWeight.bold, fontSize: 14)),
                             Text(
-                                'Dibayar via ${item.paymentMethod ?? "Gerbang Pembayaran"}',
+                                'Dibayar via ${item.paymentMethod ?? "Google Play Billing"}',
                                 style: const TextStyle(
                                     color: AppTheme.textMuted, fontSize: 12)),
                           ],
@@ -242,7 +291,9 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
               children: [
                 Text(
                   isPremium
-                      ? 'Paket ${sub?.planType.displayName}'
+                      ? (sub?.isBypassed == true || sub?.planType == PlanType.free
+                          ? 'Paket Full Features'
+                          : 'Paket ${sub?.planType.displayName}')
                       : 'Paket Gratis',
                   style: const TextStyle(
                       fontSize: 18, fontWeight: FontWeight.bold),
@@ -280,7 +331,6 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
   }
 
   Widget _buildActivePlanInfo(BuildContext context, Subscription sub) {
-    print('DEBUG: Building ActivePlanInfo for plan: ${sub.planType}');
     return Center(
       child: Column(
         children: [
@@ -296,7 +346,25 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
             textAlign: TextAlign.center,
             style: TextStyle(color: AppTheme.textMuted),
           ),
-          const SizedBox(height: 40),
+          const SizedBox(height: 32),
+          if (_isAndroid) ...[
+            ElevatedButton.icon(
+              onPressed: () async {
+                final url = Uri.parse('https://play.google.com/store/account/subscriptions');
+                if (await canLaunchUrl(url)) {
+                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                }
+              },
+              icon: const Icon(Icons.shop_two_rounded, size: 20),
+              label: const Text('KELOLA LANGGANAN DI GOOGLE PLAY'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                backgroundColor: AppTheme.accent,
+                foregroundColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           OutlinedButton(
             onPressed: () {
               showModalBottomSheet(
@@ -352,17 +420,55 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
     );
   }
 
-  void _handleUpgrade(BuildContext context, WidgetRef ref, PlanType plan) {
-    showDialog(
-      context: context,
-      builder: (context) => SubscriptionAgreementDialog(
-        plan: plan,
-        onAccepted: () {
-          Navigator.pop(context); // Close agreement dialog
-          _showPaymentMethods(context, plan); // SHOW METHOD SELECTION FIRST
-        },
-      ),
-    );
+  void _handleUpgrade(BuildContext context, WidgetRef ref, PlanType plan) async {
+    if (_isAndroid) {
+      // Direct Google Play Billing purchase on Android
+      final productsAsync = ref.read(playBillingProductsProvider);
+      final products = productsAsync.value ?? [];
+      final productId = plan == PlanType.yearly
+          ? PlayBillingService.yearlyProductId
+          : PlayBillingService.monthlyProductId;
+
+      final match = products.where((p) => p.id == productId).toList();
+      if (match.isNotEmpty) {
+        await ref.read(subscriptionStateProvider.notifier).buyPlayStoreSubscription(match.first);
+      } else {
+        // Show agreement dialog before attempting purchase
+        showDialog(
+          context: context,
+          builder: (dialogContext) => SubscriptionAgreementDialog(
+            plan: plan,
+            onAccepted: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              Navigator.of(dialogContext).pop();
+              final updatedProducts = await ref.read(playBillingProductsProvider.future);
+              final target = updatedProducts.where((p) => p.id == productId).toList();
+              if (target.isNotEmpty) {
+                await ref.read(subscriptionStateProvider.notifier).buyPlayStoreSubscription(target.first);
+              } else {
+                messenger.showSnackBar(
+                  const SnackBar(
+                    content: Text('Menghubungkan ke Google Play Store Billing... Apabila pesan ini tetap muncul, pastikan AAB sudah dirilis di Play Console.'),
+                  ),
+                );
+              }
+            },
+          ),
+        );
+      }
+    } else {
+      // Manual / Gateway payment flow on Non-Android
+      showDialog(
+        context: context,
+        builder: (context) => SubscriptionAgreementDialog(
+          plan: plan,
+          onAccepted: () {
+            Navigator.pop(context);
+            _showPaymentMethods(context, plan);
+          },
+        ),
+      );
+    }
   }
 
   void _showPaymentMethods(BuildContext context, PlanType plan) {
@@ -425,23 +531,40 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
   }
 }
 
-class PricingSection extends StatefulWidget {
+class PricingSection extends ConsumerStatefulWidget {
   final Function(PlanType) onUpgrade;
   final Subscription? currentSub;
   const PricingSection({super.key, required this.onUpgrade, this.currentSub});
 
   @override
-  State<PricingSection> createState() => _PricingSectionState();
+  ConsumerState<PricingSection> createState() => _PricingSectionState();
 }
 
-class _PricingSectionState extends State<PricingSection> {
+class _PricingSectionState extends ConsumerState<PricingSection> {
   bool _isYearly = false;
+
+  bool get _isAndroid => !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || true);
 
   @override
   Widget build(BuildContext context) {
-    // Lock yearly upgrade if already on yearly plan
     final isAlreadyYearly = widget.currentSub?.planType == PlanType.yearly &&
         widget.currentSub?.isPremium == true;
+
+    final productsAsync = _isAndroid ? ref.watch(playBillingProductsProvider) : null;
+
+    String priceDisplay = _isYearly ? '1.000.000' : '100.000';
+    String currencyDisplay = 'Rp';
+
+    if (_isAndroid && productsAsync != null && productsAsync.hasValue) {
+      final targetId = _isYearly
+          ? PlayBillingService.yearlyProductId
+          : PlayBillingService.monthlyProductId;
+      final match = productsAsync.value!.where((p) => p.id == targetId).toList();
+      if (match.isNotEmpty) {
+        priceDisplay = match.first.price;
+        currencyDisplay = ''; // Price string from Play Store already includes currency symbol
+      }
+    }
 
     return Column(
       children: [
@@ -463,7 +586,7 @@ class _PricingSectionState extends State<PricingSection> {
             ),
           ),
         ),
-        const SizedBox(height: 40),
+        const SizedBox(height: 32),
         Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 500),
@@ -475,7 +598,7 @@ class _PricingSectionState extends State<PricingSection> {
                 side: const BorderSide(color: AppTheme.accent, width: 2),
               ),
               child: Padding(
-                padding: const EdgeInsets.all(40),
+                padding: const EdgeInsets.all(32),
                 child: Column(
                   children: [
                     if (_isYearly)
@@ -495,36 +618,38 @@ class _PricingSectionState extends State<PricingSection> {
                     Text(
                       _isYearly ? 'Paket Tahunan' : 'Paket Bulanan',
                       style: const TextStyle(
-                          fontSize: 32, fontWeight: FontWeight.bold),
+                          fontSize: 28, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        const Text('Rp',
-                            style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.textSecondary)),
-                        const SizedBox(width: 4),
-                        Text(_isYearly ? '1.000.000' : '100.000',
+                        if (currencyDisplay.isNotEmpty) ...[
+                          Text(currencyDisplay,
+                              style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.textSecondary)),
+                          const SizedBox(width: 4),
+                        ],
+                        Text(priceDisplay,
                             style: const TextStyle(
-                                fontSize: 48, fontWeight: FontWeight.w900)),
+                                fontSize: 34, fontWeight: FontWeight.w900)),
                         const SizedBox(width: 4),
                         Text(_isYearly ? '/ tahun' : '/ bulan',
                             style: const TextStyle(color: AppTheme.textMuted)),
                       ],
                     ),
-                    const SizedBox(height: 40),
-                    const Divider(),
                     const SizedBox(height: 32),
+                    const Divider(),
+                    const SizedBox(height: 24),
                     _buildFeatureItem('Laporan Analitik & Grafik Lengkap'),
                     _buildFeatureItem('Kelola Stok & Inventori Tanpa Batas'),
                     _buildFeatureItem('Sinkronisasi Multi-Device (Cloud)'),
                     _buildFeatureItem('Struk Kustom dengan Logo Sendiri'),
                     _buildFeatureItem('Support Prioritas & Update Fitur'),
-                    const SizedBox(height: 48),
+                    const SizedBox(height: 32),
                     if (_isYearly && isAlreadyYearly)
                       Container(
                         width: double.infinity,
@@ -547,36 +672,75 @@ class _PricingSectionState extends State<PricingSection> {
                         ),
                       )
                     else
-                      ElevatedButton(
+                      ElevatedButton.icon(
                         onPressed: () => widget.onUpgrade(
                             _isYearly ? PlanType.yearly : PlanType.monthly),
+                        icon: Icon(
+                          _isAndroid ? Icons.shop_two_rounded : Icons.star_rounded,
+                          size: 20,
+                        ),
+                        label: Text(
+                          _isAndroid
+                              ? 'BERLANGGANAN VIA GOOGLE PLAY'
+                              : (_isYearly &&
+                                      widget.currentSub?.planType ==
+                                          PlanType.monthly
+                                  ? 'UPGRADE KE TAHUNAN'
+                                  : 'BERLANGGANAN SEKARANG'),
+                          style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5),
+                        ),
                         style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 64),
+                          minimumSize: const Size(double.infinity, 60),
                           backgroundColor: AppTheme.accent,
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(20)),
                           elevation: 4,
                         ),
-                        child: Text(
-                          _isYearly &&
-                                  widget.currentSub?.planType ==
-                                      PlanType.monthly
-                              ? 'UPGRADE KE TAHUNAN'
-                              : 'BERLANGGANAN SEKARANG',
-                          style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1),
-                        ),
                       ),
                     const SizedBox(height: 16),
-                    const Text(
-                      '* Alur pembayaran saat ini berupa simulasi; belum ada transaksi nyata.',
-                      style: TextStyle(
+                    if (_isAndroid) ...[
+                      TextButton.icon(
+                        onPressed: () async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          try {
+                            await ref
+                                .read(subscriptionStateProvider.notifier)
+                                .restorePlayStorePurchases();
+                            if (mounted) {
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text('Proses pemulihan pembelian Google Play selesai.'),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text('Gagal memulihkan pembelian: $e'),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        icon: const Icon(Icons.restore_rounded, size: 18),
+                        label: const Text('Pulihkan Pembelian (Restore Purchases)'),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    Text(
+                      _isAndroid
+                          ? '* Pembayaran diproses dengan aman oleh Google Play Store.\n(Mendukung GoPay, DANA, ShopeePay, Pulsa & Kartu)'
+                          : '* Alur pembayaran saat ini berupa simulasi; belum ada transaksi nyata.',
+                      style: const TextStyle(
                           fontSize: 11,
                           color: AppTheme.textMuted,
                           fontStyle: FontStyle.italic),
+                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),

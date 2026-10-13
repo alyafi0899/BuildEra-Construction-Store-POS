@@ -643,6 +643,17 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
     _priceFocus = FocusNode(debugLabel: 'PriceFocus_${widget.itemId}');
     _discountFocus = FocusNode(debugLabel: 'DiscFocus_${widget.itemId}');
 
+    _qtyFocus.addListener(() {
+      if (!_qtyFocus.hasFocus && mounted) {
+        final qty = Formatters.parseQuantity(_qtyCtrl.text);
+        if (qty <= 0) {
+          try {
+            ref.read(cartProvider.notifier).removeItem(widget.itemId);
+          } catch (_) {}
+        }
+      }
+    });
+
     // Register focus nodes to global registry for shortcut access
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(cartFocusRegistryProvider.notifier).register(
@@ -888,7 +899,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                                 child: ScrollableQtyField(
                                   controller: _qtyCtrl,
                                   onChanged: (v) {
-                                    if (v >= 0) {
+                                    if (v > 0) {
                                       notifier.updateQuantity(item.id, v);
                                     }
                                   },
@@ -912,15 +923,18 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                                     ),
                                     onChanged: (v) {
                                       final qty = Formatters.parseQuantity(v);
-                                      if (qty >= 0) {
+                                      if (qty > 0) {
                                         notifier.updateQuantity(item.id, qty);
                                       }
                                     },
-                                    onSubmitted: (v) => notifier.updateQuantity(
-                                        item.id,
-                                        Formatters.parseQuantity(v) >= 0
-                                            ? Formatters.parseQuantity(v)
-                                            : 0),
+                                    onSubmitted: (v) {
+                                      final qty = Formatters.parseQuantity(v);
+                                      if (qty > 0) {
+                                        notifier.updateQuantity(item.id, qty);
+                                      } else {
+                                        notifier.removeItem(item.id);
+                                      }
+                                    },
                                   ),
                                 ),
                               ),
@@ -1147,7 +1161,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                             child: ScrollableQtyField(
                               controller: _qtyCtrl,
                               onChanged: (v) {
-                                if (v >= 0) {
+                                if (v > 0) {
                                   notifier.updateQuantity(item.id, v);
                                 }
                               },
@@ -1171,15 +1185,18 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                                 ),
                                 onChanged: (v) {
                                   final qty = Formatters.parseQuantity(v);
-                                  if (qty >= 0) {
+                                  if (qty > 0) {
                                     notifier.updateQuantity(item.id, qty);
                                   }
                                 },
-                                onSubmitted: (v) => notifier.updateQuantity(
-                                    item.id,
-                                    Formatters.parseQuantity(v) >= 0
-                                        ? Formatters.parseQuantity(v)
-                                        : 0),
+                                onSubmitted: (v) {
+                                  final qty = Formatters.parseQuantity(v);
+                                  if (qty > 0) {
+                                    notifier.updateQuantity(item.id, qty);
+                                  } else {
+                                    notifier.removeItem(item.id);
+                                  }
+                                },
                               ),
                             ),
                           ),

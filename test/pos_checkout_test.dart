@@ -110,6 +110,22 @@ void main() {
       expect(container.read(cartProvider).itemCount, 0);
     });
 
+    test('updating cart quantity with decimal values (0.5, 0.25) calculates total correctly', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final cartNotifier = container.read(cartProvider.notifier);
+      cartNotifier.addProduct(testProduct);
+      final itemId = container.read(cartProvider).items.single.id;
+
+      cartNotifier.updateQuantity(itemId, 0.5);
+
+      final cart = container.read(cartProvider);
+      expect(cart.items.length, equals(1));
+      expect(cart.items.single.quantity, equals(0.5));
+      expect(cart.grossSubtotal, equals(32500)); // 65000 * 0.5
+    });
+
     test('Cash payment change calculation', () {
       final item1 = CartItem(
         id: 'item-1',

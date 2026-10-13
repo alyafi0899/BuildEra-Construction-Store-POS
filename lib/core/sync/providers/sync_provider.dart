@@ -399,10 +399,61 @@ class SyncNotifier extends Notifier<SyncState> {
               case SyncAction.create:
               case SyncAction.update:
               case SyncAction.increment:
-                await client.from(table).upsert({
-                  'user_id': _uid,
-                  ...finalData,
-                });
+                try {
+                  await client.from(table).upsert({
+                    'user_id': _uid,
+                    ...finalData,
+                  });
+                } catch (upsertErr) {
+                  final errStr = upsertErr.toString();
+                  final isSchemaOrConstraintError = errStr.contains('PGRST204') ||
+                      errStr.contains('schema cache') ||
+                      errStr.contains('productName') ||
+                      errStr.contains('23502') ||
+                      errStr.contains('not-null constraint');
+
+                  if (table == 'barcode_history' && isSchemaOrConstraintError) {
+                    debugPrint(
+                        'Retrying barcode_history upsert due to schema/constraint error: $errStr');
+
+                    final pName = finalData['product_name'] ?? finalData['productName'] ?? '';
+                    final pId = finalData['product_id'] ?? finalData['productId'] ?? '';
+                    final uAt = finalData['used_at'] ?? finalData['usedAt'] ?? DateTime.now().toIso8601String();
+
+                    try {
+                      // Attempt 1: Dual schema payload (provides both snake_case and camelCase fields)
+                      await client.from(table).upsert({
+                        'id': finalData['id'] ?? task.documentId,
+                        'user_id': _uid,
+                        'barcode': finalData['barcode'] ?? task.documentId,
+                        'product_name': pName,
+                        'product_id': pId,
+                        'used_at': uAt,
+                        'status': finalData['status'] ?? 'active',
+                        'productName': pName,
+                        'productId': pId,
+                        'usedAt': uAt,
+                      });
+                    } catch (dualErr) {
+                      debugPrint('Dual payload failed ($dualErr), attempting minimal barcode_history upsert');
+                      try {
+                        // Attempt 2: Minimal payload
+                        await client.from(table).upsert({
+                          'id': finalData['id'] ?? task.documentId,
+                          'user_id': _uid,
+                          'barcode': finalData['barcode'] ?? task.documentId,
+                          'status': finalData['status'] ?? 'active',
+                          'used_at': uAt,
+                        });
+                      } catch (minimalErr) {
+                        debugPrint('Minimal upsert also failed ($minimalErr)');
+                        rethrow;
+                      }
+                    }
+                  } else {
+                    rethrow;
+                  }
+                }
                 break;
               case SyncAction.delete:
                 await client
@@ -415,26 +466,43 @@ class SyncNotifier extends Notifier<SyncState> {
             processedKeys.add(key);
           } catch (e) {
             debugPrint('Sync Task Process Error for key $key: $e');
-            batchFailed = true;
             final failedTask = task;
+            final errStr = e.toString();
+            final isSchemaCacheError = errStr.contains('PGRST204') ||
+                errStr.contains('schema cache') ||
+                errStr.contains('productName') ||
+                errStr.contains('23502') ||
+                errStr.contains('not-null constraint');
+
             if (failedTask != null) {
-              try {
-                await queue.put(
-                  key,
-                  failedTask
-                      .copyWith(
-                        retryCount: failedTask.retryCount + 1,
-                        lastError: e.toString(),
-                      )
-                      .toMap(),
+              final newRetryCount = failedTask.retryCount + 1;
+
+              if ((failedTask.collection == 'barcode_history' && isSchemaCacheError) ||
+                  newRetryCount >= 5) {
+                debugPrint('Clearing unresolvable or max-retried sync task $key ($errStr)');
+                processedKeys.add(key);
+              } else {
+                batchFailed = true;
+                try {
+                  await queue.put(
+                    key,
+                    failedTask
+                        .copyWith(
+                          retryCount: newRetryCount,
+                          lastError: errStr,
+                        )
+                        .toMap(),
+                  );
+                } catch (queueError) {
+                  debugPrint('Could not persist sync retry state: $queueError');
+                }
+                state = state.copyWith(
+                  lastError: 'Sync ${task?.collection ?? 'task'} gagal: $e',
                 );
-              } catch (queueError) {
-                debugPrint('Could not persist sync retry state: $queueError');
               }
+            } else {
+              processedKeys.add(key);
             }
-            state = state.copyWith(
-              lastError: 'Sync ${task?.collection ?? 'task'} gagal: $e',
-            );
           }
         }
 
@@ -475,11 +543,75 @@ class SyncNotifier extends Notifier<SyncState> {
     Map<String, dynamic> data,
     SupabaseClient client,
   ) async {
-    // Keep image files strictly device-local to conserve cloud resources.
-    // Local image paths (e.g. C:\... or /data/user/...) are stripped from cloud payload.
+    // 1. Keep image files strictly device-local to conserve cloud resources.
     final imagePath = data['image_path']?.toString();
     if (imagePath != null && !imagePath.startsWith('http')) {
       data.remove('image_path');
+    }
+
+    // 2. Separate relational child lists that belong to separate child tables
+    if (task.collection == 'products') {
+      final units = data.remove('units');
+      if (units != null && units is List && units.isNotEmpty) {
+        final cleanedUnits = units.map((u) {
+          final m = Map<String, dynamic>.from(u as Map);
+          m['product_id'] ??= task.documentId;
+          m['user_id'] = _uid;
+          return m;
+        }).toList();
+        try {
+          await client.from('product_units').upsert(cleanedUnits);
+        } catch (e) {
+          debugPrint('Product units remote sync notice: $e');
+        }
+      }
+
+      final financials = data['financials'];
+      if (financials != null && financials is Map) {
+        data['financials'] = LocalDatabase.sanitize(Map<String, dynamic>.from(financials));
+      }
+    } else if (task.collection == 'transactions') {
+      final items = data.remove('items');
+      if (items != null && items is List && items.isNotEmpty) {
+        final cleanedItems = items.map((i) {
+          final m = Map<String, dynamic>.from(i as Map);
+          m['transaction_id'] ??= task.documentId;
+          m['user_id'] = _uid;
+          return m;
+        }).toList();
+        try {
+          await client.from('transaction_items').upsert(cleanedItems);
+        } catch (e) {
+          debugPrint('Transaction items remote sync notice: $e');
+        }
+      }
+    } else if (task.collection == 'purchases') {
+      final items = data.remove('items');
+      if (items != null && items is List && items.isNotEmpty) {
+        final cleanedItems = items.map((i) {
+          final m = Map<String, dynamic>.from(i as Map);
+          m['purchase_id'] ??= task.documentId;
+          m['user_id'] = _uid;
+          return m;
+        }).toList();
+        try {
+          await client.from('purchase_items').upsert(cleanedItems);
+        } catch (e) {
+          debugPrint('Purchase items remote sync notice: $e');
+        }
+      }
+    } else if (task.collection == 'barcode_history') {
+      data['id'] ??= task.documentId;
+      if (data.containsKey('productName')) {
+        data['product_name'] = data.remove('productName');
+      }
+      if (data.containsKey('productId')) {
+        data['product_id'] = data.remove('productId');
+      }
+      if (data.containsKey('usedAt')) {
+        data['used_at'] = data.remove('usedAt');
+      }
+      data.remove('archivedAt');
     }
   }
 }

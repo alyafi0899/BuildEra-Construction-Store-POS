@@ -81,10 +81,11 @@ class BarcodeHistoryRepository {
     if (normalized.isEmpty) return;
     
     final data = {
+      'id': normalized,
       'barcode': normalized,
-      'productName': productName,
-      'productId': productId,
-      'usedAt': DateTime.now().toIso8601String(),
+      'product_name': productName,
+      'product_id': productId,
+      'used_at': DateTime.now().toIso8601String(),
       'status': 'active',
     };
 
@@ -112,10 +113,11 @@ class BarcodeHistoryRepository {
       if (normalized.isEmpty) continue;
 
       final data = {
+        'id': normalized,
         'barcode': normalized,
-        'productName': item.name,
-        'productId': item.id,
-        'usedAt': now,
+        'product_name': item.name,
+        'product_id': item.id,
+        'used_at': now,
         'status': 'active',
       };
 

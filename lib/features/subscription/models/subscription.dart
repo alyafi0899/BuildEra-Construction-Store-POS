@@ -69,11 +69,14 @@ class Subscription {
 
     final now = DateTime.now();
     // Use grace period for determining access
-    if (gracePeriodEndsAt != null && gracePeriodEndsAt!.isBefore(now))
+    if (gracePeriodEndsAt != null && gracePeriodEndsAt!.isBefore(now)) {
       return false;
+    }
     if (gracePeriodEndsAt == null &&
         expiresAt != null &&
-        expiresAt!.isBefore(now)) return false;
+        expiresAt!.isBefore(now)) {
+      return false;
+    }
 
     return true;
   }
@@ -96,6 +99,7 @@ class Subscription {
   }
 
   bool get isNearExpiry {
+    if (isBypassed) return false;
     final remaining = daysRemaining;
     return isPremium && remaining <= 5;
   }
@@ -112,19 +116,24 @@ class Subscription {
 
   factory Subscription.fromMap(Map<String, dynamic> map) {
     return Subscription(
-      userId: map['user_id'] as String,
+      userId: (map['user_id'] ?? '').toString(),
       planType: PlanType.fromString(map['plan_type'] as String?),
       status: SubscriptionStatus.fromString(map['status'] as String?),
       expiresAt: map['expires_at'] != null
-          ? DateTime.parse(map['expires_at'] as String)
+          ? DateTime.tryParse(map['expires_at'].toString())
           : null,
-      createdAt: DateTime.parse(map['created_at'] as String),
-      updatedAt: DateTime.parse(map['updated_at'] as String),
+      createdAt: map['created_at'] != null
+          ? (DateTime.tryParse(map['created_at'].toString()) ?? DateTime.now())
+          : DateTime.now(),
+      updatedAt: map['updated_at'] != null
+          ? (DateTime.tryParse(map['updated_at'].toString()) ?? DateTime.now())
+          : DateTime.now(),
       lastExternalId: map['last_external_id'] as String?,
       gracePeriodEndsAt: map['grace_period_ends_at'] != null
-          ? DateTime.parse(map['grace_period_ends_at'] as String)
+          ? DateTime.tryParse(map['grace_period_ends_at'].toString())
           : null,
-      isBypassed: map['is_bypassed'] as bool? ?? false,
+      isBypassed: map['is_bypassed'] == true ||
+          map['is_bypassed']?.toString().toLowerCase() == 'true',
     );
   }
 

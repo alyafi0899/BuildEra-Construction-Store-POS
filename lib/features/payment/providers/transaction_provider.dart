@@ -67,35 +67,73 @@ class TransactionRepository {
     final box = await _getBox();
     if (box.isNotEmpty && !force) return;
 
-    final response = await _client
-        .from('transactions')
-        .select('*, items:transaction_items(*)')
-        .eq('user_id', _uid)
-        .timeout(const Duration(seconds: 20));
-
     final Map<String, dynamic> allEntries = {};
-    for (final item in response) {
-      allEntries[item['id']] = LocalDatabase.sanitize(item);
+
+    try {
+      dynamic response;
+      try {
+        // Tier 1: Try relational select with alias 'items'
+        response = await _client
+            .from('transactions')
+            .select('*, items:transaction_items(*)')
+            .eq('user_id', _uid)
+            .timeout(const Duration(seconds: 15));
+      } catch (tier1Error) {
+        debugPrint('Transaction Bootstrap Tier 1 Query Notice: $tier1Error');
+        try {
+          // Tier 2: Try relational select with default embedding name
+          response = await _client
+              .from('transactions')
+              .select('*, transaction_items(*)')
+              .eq('user_id', _uid)
+              .timeout(const Duration(seconds: 15));
+        } catch (tier2Error) {
+          debugPrint('Transaction Bootstrap Tier 2 Query Notice: $tier2Error');
+          // Tier 3: Try plain transactions query
+          response = await _client
+              .from('transactions')
+              .select('*')
+              .eq('user_id', _uid)
+              .timeout(const Duration(seconds: 15));
+        }
+      }
+
+      if (response != null && response is List) {
+        for (final item in response) {
+          final data = Map<String, dynamic>.from(item as Map);
+          if (!data.containsKey('items') && data.containsKey('transaction_items')) {
+            data['items'] = data['transaction_items'];
+          }
+          final id = data['id']?.toString();
+          if (id != null && id.isNotEmpty) {
+            allEntries[id] = LocalDatabase.sanitize(data);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Transaction Bootstrap Remote Fetch Warning: $e');
     }
 
     if (force) await box.clear();
 
-    const int chunkSize = 50;
-    final keys = allEntries.keys.toList();
+    if (allEntries.isNotEmpty) {
+      const int chunkSize = 50;
+      final keys = allEntries.keys.toList();
 
-    for (var i = 0; i < keys.length; i += chunkSize) {
-      final end = (i + chunkSize < keys.length) ? i + chunkSize : keys.length;
-      final Map<String, dynamic> batch = {};
+      for (var i = 0; i < keys.length; i += chunkSize) {
+        final end = (i + chunkSize < keys.length) ? i + chunkSize : keys.length;
+        final Map<String, dynamic> batch = {};
 
-      for (var j = i; j < end; j++) {
-        final key = keys[j];
-        batch[key] = allEntries[key];
+        for (var j = i; j < end; j++) {
+          final key = keys[j];
+          batch[key] = allEntries[key];
+        }
+
+        if (batch.isNotEmpty) {
+          await box.putAll(batch);
+        }
+        await Future.delayed(const Duration(milliseconds: 1));
       }
-
-      if (batch.isNotEmpty) {
-        await box.putAll(batch);
-      }
-      await Future.delayed(const Duration(milliseconds: 1));
     }
   }
 
