@@ -62,10 +62,16 @@ class Subscription {
   });
 
   bool get isPremium {
-    if (isBypassed) return true;
-    if (planType == PlanType.free) return false;
+    if (isBypassed) {
+      return true;
+    }
+    if (planType == PlanType.free) {
+      return false;
+    }
     if (status != SubscriptionStatus.active &&
-        status != SubscriptionStatus.trial) return false;
+        status != SubscriptionStatus.trial) {
+      return false;
+    }
 
     final now = DateTime.now();
     // Use grace period for determining access

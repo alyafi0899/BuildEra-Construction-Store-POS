@@ -24,8 +24,6 @@ import '../../../settings/models/store_settings.dart';
 import 'package:printing/printing.dart';
 import 'package:uuid/uuid.dart';
 import '../../../subscription/providers/subscription_provider.dart';
-import '../../../subscription/models/subscription.dart';
-import '../../../../shared/widgets/premium_guard.dart';
 
 final _uuid = Uuid();
 

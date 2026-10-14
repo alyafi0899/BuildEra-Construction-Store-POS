@@ -161,16 +161,101 @@ Future<void> main(List<String> args) async {
       } catch (_) {}
     }
 
-    runApp(MaterialApp(
+    runApp(_BootErrorApp(error: e.toString()));
+  }
+}
+
+class _BootErrorApp extends StatelessWidget {
+  final String error;
+  const _BootErrorApp({required this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.dark,
       home: Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: SelectableText('Error during boot:\n$e\n\n$stack'),
+        backgroundColor: AppTheme.bg,
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(32),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 450),
+                child: Container(
+                  padding: const EdgeInsets.all(32),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: AppTheme.border),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppTheme.warning.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.wifi_off_rounded,
+                          size: 48,
+                          color: AppTheme.warning,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Koneksi Internet Diperlukan Saat Membuka Aplikasi',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Aplikasi membutuhkan jaringan internet pada awal dibuka untuk verifikasi keamanan akun & autentikasi Sesi.\n\nSetelah berhasil dibuka, transaksi kasir & kelola POS dapat dijalankan secara offline.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppTheme.textSecondary,
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          main([]);
+                        },
+                        icon: const Icon(Icons.refresh_rounded, size: 20),
+                        label: const Text('HUBUNGKAN & COBA LAGI'),
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 52),
+                          backgroundColor: AppTheme.accent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ),
-    ));
+    );
   }
 }
 

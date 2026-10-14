@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -95,10 +94,6 @@ class _CashierPageState extends ConsumerState<CashierPage> {
   Widget build(BuildContext context) {
     final category = ref.watch(productCategoryFilterProvider);
     final cart = ref.watch(cartProvider);
-    final supportsCameraScanner = kIsWeb ||
-        defaultTargetPlatform == TargetPlatform.android ||
-        defaultTargetPlatform == TargetPlatform.iOS ||
-        defaultTargetPlatform == TargetPlatform.macOS;
 
     Widget buildProductPanel({required bool compact}) => Column(
           children: [

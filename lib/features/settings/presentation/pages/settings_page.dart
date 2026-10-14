@@ -995,7 +995,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               .read(settingsProvider.notifier)
                               .updateSettings(
                                   current.copyWith(qrisImagePath: null));
-                          if (mounted) {
+                          if (context.mounted) {
                             showSuccess(context, 'Gambar QRIS terhapus');
                           }
                         },
@@ -1600,7 +1600,6 @@ class _LocalTextField extends StatelessWidget {
   final String label;
   final Widget? prefixIcon;
   final String? Function(String?)? validator;
-  final TextInputType? keyboardType;
   final int maxLines;
 
   const _LocalTextField({
@@ -1608,7 +1607,6 @@ class _LocalTextField extends StatelessWidget {
     required this.label,
     this.prefixIcon,
     this.validator,
-    this.keyboardType,
     this.maxLines = 1,
   });
 
@@ -1616,7 +1614,6 @@ class _LocalTextField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controller,
-      keyboardType: keyboardType,
       maxLines: maxLines,
       decoration: InputDecoration(
         labelText: label,

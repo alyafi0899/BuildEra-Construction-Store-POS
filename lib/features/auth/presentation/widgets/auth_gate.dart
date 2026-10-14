@@ -67,19 +67,62 @@ class _AuthGateState extends ConsumerState<AuthGate> {
       },
       loading: () => const SplashScreen(status: 'Menghubungkan ke Server...'),
       error: (e, stack) => Scaffold(
+        backgroundColor: AppTheme.bg,
         body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline_rounded, color: AppTheme.danger, size: 48),
-              const SizedBox(height: 16),
-              Text('Terjadi kesalahan sistem: $e'),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () => ref.read(authRepositoryProvider).logout(),
-                child: const Text('Kembali ke Login'),
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Container(
+                padding: const EdgeInsets.all(32),
+                decoration: BoxDecoration(
+                  color: AppTheme.surface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppTheme.border),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.warning.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.wifi_off_rounded, color: AppTheme.warning, size: 40),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Koneksi Internet Terputus',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Aplikasi membutuhkan koneksi internet di awal saat dibuka untuk verifikasi keamanan akun.\nPastikan paket data atau Wi-Fi Anda aktif.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: AppTheme.textSecondary, fontSize: 13, height: 1.4),
+                    ),
+                    const SizedBox(height: 28),
+                    ElevatedButton.icon(
+                      onPressed: () => ref.refresh(authStateProvider),
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                      label: const Text('HUBUNGKAN UANG'),
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 48),
+                        backgroundColor: AppTheme.accent,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: () => ref.read(authRepositoryProvider).logout(),
+                      child: const Text('KEMBALI KE HALAMAN LOGIN', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                    ),
+                  ],
+                ),
               ),
-            ],
+            ),
           ),
         ),
       ),
