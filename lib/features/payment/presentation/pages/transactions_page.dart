@@ -18,6 +18,7 @@ import '../../../settings/models/store_settings.dart';
 import 'package:printing/printing.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../shared/widgets/security_gate.dart';
+import '../../../../core/sync/providers/initial_sync_provider.dart';
 
 class TransactionsPage extends ConsumerStatefulWidget {
   const TransactionsPage({super.key});
@@ -58,9 +59,13 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
               icon: Icons.receipt_long_rounded,
               actions: [
                 IconButton(
-                  onPressed: () => ref.refresh(transactionsProvider),
+                  onPressed: () async {
+                    await ref.read(initialSyncProvider.notifier).triggerManualSync();
+                    ref.invalidate(transactionsProvider);
+                  },
                   icon: const Icon(Icons.refresh_rounded,
                       color: AppTheme.accent),
+                  tooltip: 'Muat Ulang Data Cloud',
                 ),
               ],
             ),

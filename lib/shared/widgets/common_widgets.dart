@@ -1,8 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/sync/providers/connectivity_provider.dart';
+import '../../core/sync/providers/initial_sync_provider.dart';
+
+// ── CloudSyncIconButton ──────────────────────────────────────────────────
+
+class CloudSyncIconButton extends ConsumerWidget {
+  const CloudSyncIconButton({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final syncState = ref.watch(initialSyncProvider);
+    final isOnline = ref.watch(isOnlineProvider);
+
+    if (syncState.isSyncing) {
+      return const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent),
+      );
+    }
+
+    return IconButton(
+      onPressed: !isOnline
+          ? null
+          : () => ref.read(initialSyncProvider.notifier).triggerManualSync(),
+      icon: const Icon(Icons.cloud_download_rounded, color: AppTheme.accent),
+      tooltip: 'Unduh Data Cloud',
+    );
+  }
+}
 
 // ── PageHeader ───────────────────────────────────────────────────────────
 

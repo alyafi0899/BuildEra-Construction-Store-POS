@@ -24,6 +24,7 @@ import '../../../inventory/presentation/widgets/restock_dialog.dart';
 import '../../../../shared/widgets/security_gate.dart';
 import '../../../../core/providers/navigation_provider.dart';
 import '../../../../features/settings/providers/settings_provider.dart';
+import '../../../../core/localization/localization_provider.dart';
 
 class ProductsPage extends ConsumerStatefulWidget {
   const ProductsPage({super.key});
@@ -263,6 +264,8 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
       }
     });
 
+    final strings = ref.watch(appStringsProvider);
+
     return Scaffold(
       backgroundColor: AppTheme.bg,
       body: LayoutBuilder(
@@ -276,8 +279,8 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
               children: [
                 // Top bar
                 PageHeader(
-                  title: 'Manajemen Produk',
-                  subtitle: 'Kelola daftar produk dan satuan jual',
+                  title: strings.productsTitle,
+                  subtitle: strings.isEnglish ? 'Manage product list and selling units' : 'Kelola daftar produk dan satuan jual',
                   icon: Icons.inventory_2_rounded,
                   actions: compactLayout
                       ? [

@@ -19,6 +19,10 @@ import '../../../payment/providers/transaction_provider.dart';
 import '../../../inventory/providers/restock_provider.dart';
 import '../../../inventory/providers/bill_payment_provider.dart';
 import '../../../debts/providers/debt_repository.dart';
+import '../../../../core/localization/app_language.dart';
+import '../../../../core/localization/localization_provider.dart';
+import '../../providers/app_settings_provider.dart';
+import '../../../../core/sync/providers/initial_sync_provider.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -251,6 +255,57 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     });
   }
 
+  void _showLanguageSelectionDialog(BuildContext context, WidgetRef ref) {
+    final currentLang = ref.read(appSettingsProvider).appLanguage;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.language_rounded, color: AppTheme.accent),
+            SizedBox(width: 12),
+            Text('Pilih Bahasa / Select Language'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: AppLanguage.values.map((lang) {
+            final isSelected = lang == currentLang;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: Text(lang.flag, style: const TextStyle(fontSize: 24)),
+                title: Text(lang.displayName,
+                    style: TextStyle(
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                trailing: isSelected
+                    ? const Icon(Icons.check_circle_rounded, color: AppTheme.accent)
+                    : null,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(
+                    color: isSelected ? AppTheme.accent : AppTheme.border,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  ref.read(appSettingsProvider.notifier).setLanguage(lang);
+                },
+              ),
+            );
+          }).toList(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal / Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _handleLogout(BuildContext context) {
     showDialog(
       context: context,
@@ -380,9 +435,55 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 trailingBadge: ref.watch(isPremiumProvider) ? 'PREMIUM' : 'GRATIS',
                 onTap: () => setState(() => _selectedCategory = 5),
               ),
+              const SizedBox(height: 10),
+              _CategoryCard(
+                icon: Icons.language_rounded,
+                iconColor: Colors.cyan,
+                title: ref.watch(appStringsProvider).languageSettings,
+                subtitle: ref.watch(appStringsProvider).selectLanguage,
+                trailingBadge: '${ref.watch(appSettingsProvider).appLanguage.flag} ${ref.watch(appSettingsProvider).appLanguage.displayName}',
+                onTap: () => _showLanguageSelectionDialog(context, ref),
+              ),
               const SizedBox(height: 20),
 
               _categoryGroupHeader('PEMELIHARAAN & DATA'),
+              _CategoryCard(
+                icon: Icons.cloud_download_rounded,
+                iconColor: AppTheme.accent,
+                title: 'Sinkronisasi & Unduh Data Cloud',
+                subtitle:
+                    'Unduh dan sinkronkan data produk, transaksi, & pengaturan dari cloud Supabase',
+                onTap: () async {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Memulai sinkronisasi data dari cloud...'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                  try {
+                    await ref.read(initialSyncProvider.notifier).triggerManualSync();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Sinkronisasi data cloud selesai.'),
+                          backgroundColor: Colors.green,
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Gagal sinkronisasi: $e'),
+                          backgroundColor: AppTheme.danger,
+                        ),
+                      );
+                    }
+                  }
+                },
+              ),
+              const SizedBox(height: 10),
               _CategoryCard(
                 icon: Icons.table_chart_rounded,
                 iconColor: Colors.green,

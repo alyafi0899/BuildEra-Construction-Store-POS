@@ -21,6 +21,7 @@ import '../widgets/payment_dialog.dart';
 import 'scanner_page.dart';
 
 import '../../../../shared/widgets/product_detail_dialog.dart';
+import '../../../../core/localization/localization_provider.dart';
 
 class CashierPage extends ConsumerStatefulWidget {
   const CashierPage({super.key});
@@ -94,11 +95,12 @@ class _CashierPageState extends ConsumerState<CashierPage> {
   Widget build(BuildContext context) {
     final category = ref.watch(productCategoryFilterProvider);
     final cart = ref.watch(cartProvider);
+    final strings = ref.watch(appStringsProvider);
 
     Widget buildProductPanel({required bool compact}) => Column(
           children: [
             PageHeader(
-              title: 'Kasir',
+              title: strings.cashierTitle,
               icon: Icons.point_of_sale_rounded,
               actions: compact
                   ? const []
@@ -118,7 +120,7 @@ class _CashierPageState extends ConsumerState<CashierPage> {
                     child: AppSearchField(
                       controller: _searchCtrl,
                       focusNode: _searchFocusNode,
-                      hintText: 'Cari produk atau scan barcode...',
+                      hintText: strings.searchProductOrBarcode,
                       onChanged: (v) {
                         ref.read(productSearchQueryProvider.notifier).set(v);
                         _resetUnfocusTimer();
@@ -158,7 +160,7 @@ class _CashierPageState extends ConsumerState<CashierPage> {
                       },
                       icon: const Icon(Icons.qr_code_scanner_rounded,
                           color: AppTheme.accent),
-                      tooltip: 'Buka Kamera Scanner',
+                      tooltip: strings.openCameraScanner,
                     ),
                   ),
                 ],

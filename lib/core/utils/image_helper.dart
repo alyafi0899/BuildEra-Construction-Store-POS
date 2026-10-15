@@ -50,9 +50,18 @@ class ImageHelper {
       }
     }
 
-    if (pickedFile.bytes != null) return pickedFile.bytes;
+    if (pickedFile.bytes != null && pickedFile.bytes!.isNotEmpty) {
+      return pickedFile.bytes;
+    }
     if (pickedFile.path != null && !kIsWeb) {
-      return File(pickedFile.path!).readAsBytes();
+      try {
+        final f = File(pickedFile.path!);
+        if (await f.exists()) {
+          return await f.readAsBytes();
+        }
+      } catch (e) {
+        debugPrint('File read error: $e');
+      }
     }
     return null;
   }

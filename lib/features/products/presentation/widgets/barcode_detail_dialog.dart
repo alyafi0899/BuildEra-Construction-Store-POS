@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:barcode_widget/barcode_widget.dart' as bc;
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:printing/printing.dart';
@@ -7,8 +8,9 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/models/product.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../core/localization/localization_provider.dart';
 
-class BarcodeDetailDialog extends StatelessWidget {
+class BarcodeDetailDialog extends ConsumerWidget {
   final Product product;
 
   const BarcodeDetailDialog({super.key, required this.product});
@@ -53,7 +55,8 @@ class BarcodeDetailDialog extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(appStringsProvider);
     final barcode = product.barcode ?? '';
     final hasBarcode = barcode.isNotEmpty;
 
@@ -91,22 +94,25 @@ class BarcodeDetailDialog extends StatelessWidget {
               dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: AppTheme.textPrimary),
             ),
           ] else
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Text('Produk ini belum memiliki barcode.', style: TextStyle(fontStyle: FontStyle.italic)),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Text(
+                strings.isEnglish ? 'This product does not have a barcode yet.' : 'Produk ini belum memiliki barcode.',
+                style: const TextStyle(fontStyle: FontStyle.italic),
+              ),
             ),
         ],
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Tutup'),
+          child: Text(strings.close),
         ),
         if (hasBarcode)
           ElevatedButton.icon(
             onPressed: _printLabel,
             icon: const Icon(Icons.print_rounded, size: 18),
-            label: const Text('Cetak Label'),
+            label: Text(strings.printLabel),
           ),
       ],
     );

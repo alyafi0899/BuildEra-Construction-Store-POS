@@ -21,6 +21,7 @@ import '../../../debts/models/customer.dart';
 import '../../../debts/models/debt.dart';
 import '../../../debts/models/debt_payment.dart';
 import '../../../settings/models/store_settings.dart';
+import '../../../../core/localization/localization_provider.dart';
 import 'package:printing/printing.dart';
 import 'package:uuid/uuid.dart';
 import '../../../subscription/providers/subscription_provider.dart';
@@ -88,16 +89,17 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
 
   Future<void> _confirm() async {
     final cart = ref.read(cartProvider);
+    final strings = ref.read(appStringsProvider);
     final finalTotal = cart.total + _shippingFee;
 
     if (_method == AppConstants.paymentCash && _paid < finalTotal) {
-      showError(context, 'Jumlah bayar kurang dari total');
+      showError(context, strings.amountLessTotal);
       return;
     }
 
     if (_method == AppConstants.paymentPiutang) {
       if (_selectedCustomer == null) {
-        showError(context, 'Pilih pelanggan untuk transaksi piutang');
+        showError(context, strings.selectCustomerForCredit);
         return;
       }
       // For Piutang, we update the cart with customer info before checkout

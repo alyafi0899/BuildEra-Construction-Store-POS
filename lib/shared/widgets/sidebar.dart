@@ -5,6 +5,8 @@ import '../../features/settings/models/store_settings.dart';
 import '../../features/settings/providers/settings_provider.dart';
 import '../../core/sync/widgets/sync_status_bar.dart';
 import '../../core/providers/navigation_provider.dart';
+import '../../core/localization/localization_provider.dart';
+import '../../core/localization/app_strings.dart';
 
 class _NavItem {
   final IconData icon;
@@ -34,6 +36,31 @@ const _navItems = [
   // SISTEM
   _NavItem(Icons.settings_rounded, 'Pengaturan', 7, 'SISTEM'),
 ];
+
+String _getNavItemLabel(_NavItem item, AppStrings strings) {
+  switch (item.index) {
+    case 0: return strings.navCashier;
+    case 1: return strings.navProducts;
+    case 2: return strings.navTransactions;
+    case 3: return strings.navDebts;
+    case 4: return strings.navCustomers;
+    case 5: return strings.navAnalytics;
+    case 6: return strings.navBarcodes;
+    case 7: return strings.navSettings;
+    case 8: return strings.navBills;
+    case 10: return strings.navPurchases;
+    case 11: return strings.navPurchaseHistory;
+    default: return item.label;
+  }
+}
+
+String _getCategoryTitle(String cat, AppStrings strings) {
+  if (cat == 'OPERASIONAL') return strings.isEnglish ? 'OPERATIONAL' : 'OPERASIONAL';
+  if (cat == 'INVENTORI') return strings.isEnglish ? 'INVENTORY' : 'INVENTORI';
+  if (cat == 'FINANSIAL') return strings.isEnglish ? 'FINANCIAL' : 'FINANSIAL';
+  if (cat == 'SISTEM') return strings.isEnglish ? 'SYSTEM' : 'SISTEM';
+  return cat;
+}
 
 class AppSidebar extends ConsumerWidget {
   final int selectedIndex;
@@ -215,6 +242,7 @@ class AppSidebar extends ConsumerWidget {
   List<Widget> _buildCategorizedNav(
       BuildContext context, WidgetRef ref, bool isCollapsed) {
     final settings = ref.watch(settingsProvider);
+    final strings = ref.watch(appStringsProvider);
     final visibleItems = _navItems.where((i) => _isItemEnabled(i, settings)).toList();
 
     final Map<String, List<_NavItem>> categories = {};
@@ -228,7 +256,7 @@ class AppSidebar extends ConsumerWidget {
       if (!isCollapsed) {
         widgets.add(Padding(
           padding: const EdgeInsets.only(left: 10, bottom: 8, top: 16),
-          child: Text(cat,
+          child: Text(_getCategoryTitle(cat, strings),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     letterSpacing: 1.5,
                     fontWeight: FontWeight.w900,
@@ -253,7 +281,7 @@ class AppSidebar extends ConsumerWidget {
   }
 }
 
-class _NavTile extends StatelessWidget {
+class _NavTile extends ConsumerWidget {
   final _NavItem item;
   final bool selected;
   final VoidCallback onTap;
@@ -267,7 +295,10 @@ class _NavTile extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(appStringsProvider);
+    final label = _getNavItemLabel(item, strings);
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Material(
@@ -288,7 +319,7 @@ class _NavTile extends StatelessWidget {
                   : MainAxisAlignment.start,
               children: [
                 Tooltip(
-                  message: isCollapsed ? item.label : '',
+                  message: isCollapsed ? label : '',
                   child: Icon(
                     item.icon,
                     size: 20,
@@ -299,7 +330,7 @@ class _NavTile extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      item.label,
+                      label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
