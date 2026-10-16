@@ -20,7 +20,6 @@ import '../../../../core/utils/barcode_helper.dart';
 import '../../providers/barcode_history_provider.dart';
 
 import '../../models/product_financials.dart';
-import '../../../../core/localization/localization_provider.dart';
 
 final _uuid = Uuid();
 

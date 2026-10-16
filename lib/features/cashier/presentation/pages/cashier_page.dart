@@ -18,6 +18,7 @@ import '../widgets/barcode_listener.dart';
 import '../widgets/cashier_intents.dart';
 import '../../providers/cart_focus_provider.dart';
 import '../widgets/payment_dialog.dart';
+import '../../../../shared/widgets/feature_tour_overlay.dart';
 import 'scanner_page.dart';
 
 import '../../../../shared/widgets/product_detail_dialog.dart';
@@ -309,8 +310,42 @@ class _CashierPageState extends ConsumerState<CashierPage> {
               // Short delay to let the click focus the target field first
               Future.delayed(const Duration(milliseconds: 150), _reclaimFocus);
             },
-            child: LayoutBuilder(
-              builder: (context, constraints) {
+            child: FeatureTourOverlay(
+              tourKey: 'cashier',
+              steps: const [
+                TourStep(
+                  title: 'Navigasi Fitur POS',
+                  description: 'Gunakan menu navigasi utama untuk berpindah antar modul kasir, produk, pembelian, piutang, tagihan, dan analitik.',
+                  icon: Icons.menu_rounded,
+                ),
+                TourStep(
+                  title: 'Pencarian & Barcode Scanner',
+                  description: 'Cari produk berdasarkan nama, kode SKU, atau gunakan kamera / barcode scanner fisik untuk memasukkan barang otomatis.',
+                  icon: Icons.qr_code_scanner_rounded,
+                ),
+                TourStep(
+                  title: 'Keranjang & Pengaturan QTY',
+                  description: 'Atur jumlah beli (termasuk desimal seperti 0.5), harga jual khusus, dan potongan diskon per barang.',
+                  icon: Icons.shopping_cart_rounded,
+                ),
+                TourStep(
+                  title: 'Estimasi Keuntungan',
+                  description: 'Klik ikon indikator atau keuntungan untuk melihat estimasi laba bersih transaksi saat ini.',
+                  icon: Icons.trending_up_rounded,
+                ),
+                TourStep(
+                  title: 'Diskon Transaksi & PPN',
+                  description: 'Atur diskon nota transaksi (nominal/persen) serta sakelar PPN 11%.',
+                  icon: Icons.percent_rounded,
+                ),
+                TourStep(
+                  title: 'Tombol Bayar Sekarang',
+                  description: 'Klik BAYAR SEKARANG untuk memilih metode pembayaran dan mencetak nota transaksi.',
+                  icon: Icons.payments_rounded,
+                ),
+              ],
+              child: LayoutBuilder(
+                builder: (context, constraints) {
                 final compact = ResponsiveBreakpoints.useCompactCashier(
                     constraints.maxWidth);
                 if (!compact) {
@@ -375,8 +410,9 @@ class _CashierPageState extends ConsumerState<CashierPage> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 class ClearFocusIntent extends Intent {

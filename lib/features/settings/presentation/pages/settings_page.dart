@@ -23,6 +23,7 @@ import '../../../../core/localization/app_language.dart';
 import '../../../../core/localization/localization_provider.dart';
 import '../../providers/app_settings_provider.dart';
 import '../../../../core/sync/providers/initial_sync_provider.dart';
+import '../../../../shared/widgets/feature_tour_overlay.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -340,9 +341,34 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     return Scaffold(
       backgroundColor: AppTheme.bg,
       body: SafeArea(
-        child: _selectedCategory == null
-            ? _buildCategoryListView()
-            : _buildCategoryDetailView(_selectedCategory!),
+        child: FeatureTourOverlay(
+          tourKey: 'settings',
+          steps: const [
+            TourStep(
+              title: 'Manajemen Fitur POS',
+              description: 'Aktifkan atau nonaktifkan modul kasir, produk, piutang, tagihan, dan analitik sesuai kebutuhan toko.',
+              icon: Icons.tune_rounded,
+            ),
+            TourStep(
+              title: 'Keamanan & PIN Admin',
+              description: 'Atur PIN admin untuk melindungi modul analitik, laporan, modal barang, dan pengaturan fitur.',
+              icon: Icons.security_rounded,
+            ),
+            TourStep(
+              title: 'Printer & Desain Struk',
+              description: 'Sambungkan printer Bluetooth/WiFi dan pilih kustomisasi tampilan nota struk.',
+              icon: Icons.print_rounded,
+            ),
+            TourStep(
+              title: 'Sinkronisasi & Unduh Cloud',
+              description: 'Gunakan opsi ini untuk menyelaraskan seluruh data toko Anda dari Supabase Cloud.',
+              icon: Icons.cloud_download_rounded,
+            ),
+          ],
+          child: _selectedCategory == null
+              ? _buildCategoryListView()
+              : _buildCategoryDetailView(_selectedCategory!),
+        ),
       ),
     );
   }

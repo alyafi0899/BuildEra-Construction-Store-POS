@@ -25,6 +25,7 @@ import '../../../../core/localization/localization_provider.dart';
 import 'package:printing/printing.dart';
 import 'package:uuid/uuid.dart';
 import '../../../subscription/providers/subscription_provider.dart';
+import '../../../../shared/widgets/feature_tour_overlay.dart';
 
 final _uuid = Uuid();
 
@@ -248,14 +249,39 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
         children: [
           // Hidden focus node for neutralization
           Focus(focusNode: _neutralFocusNode, child: const SizedBox.shrink()),
-          Dialog(
-            insetPadding: dialogInsets,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: dialogWidth,
-                maxHeight: viewport.height - 16,
+          FeatureTourOverlay(
+            tourKey: 'payment',
+            steps: const [
+              TourStep(
+                title: 'Rincian Checkout',
+                description: 'Daftar barang, kuantitas, harga jual, dan total tagihan bersih yang akan dibayar.',
+                icon: Icons.receipt_long_rounded,
               ),
-              child: _formPanel(context, cart),
+              TourStep(
+                title: 'Pilihan Metode Pembayaran',
+                description: 'Pilih metode Tunai, QRIS Statis, Transfer Bank, atau Bon / Piutang Pelanggan.',
+                icon: Icons.payment_rounded,
+              ),
+              TourStep(
+                title: 'Input Nominal & Kembalian',
+                description: 'Masukkan jumlah uang tunai yang diterima dari pembeli, kembalian akan dihitung otomatis.',
+                icon: Icons.calculate_rounded,
+              ),
+              TourStep(
+                title: 'Selesaikan & Cetak Struk',
+                description: 'Klik Konfirmasi untuk memproses pembayaran dan mencetak nota transaksi ke printer.',
+                icon: Icons.print_rounded,
+              ),
+            ],
+            child: Dialog(
+              insetPadding: dialogInsets,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: dialogWidth,
+                  maxHeight: viewport.height - 16,
+                ),
+                child: _formPanel(context, cart),
+              ),
             ),
           ),
         ],

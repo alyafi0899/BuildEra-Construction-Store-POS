@@ -4,6 +4,7 @@ import 'package:buildera/features/settings/models/store_settings.dart';
 import 'package:buildera/core/sync/providers/initial_sync_provider.dart';
 import 'package:buildera/features/subscription/models/subscription.dart';
 import 'package:buildera/shared/models/product.dart';
+import 'package:buildera/core/providers/feature_tour_provider.dart';
 
 void main() {
   group('Auth & Security Model Tests', () {
@@ -197,6 +198,18 @@ void main() {
       final units = map.remove('units') as List;
       expect(units.length, equals(1));
       expect(map.containsKey('units'), isFalse);
+    });
+
+    test('FeatureTourState default state and copyWith behavior', () {
+      const state = FeatureTourState();
+      expect(state.isLanguageSelected, isFalse);
+      expect(state.tourCashierDone, isFalse);
+      expect(state.isAllSkipped, isFalse);
+
+      final updated = state.copyWith(tourCashierDone: true, isLanguageSelected: true);
+      expect(updated.tourCashierDone, isTrue);
+      expect(updated.isLanguageSelected, isTrue);
+      expect(updated.tourProductsDone, isFalse);
     });
   });
 }

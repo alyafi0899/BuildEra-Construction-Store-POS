@@ -9,6 +9,9 @@ import '../../../../main.dart';
 import '../../../../shared/widgets/splash_screen.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../../core/sync/providers/initial_sync_provider.dart';
+import '../../../../core/providers/feature_tour_provider.dart';
+import '../../../../core/localization/app_language.dart';
+import '../../../settings/providers/app_settings_provider.dart';
 
 class AuthGate extends ConsumerStatefulWidget {
   const AuthGate({super.key});
@@ -22,6 +25,14 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 
   @override
   Widget build(BuildContext context) {
+    final tourState = ref.watch(featureTourProvider);
+    if (!tourState.isLanguageSelected) {
+      return const Scaffold(
+        backgroundColor: AppTheme.bg,
+        body: Center(child: _InitialLanguageDialog()),
+      );
+    }
+
     final authState = ref.watch(authStateProvider);
     final registrationEmail = ref.watch(registrationEmailProvider);
 
@@ -214,6 +225,68 @@ class _SyncPromptDialog extends ConsumerWidget {
             child: const Text('LANJUTKAN KE APLIKASI'),
           ),
       ],
+    );
+  }
+}
+
+class _InitialLanguageDialog extends ConsumerWidget {
+  const _InitialLanguageDialog();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 380),
+        padding: const EdgeInsets.all(28),
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: AppTheme.border),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.language_rounded, size: 48, color: AppTheme.accent),
+            const SizedBox(height: 16),
+            const Text(
+              'Pilih Bahasa / Select Language',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Silakan pilih bahasa aplikasi Anda\nPlease choose your preferred language',
+              style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ...AppLanguage.values.map((lang) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: ListTile(
+                  leading: Text(lang.flag, style: const TextStyle(fontSize: 24)),
+                  title: Text(lang.displayName,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: const BorderSide(color: AppTheme.border),
+                  ),
+                  tileColor: AppTheme.surfaceAlt,
+                  onTap: () {
+                    ref.read(appSettingsProvider.notifier).setLanguage(lang);
+                    ref.read(featureTourProvider.notifier).markLanguageSelected();
+                  },
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
     );
   }
 }

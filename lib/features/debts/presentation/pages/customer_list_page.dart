@@ -8,6 +8,7 @@ import '../../models/customer.dart';
 import '../../providers/debt_repository.dart';
 import '../pages/customer_debt_detail_page.dart';
 import '../../../../shared/widgets/security_gate.dart';
+import '../../../../shared/widgets/feature_tour_overlay.dart';
 
 class CustomerListPage extends ConsumerStatefulWidget {
   const CustomerListPage({super.key});
@@ -32,8 +33,22 @@ class _CustomerListPageState extends ConsumerState<CustomerListPage> {
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      body: Column(
-        children: [
+      body: FeatureTourOverlay(
+        tourKey: 'debts',
+        steps: const [
+          TourStep(
+            title: 'Pelanggan & Bon Piutang',
+            description: 'Daftar seluruh pelanggan toko beserta total saldo bon piutang yang belum dilunasi.',
+            icon: Icons.account_balance_wallet_rounded,
+          ),
+          TourStep(
+            title: 'Limit Kredit & Riwayat Pembayaran',
+            description: 'Klik pelanggan untuk melihat riwayat nota bon, batas kredit (credit limit), dan mencatatkan pembayaran cicilan.',
+            icon: Icons.receipt_long_rounded,
+          ),
+        ],
+        child: Column(
+          children: [
           // Header
           PageHeader(
             title: 'Data Pelanggan',
@@ -106,6 +121,7 @@ class _CustomerListPageState extends ConsumerState<CustomerListPage> {
           ),
         ],
       ),
+    ),
     );
   }
 

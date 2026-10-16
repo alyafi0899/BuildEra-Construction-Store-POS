@@ -18,6 +18,7 @@ import '../../models/bill_payment.dart';
 import '../../providers/bill_payment_provider.dart';
 import '../../../../shared/widgets/security_gate.dart';
 import '../../../../features/settings/providers/settings_provider.dart';
+import '../../../../shared/widgets/feature_tour_overlay.dart';
 
 class BillsPage extends ConsumerStatefulWidget {
   const BillsPage({super.key});
@@ -50,8 +51,22 @@ class _BillsPageState extends ConsumerState<BillsPage> with SingleTickerProvider
       backgroundColor: AppTheme.bg,
       body: PinGate(
         manualTrigger: ref.watch(settingsProvider).lockInventoryPage,
-        child: Column(
-          children: [
+        child: FeatureTourOverlay(
+          tourKey: 'bills',
+          steps: const [
+            TourStep(
+              title: 'Tagihan Operasional Toko',
+              description: 'Pencatatan pengeluaran operasional toko seperti listrik, gaji karyawan, dan sewa tempat.',
+              icon: Icons.receipt_rounded,
+            ),
+            TourStep(
+              title: 'Tagihan Supplier & Ekspedisi',
+              description: 'Pantau tagihan pembelian barang dari supplier dan biaya ongkos kirim ekspedisi yang belum lunas.',
+              icon: Icons.local_shipping_rounded,
+            ),
+          ],
+          child: Column(
+            children: [
             const PageHeader(
             title: 'Manajemen Tagihan',
             subtitle: 'Pantau riwayat biaya dan kelola hutang operasional',
@@ -86,8 +101,9 @@ class _BillsPageState extends ConsumerState<BillsPage> with SingleTickerProvider
         ],
       ),
     ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildQuickStats(AsyncValue<List<Product>> products, AsyncValue<List<RestockRecord>> restocks) {
     return products.when(

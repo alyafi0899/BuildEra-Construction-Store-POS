@@ -25,6 +25,7 @@ import '../../../../shared/widgets/security_gate.dart';
 import '../../../../core/providers/navigation_provider.dart';
 import '../../../../features/settings/providers/settings_provider.dart';
 import '../../../../core/localization/localization_provider.dart';
+import '../../../../shared/widgets/feature_tour_overlay.dart';
 
 class ProductsPage extends ConsumerStatefulWidget {
   const ProductsPage({super.key});
@@ -275,8 +276,32 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                   constraints.maxWidth);
           return PinGate(
             manualTrigger: ref.watch(settingsProvider).lockProductsPage,
-            child: Column(
-              children: [
+            child: FeatureTourOverlay(
+              tourKey: 'products',
+              steps: const [
+                TourStep(
+                  title: 'Tambah Produk Baru',
+                  description: 'Klik tombol Tambah untuk membuat produk baru, mengisi SKU, barcode, satuan, harga jual, dan stok awal.',
+                  icon: Icons.add_circle_rounded,
+                ),
+                TourStep(
+                  title: 'Import & Export Excel',
+                  description: 'Tambah ribuan barang secara cepat via file Master Excel atau unduh catalog produk Anda.',
+                  icon: Icons.file_download_rounded,
+                ),
+                TourStep(
+                  title: 'Daftar Produk & Edit Instan',
+                  description: 'Lihat daftar barang, ubah harga jual/modal, atau sesuaikan kuantitas stok secara langsung.',
+                  icon: Icons.inventory_rounded,
+                ),
+                TourStep(
+                  title: 'Restok Pembelian Supplier',
+                  description: 'Gunakan fitur Restok untuk mencatat barang masuk dari supplier beserta ongkos kirim.',
+                  icon: Icons.local_shipping_rounded,
+                ),
+              ],
+              child: Column(
+                children: [
                 // Top bar
                 PageHeader(
                   title: strings.productsTitle,
@@ -833,10 +858,10 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                 ),
               ],
             ),
-          );
-        },
-      ),
-    );
+          ),
+        );
+      },
+    ));
   }
 
   Widget _columnVisibilityMenu() {
