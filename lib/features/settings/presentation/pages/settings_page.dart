@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -307,6 +308,85 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
+  void _showDisplayScaleDialog(BuildContext context, WidgetRef ref) {
+    double currentScale = ref.read(appSettingsProvider).displayScale;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: AppTheme.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.aspect_ratio_rounded, color: AppTheme.accent),
+              SizedBox(width: 12),
+              Text('Skala Tampilan Aplikasi'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Ukuran Skala: ${(currentScale * 100).toInt()}%',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.accent,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Geser slider untuk memperbesar atau memperkecil ukuran tampilan antarmuka.',
+                style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              Slider(
+                value: currentScale,
+                min: 0.70,
+                max: 1.30,
+                divisions: 12,
+                activeColor: AppTheme.accent,
+                inactiveColor: AppTheme.surfaceAlt,
+                label: '${(currentScale * 100).toInt()}%',
+                onChanged: (v) {
+                  final newScale = double.parse(v.toStringAsFixed(2));
+                  setDialogState(() => currentScale = newScale);
+                  ref.read(appSettingsProvider.notifier).setDisplayScale(newScale);
+                },
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  OutlinedButton(
+                    onPressed: () {
+                      final isDesktop = !kIsWeb &&
+                          (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+                      final defaultScale = isDesktop ? 1.0 : 0.8;
+                      setDialogState(() => currentScale = defaultScale);
+                      ref.read(appSettingsProvider.notifier).setDisplayScale(defaultScale);
+                    },
+                    child: const Text('RESET DEFAULT'),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.accent,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('SIMPAN'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _handleLogout(BuildContext context) {
     showDialog(
       context: context,
@@ -469,6 +549,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 subtitle: ref.watch(appStringsProvider).selectLanguage,
                 trailingBadge: '${ref.watch(appSettingsProvider).appLanguage.flag} ${ref.watch(appSettingsProvider).appLanguage.displayName}',
                 onTap: () => _showLanguageSelectionDialog(context, ref),
+              ),
+              const SizedBox(height: 10),
+              _CategoryCard(
+                icon: Icons.aspect_ratio_rounded,
+                iconColor: Colors.deepOrangeAccent,
+                title: ref.watch(appStringsProvider).displayScale,
+                subtitle: 'Atur skala perbesaran antarmuka (Default: 100% Desktop, 80% Mobile)',
+                trailingBadge: '${(ref.watch(appSettingsProvider).displayScale * 100).toInt()}%',
+                onTap: () => _showDisplayScaleDialog(context, ref),
               ),
               const SizedBox(height: 20),
 

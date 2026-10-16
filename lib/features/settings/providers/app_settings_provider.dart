@@ -23,9 +23,12 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    final isDesktop = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+    final defaultScale = isDesktop ? 1.0 : 0.8;
+
     final isFull = prefs.getBool(_keyFullScreen) ?? false;
     final isCust = prefs.getBool(_keyCustomerDisplay) ?? false;
-    final scale = prefs.getDouble(_keyDisplayScale) ?? 1.0;
+    final scale = prefs.getDouble(_keyDisplayScale) ?? defaultScale;
     final langCode = prefs.getString(_keyLanguage) ?? 'id';
 
     state = AppSettings(
@@ -34,8 +37,6 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
       displayScale: scale,
       appLanguage: AppLanguage.fromCode(langCode),
     );
-
-    final isDesktop = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
 
     if (isDesktop) {
       await windowManager.setFullScreen(isFull);
