@@ -5,65 +5,59 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter/material.dart';
 import 'package:image_cropper/image_cropper.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../core/theme/app_theme.dart';
 
 class ImageHelper {
-  /// Picks an image, crops it (if supported), and returns the bytes
+  /// Picks an image via system Photo Picker, crops it (if supported), and returns the bytes
   static Future<Uint8List?> pickAndCropImage(BuildContext context) async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      withData: true,
-    );
+    try {
+      final picker = ImagePicker();
+      final XFile? pickedFile = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 1600,
+      );
 
-    if (result == null || result.files.isEmpty) return null;
-    final pickedFile = result.files.first;
+      if (pickedFile == null) return null;
 
-    final supportsNativeCropper = !kIsWeb &&
-        (Platform.isAndroid || Platform.isIOS) &&
-        pickedFile.path != null;
-    if (supportsNativeCropper) {
-      try {
-        final croppedFile = await ImageCropper().cropImage(
-          sourcePath: pickedFile.path!,
-          uiSettings: [
-            AndroidUiSettings(
-              toolbarTitle: 'Potong Gambar',
-              toolbarColor: AppTheme.accent,
-              toolbarWidgetColor: Colors.white,
-              initAspectRatio: CropAspectRatioPreset.square,
-              lockAspectRatio: true,
-            ),
-            IOSUiSettings(
-              title: 'Potong Gambar',
-              aspectRatioLockEnabled: true,
-            ),
-          ],
-        );
+      final supportsNativeCropper = !kIsWeb &&
+          (Platform.isAndroid || Platform.isIOS) &&
+          pickedFile.path.isNotEmpty;
 
-        if (croppedFile != null) {
-          return await croppedFile.readAsBytes();
+      if (supportsNativeCropper) {
+        try {
+          final croppedFile = await ImageCropper().cropImage(
+            sourcePath: pickedFile.path,
+            uiSettings: [
+              AndroidUiSettings(
+                toolbarTitle: 'Potong Gambar',
+                toolbarColor: AppTheme.accent,
+                toolbarWidgetColor: Colors.white,
+                initAspectRatio: CropAspectRatioPreset.square,
+                lockAspectRatio: true,
+              ),
+              IOSUiSettings(
+                title: 'Potong Gambar',
+                aspectRatioLockEnabled: true,
+              ),
+            ],
+          );
+
+          if (croppedFile != null) {
+            return await croppedFile.readAsBytes();
+          }
+        } catch (e) {
+          debugPrint('Image crop failed; using the selected image instead: $e');
         }
-      } catch (e) {
-        debugPrint('Image crop failed; using the selected image instead: $e');
       }
-    }
 
-    if (pickedFile.bytes != null && pickedFile.bytes!.isNotEmpty) {
-      return pickedFile.bytes;
+      return await pickedFile.readAsBytes();
+    } catch (e) {
+      debugPrint('Error picking image: $e');
+      return null;
     }
-    if (pickedFile.path != null && !kIsWeb) {
-      try {
-        final f = File(pickedFile.path!);
-        if (await f.exists()) {
-          return await f.readAsBytes();
-        }
-      } catch (e) {
-        debugPrint('File read error: $e');
-      }
-    }
-    return null;
   }
 
   /// Compresses and resizes image to a safe max dimension for local brand asset usage.

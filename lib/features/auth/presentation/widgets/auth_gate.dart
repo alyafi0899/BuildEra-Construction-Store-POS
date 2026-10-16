@@ -118,7 +118,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
                     ElevatedButton.icon(
                       onPressed: () => ref.refresh(authStateProvider),
                       icon: const Icon(Icons.refresh_rounded, size: 18),
-                      label: const Text('HUBUNGKAN UANG'),
+                      label: const Text('HUBUNGKAN ULANG'),
                       style: ElevatedButton.styleFrom(
                         minimumSize: const Size(double.infinity, 48),
                         backgroundColor: AppTheme.accent,
