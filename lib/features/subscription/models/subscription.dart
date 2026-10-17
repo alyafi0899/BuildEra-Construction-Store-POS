@@ -5,7 +5,7 @@ enum PlanType {
 
   static PlanType fromString(String? value) {
     return PlanType.values.firstWhere(
-      (e) => e.toString().split('.').last == value,
+      (e) => e.name == value,
       orElse: () => PlanType.free,
     );
   }
@@ -24,14 +24,20 @@ enum PlanType {
 
 enum SubscriptionStatus {
   active,
+  canceled,
+  grace,
+  on_hold,
+  paused,
   expired,
-  trial,
-  pending,
   none;
 
   static SubscriptionStatus fromString(String? value) {
+    if (value == null || value.isEmpty) return SubscriptionStatus.none;
+    final val = value.toLowerCase().trim();
+    if (val == 'trial') return SubscriptionStatus.active;
+    if (val == 'pending') return SubscriptionStatus.none;
     return SubscriptionStatus.values.firstWhere(
-      (e) => e.toString().split('.').last == value,
+      (e) => e.name == val,
       orElse: () => SubscriptionStatus.none,
     );
   }
@@ -48,6 +54,7 @@ class Subscription {
   final String? lastExternalId;
   final DateTime? gracePeriodEndsAt;
   final bool isBypassed;
+  final bool isTrial;
 
   const Subscription({
     required this.userId,
@@ -59,6 +66,7 @@ class Subscription {
     this.lastExternalId,
     this.gracePeriodEndsAt,
     this.isBypassed = false,
+    this.isTrial = false,
   });
 
   bool get isPremium {
@@ -69,12 +77,12 @@ class Subscription {
       return false;
     }
     if (status != SubscriptionStatus.active &&
-        status != SubscriptionStatus.trial) {
+        status != SubscriptionStatus.grace &&
+        status != SubscriptionStatus.canceled) {
       return false;
     }
 
     final now = DateTime.now();
-    // Use grace period for determining access
     if (gracePeriodEndsAt != null && gracePeriodEndsAt!.isBefore(now)) {
       return false;
     }
@@ -140,19 +148,22 @@ class Subscription {
           : null,
       isBypassed: map['is_bypassed'] == true ||
           map['is_bypassed']?.toString().toLowerCase() == 'true',
+      isTrial: map['is_trial'] == true ||
+          map['is_trial']?.toString().toLowerCase() == 'true',
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
       'user_id': userId,
-      'plan_type': planType.toString().split('.').last,
-      'status': status.toString().split('.').last,
+      'plan_type': planType.name,
+      'status': status.name,
       'expires_at': expiresAt?.toIso8601String(),
       'updated_at': DateTime.now().toIso8601String(),
       'last_external_id': lastExternalId,
       'grace_period_ends_at': gracePeriodEndsAt?.toIso8601String(),
       'is_bypassed': isBypassed,
+      'is_trial': isTrial,
     };
   }
 
@@ -166,6 +177,7 @@ class Subscription {
     String? lastExternalId,
     DateTime? gracePeriodEndsAt,
     bool? isBypassed,
+    bool? isTrial,
   }) {
     return Subscription(
       userId: userId ?? this.userId,
@@ -177,6 +189,7 @@ class Subscription {
       lastExternalId: lastExternalId ?? this.lastExternalId,
       gracePeriodEndsAt: gracePeriodEndsAt ?? this.gracePeriodEndsAt,
       isBypassed: isBypassed ?? this.isBypassed,
+      isTrial: isTrial ?? this.isTrial,
     );
   }
 }

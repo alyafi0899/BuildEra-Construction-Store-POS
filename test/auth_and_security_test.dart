@@ -5,6 +5,12 @@ import 'package:buildera/core/sync/providers/initial_sync_provider.dart';
 import 'package:buildera/features/subscription/models/subscription.dart';
 import 'package:buildera/shared/models/product.dart';
 import 'package:buildera/core/providers/feature_tour_provider.dart';
+import 'package:buildera/features/subscription/models/entitlement.dart';
+import 'package:buildera/features/subscription/services/checkout_policy.dart';
+import 'package:buildera/core/utils/trusted_time_helper.dart';
+import 'package:buildera/features/cashier/providers/cart_provider.dart';
+import 'package:buildera/features/cashier/models/cart_item.dart';
+import 'package:buildera/shared/models/transaction.dart';
 
 void main() {
   group('Auth & Security Model Tests', () {
@@ -210,6 +216,80 @@ void main() {
       expect(updated.tourCashierDone, isTrue);
       expect(updated.isLanguageSelected, isTrue);
       expect(updated.tourProductsDone, isFalse);
+    });
+
+    test('Entitlement model free vs premium attributes and feature locks', () {
+      final free = Entitlement.free();
+      expect(free.isFree, isTrue);
+      expect(free.isPremium, isFalse);
+      expect(free.maxItemsPerTransaction, equals(3));
+      expect(free.maxTransactionsPerDay, equals(10));
+      expect(free.isFeatureUnlocked(PremiumFeature.analytics), isFalse);
+
+      final premium = Entitlement.premium(source: EntitlementSource.play);
+      expect(premium.isPremium, isTrue);
+      expect(premium.maxTransactionsPerDay, isNull);
+      expect(premium.isFeatureUnlocked(PremiumFeature.analytics), isTrue);
+      expect(premium.isFeatureUnlocked(PremiumFeature.excelImport), isTrue);
+    });
+
+    test('CheckoutPolicy allows 3 items free cart but blocks 4 items', () {
+      final free = Entitlement.free();
+      final nowJakarta = TrustedTimeHelper.getTrustedJakartaTime();
+
+      final dummyProduct = Product(
+        id: 'p-1',
+        name: 'Item Test',
+        category: 'Test',
+        costPrice: 1000,
+        basePrice: 2000,
+        baseUnit: 'pcs',
+        stock: 10,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      final item1 = CartItem(
+        id: 'i-1',
+        product: dummyProduct,
+        selectedUnit: dummyProduct.baseProductUnit,
+        quantity: 1,
+        costPrice: 1000,
+        originalPrice: 2000,
+        soldPrice: 2000,
+      );
+
+      final cart3 = CartState(items: [item1, item1, item1]);
+      final result3 = CheckoutPolicy.canCheckout(
+        cart: cart3,
+        entitlement: free,
+        todayTransactions: [],
+        currentJakartaTime: nowJakarta,
+      );
+      expect(result3.allowed, isTrue);
+
+      final cart4 = CartState(items: [item1, item1, item1, item1]);
+      final result4 = CheckoutPolicy.canCheckout(
+        cart: cart4,
+        entitlement: free,
+        todayTransactions: [],
+        currentJakartaTime: nowJakarta,
+      );
+      expect(result4.allowed, isFalse);
+      expect(result4.reason, contains('Maks 3 item'));
+    });
+
+    test('TrustedTimeHelper detects clock rollback and provides Jakarta time', () {
+      final nowUtc = DateTime.now().toUtc();
+      final pastTime = nowUtc.subtract(const Duration(days: 1));
+
+      final trusted = TrustedTimeHelper.getTrustedJakartaTime(
+        offsetMs: 0,
+        lastTrusted: nowUtc,
+      );
+
+      expect(trusted, isA<DateTime>());
+      expect(trusted.isAfter(pastTime), isTrue);
     });
   });
 }

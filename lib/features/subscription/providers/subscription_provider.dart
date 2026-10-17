@@ -4,10 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/subscription.dart';
+import '../models/entitlement.dart';
 import '../models/subscription_history.dart';
 import '../repositories/subscription_repository.dart';
 import '../services/play_billing_service.dart';
 import '../../payment/providers/transaction_provider.dart';
+import '../../../core/sync/services/local_database.dart';
+import '../../../core/utils/trusted_time_helper.dart';
 
 final subscriptionRepositoryProvider = Provider<SubscriptionRepository>((ref) {
   return SubscriptionRepository(ref.watch(supabaseClientProvider));
@@ -24,15 +27,19 @@ final playBillingProductsProvider = FutureProvider<List<ProductDetails>>((ref) a
   final service = ref.watch(playBillingServiceProvider);
   final user = ref.watch(authStateProvider).value;
   if (user != null) {
-    await service.initialize(
-      userId: user.uid,
-      onSubscriptionUpdated: () {
-        ref.read(subscriptionStateProvider.notifier).refresh();
-      },
-      onError: (error) {
-        debugPrint('Play Billing error notice: $error');
-      },
-    );
+    try {
+      await service.initialize(
+        userId: user.uid,
+        onSubscriptionUpdated: () {
+          ref.read(subscriptionStateProvider.notifier).refresh();
+        },
+        onError: (error) {
+          debugPrint('Play Billing error notice: $error');
+        },
+      );
+    } catch (e) {
+      debugPrint('Play Billing background init notice (failing silently): $e');
+    }
   }
   return service.products;
 });
@@ -65,7 +72,6 @@ class SubscriptionNotifier extends Notifier<AsyncValue<Subscription?>> {
     // Initial load
     final user = ref.read(authStateProvider).value;
     if (user != null) {
-      // Use Future.microtask to avoid state modification during build
       Future.microtask(() {
         _listenToSubscriptionChanges(user.uid);
         refresh();
@@ -106,12 +112,15 @@ class SubscriptionNotifier extends Notifier<AsyncValue<Subscription?>> {
       return;
     }
 
-    state = const AsyncValue.loading();
+    // Keep previous state while revalidating in background
     try {
       final subscription = await _repository.getSubscription(user.uid);
       state = AsyncValue.data(subscription ?? Subscription.free(user.uid));
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      // Do not overwrite previous valid data with error
+      if (state.value == null) {
+        state = AsyncValue.error(e, st);
+      }
     }
   }
 
@@ -127,17 +136,16 @@ class SubscriptionNotifier extends Notifier<AsyncValue<Subscription?>> {
         method: method,
       );
       
-      // Update local state to pending
       final now = DateTime.now();
       final invoiceUrl = result['invoice_url'] as String?;
       
       final pendingSub = Subscription(
         userId: user.uid,
         planType: plan,
-        status: SubscriptionStatus.pending,
+        status: SubscriptionStatus.none,
         createdAt: state.value?.createdAt ?? now,
         updatedAt: now,
-        lastExternalId: invoiceUrl, // Temp store URL here to retrieve in UI
+        lastExternalId: invoiceUrl,
       );
       state = AsyncValue.data(pendingSub);
       
@@ -164,27 +172,111 @@ class SubscriptionNotifier extends Notifier<AsyncValue<Subscription?>> {
   }
 }
 
+// ── Entitlement Provider (Single Source of Truth) ───────────────────────────
+
+final entitlementProvider = NotifierProvider<EntitlementNotifier, Entitlement>(EntitlementNotifier.new);
+
+class EntitlementNotifier extends Notifier<Entitlement> {
+  @override
+  Entitlement build() {
+    ref.listen(authStateProvider, (previous, next) {
+      final user = next.value;
+      if (user != null) {
+        refresh();
+      } else {
+        state = Entitlement.free(source: EntitlementSource.offlineCache);
+      }
+    });
+
+    ref.listen(subscriptionStateProvider, (previous, next) {
+      next.when(
+        data: (sub) {
+          _updateFromSubscription(sub);
+        },
+        error: (err, stack) {
+          _loadCachedSnapshotOrKeep();
+        },
+        loading: () {
+          // Stale-while-revalidate: keep current entitlement during background updates
+        },
+      );
+    });
+
+    final user = ref.read(authStateProvider).value;
+    if (user != null) {
+      Future.microtask(() => refresh());
+    }
+
+    return Entitlement.free(source: EntitlementSource.offlineCache);
+  }
+
+  Future<void> refresh() async {
+    final user = ref.read(authStateProvider).value;
+    if (user == null) {
+      state = Entitlement.free(source: EntitlementSource.offlineCache);
+      return;
+    }
+
+    await _loadCachedSnapshotOrKeep();
+
+    try {
+      final sub = await ref.read(subscriptionRepositoryProvider).getSubscription(user.uid);
+      await _updateFromSubscription(sub ?? Subscription.free(user.uid));
+    } catch (_) {
+      await _loadCachedSnapshotOrKeep();
+    }
+  }
+
+  Future<void> _updateFromSubscription(Subscription? sub) async {
+    final user = ref.read(authStateProvider).value;
+    final uid = user?.uid;
+
+    if (sub == null || !sub.isPremium) {
+      final freeEntitlement = Entitlement.free(source: EntitlementSource.play);
+      state = freeEntitlement;
+      if (uid != null) {
+        await LocalDatabase.setMetadata(uid, 'cached_entitlement', freeEntitlement.toMap());
+      }
+      return;
+    }
+
+    final source = sub.isBypassed ? EntitlementSource.bypass : EntitlementSource.play;
+    final premiumEntitlement = Entitlement.premium(
+      source: source,
+      validUntil: sub.expiresAt ?? sub.gracePeriodEndsAt,
+      isTrial: sub.isTrial,
+    );
+
+    state = premiumEntitlement;
+    if (uid != null) {
+      await LocalDatabase.setMetadata(uid, 'cached_entitlement', premiumEntitlement.toMap());
+    }
+  }
+
+  Future<void> _loadCachedSnapshotOrKeep() async {
+    final user = ref.read(authStateProvider).value;
+    if (user == null) return;
+
+    try {
+      final rawMap = await LocalDatabase.getMetadata(user.uid, 'cached_entitlement');
+      if (rawMap != null && rawMap is Map) {
+        final cached = Entitlement.fromMap(Map<String, dynamic>.from(rawMap));
+        state = cached;
+      }
+    } catch (e) {
+      debugPrint('Entitlement snapshot read error: $e');
+    }
+  }
+}
+
+final isPremiumProvider = Provider<bool>((ref) {
+  return ref.watch(entitlementProvider).isPremium;
+});
+
 final subscriptionHistoryProvider = FutureProvider<List<SubscriptionHistory>>((ref) async {
   final user = ref.watch(authStateProvider).value;
   if (user == null) return [];
   return ref.read(subscriptionRepositoryProvider).getHistory(user.uid);
-});
-
-final isPremiumProvider = Provider<bool>((ref) {
-  final user = ref.watch(authStateProvider).value;
-  // Allow developer / bypass account email check
-  if (user?.email != null) {
-    final emailLower = user!.email.toLowerCase();
-    if (emailLower == 'admin@buildera.com' || emailLower.endsWith('@admin.buildera.com')) {
-      return true;
-    }
-  }
-
-  final subAsync = ref.watch(subscriptionStateProvider);
-  return subAsync.maybeWhen(
-    data: (sub) => (sub?.isPremium ?? false) || (sub?.isBypassed ?? false),
-    orElse: () => false,
-  );
 });
 
 class GatewayState {
@@ -207,8 +299,6 @@ final dailyTransactionCountProvider = FutureProvider<int>((ref) async {
   final all = await repo.getAllTransactions();
   final now = DateTime.now();
   return all.where((t) {
-    return t.createdAt.year == now.year && 
-           t.createdAt.month == now.month && 
-           t.createdAt.day == now.day;
+    return TrustedTimeHelper.isSameJakartaDay(t.createdAt, now);
   }).length;
 });

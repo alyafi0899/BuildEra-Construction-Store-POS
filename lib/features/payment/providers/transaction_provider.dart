@@ -18,6 +18,9 @@ import '../../debts/models/debt.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/sync/models/sync_task.dart';
+import '../../subscription/providers/subscription_provider.dart';
+import '../../subscription/services/checkout_policy.dart';
+import '../../../core/utils/trusted_time_helper.dart';
 import '../../../core/sync/providers/sync_provider.dart';
 import '../../../core/sync/services/local_database.dart';
 
@@ -160,6 +163,25 @@ class TransactionRepository {
     String? cashierName,
     String? notes,
   }) async {
+    final entitlement = _ref.read(entitlementProvider);
+    final allTransactions = await getAllTransactions();
+    final timeInfo = await TrustedTimeHelper.getSavedTimeInfo(_uid);
+    final currentJakartaTime = TrustedTimeHelper.getTrustedJakartaTime(
+      offsetMs: timeInfo.offsetMs,
+      lastTrusted: timeInfo.lastTrusted,
+    );
+
+    final policyResult = CheckoutPolicy.canCheckout(
+      cart: cart,
+      entitlement: entitlement,
+      todayTransactions: allTransactions,
+      currentJakartaTime: currentJakartaTime,
+    );
+
+    if (!policyResult.allowed) {
+      throw Exception(policyResult.reason ?? 'Transaksi tidak diperbolehkan (Limit Mode Gratis)');
+    }
+
     final id = _uuid.v4();
     final invoice = _invoice();
     final finalTotal = cart.total + shippingFee;

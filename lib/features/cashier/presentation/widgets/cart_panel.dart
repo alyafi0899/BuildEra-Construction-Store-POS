@@ -10,7 +10,12 @@ import '../../../settings/providers/settings_provider.dart';
 import '../../providers/cart_focus_provider.dart';
 import 'payment_dialog.dart';
 import '../../../subscription/providers/subscription_provider.dart';
+import '../../../subscription/services/checkout_policy.dart';
+import '../../../subscription/presentation/pages/subscription_page.dart';
+import '../../../../core/utils/trusted_time_helper.dart';
+import '../../../../shared/models/transaction.dart';
 import '../../../../core/localization/localization_provider.dart';
+import '../../../payment/providers/transaction_provider.dart';
 
 class CartPanel extends StatelessWidget {
   const CartPanel({super.key});
@@ -603,36 +608,84 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
           const SizedBox(height: 10),
           Consumer(
             builder: (context, ref, child) {
-              final isPremium = ref.watch(isPremiumProvider);
-              final dailyCountAsync = ref.watch(dailyTransactionCountProvider);
-              final itemsCount = ref.watch(cartProvider.select((s) => s.items.length));
+              final entitlement = ref.watch(entitlementProvider);
+              final cart = ref.watch(cartProvider);
+              final transactionsAsync = ref.watch(transactionsProvider);
+              final todayTransactions = transactionsAsync.value ?? <Transaction>[];
+              final nowJakarta = TrustedTimeHelper.getTrustedJakartaTime();
 
-              String? error;
-              if (!isPremium) {
-                if (itemsCount > 3) {
-                  error = 'Maks 3 item (Mode Gratis)';
-                } else {
-                  final count = dailyCountAsync.value ?? 0;
-                  if (count >= 10) {
-                    error = 'Limit 10 Transaksi Hari Ini';
-                  }
-                }
-              }
+              final policyResult = CheckoutPolicy.canCheckout(
+                cart: cart,
+                entitlement: entitlement,
+                todayTransactions: todayTransactions,
+                currentJakartaTime: nowJakarta,
+              );
 
-              return SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton.icon(
-                  onPressed: (isEmpty || error != null) ? null : () => PaymentDialog.show(context),
-                  icon: Icon(error != null ? Icons.lock_outline_rounded : Icons.payments_rounded),
-                  label: Text(error ?? 'BAYAR SEKARANG'),
-                  style: ElevatedButton.styleFrom(
-                    textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
-                    backgroundColor: error != null ? AppTheme.textMuted : AppTheme.accent,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              final error = policyResult.allowed ? null : policyResult.reason;
+              final remainingQuota = policyResult.remainingDailyTransactions;
+
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (entitlement.isFree && policyResult.allowed && remainingQuota <= 3) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text(
+                        'Sisa $remainingQuota transaksi hari ini (Mode Gratis)',
+                        style: const TextStyle(
+                          color: Colors.orange,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (error != null) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: InkWell(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const SubscriptionPage()),
+                          );
+                        },
+                        child: Text(
+                          '$error — Klik untuk Upgrade',
+                          style: const TextStyle(
+                            color: AppTheme.danger,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      onPressed: (isEmpty || error != null)
+                          ? null
+                          : () => PaymentDialog.show(context),
+                      icon: Icon(error != null
+                          ? Icons.lock_outline_rounded
+                          : Icons.payments_rounded),
+                      label: Text(error ?? 'BAYAR SEKARANG'),
+                      style: ElevatedButton.styleFrom(
+                        textStyle: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w800),
+                        backgroundColor:
+                            error != null ? AppTheme.textMuted : AppTheme.accent,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
                   ),
-                ),
+                ],
               );
             },
           ),

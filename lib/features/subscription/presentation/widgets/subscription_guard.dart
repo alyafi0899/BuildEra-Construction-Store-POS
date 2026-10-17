@@ -17,8 +17,8 @@ class SubscriptionGuard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isPremium = ref.watch(isPremiumProvider);
-    if (isPremium) return child;
+    final entitlement = ref.watch(entitlementProvider);
+    if (entitlement.isPremium) return child;
 
     return Stack(
       children: [
