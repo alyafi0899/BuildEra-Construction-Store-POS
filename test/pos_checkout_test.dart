@@ -66,6 +66,31 @@ void main() {
       expect(item.profit, equals(17000));
     });
 
+    test('CartState totals with percentage transaction discount and disabled tax', () {
+      final item = CartItem(
+        id: 'item-1',
+        product: testProduct,
+        selectedUnit: testProduct.units.first,
+        quantity: 2,
+        costPrice: 50000,
+        originalPrice: 65000,
+        soldPrice: 65000,
+      );
+
+      final cart = CartState(
+        items: [item],
+        transDiscountValue: 10, // 10% transaction discount
+        transDiscountType: DiscountType.percentage,
+        taxRate: 0.11,
+        taxEnabled: false, // Tax disabled
+      );
+
+      expect(cart.grossSubtotal, equals(130000));
+      expect(cart.transDiscountAmount, equals(13000)); // 10% of 130,000
+      expect(cart.taxAmount, equals(0));
+      expect(cart.total, equals(117000)); // 130,000 - 13,000
+    });
+
     test('CartState totals, tax, and shipping fee logic', () {
       final item1 = CartItem(
         id: 'item-1',
@@ -91,9 +116,38 @@ void main() {
       expect(cart.transDiscountAmount, equals(5000));
       // Taxable amount = netSubtotal (130,000) - transDiscount (5,000) = 125,000
       // Tax 11% of 125,000 = 13,750
-      expect(cart.taxAmount, equals(13750));
+      expect(cart.taxAmount, equals(138750 - 125000));
       // Total = 125,000 + 13,750 = 138,750
       expect(cart.total, equals(138750));
+    });
+
+    test('CartNotifier operations: addProduct, setItemDiscount, updateSoldPrice, setCustomer, and clear', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final cartNotifier = container.read(cartProvider.notifier);
+
+      // Add product
+      cartNotifier.addProduct(testProduct);
+      final itemId = container.read(cartProvider).items.single.id;
+
+      // Update line discount
+      cartNotifier.setItemDiscount(itemId, 5000, DiscountType.fixed);
+      expect(container.read(cartProvider).items.single.discountValue, equals(5000));
+
+      // Custom price override
+      cartNotifier.updateSoldPrice(itemId, 60000);
+      expect(container.read(cartProvider).items.single.soldPrice, equals(60000));
+      expect(container.read(cartProvider).items.single.isOverridden, isTrue);
+
+      // Set customer
+      cartNotifier.setCustomer('cust-1', 'Pak Budi');
+      expect(container.read(cartProvider).customerName, equals('Pak Budi'));
+
+      // Clear cart
+      cartNotifier.clear();
+      expect(container.read(cartProvider).items, isEmpty);
+      expect(container.read(cartProvider).customerName, isNull);
     });
 
     test('setting cart quantity to zero removes the line item', () {
