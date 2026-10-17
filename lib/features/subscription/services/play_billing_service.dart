@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
-import '../models/subscription.dart';
+import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import '../repositories/subscription_repository.dart';
+import '../../../core/utils/trusted_time_helper.dart';
 
 class PlayBillingService {
   static const String monthlyProductId = 'buildera_monthly';
@@ -12,14 +13,17 @@ class PlayBillingService {
   final InAppPurchase _iap = InAppPurchase.instance;
   final SubscriptionRepository _repository;
   StreamSubscription<List<PurchaseDetails>>? _subscription;
+  final Set<String> _verifyingTokens = {};
 
   bool _isAvailable = false;
   List<ProductDetails> _products = [];
   String? _lastError;
+  bool _isVerifying = false;
 
   bool get isAvailable => _isAvailable;
   List<ProductDetails> get products => List.unmodifiable(_products);
   String? get lastError => _lastError;
+  bool get isVerifying => _isVerifying;
 
   PlayBillingService(this._repository);
 
@@ -52,7 +56,7 @@ class PlayBillingService {
         ),
         onError: (error) {
           _lastError = error.toString();
-          onError('Error sistem Google Play Billing: $error');
+          debugPrint('Play Billing stream notice: $error');
         },
       );
 
@@ -83,13 +87,35 @@ class PlayBillingService {
     }
   }
 
-  /// Triggers purchasing a subscription plan
-  Future<bool> buySubscription(ProductDetails productDetails) async {
+  /// Triggers purchasing a subscription plan with obfuscatedAccountId and proration mode
+  Future<bool> buySubscription(
+    ProductDetails productDetails, {
+    String? userId,
+    PurchaseDetails? oldPurchaseDetails,
+    ProrationMode prorationMode = ProrationMode.immediateWithTimeProration,
+  }) async {
     if (!_isAvailable) return false;
 
     try {
-      final purchaseParam = PurchaseParam(productDetails: productDetails);
-      return await _iap.buyNonConsumable(purchaseParam: purchaseParam);
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        final googleParam = GooglePlayPurchaseParam(
+          productDetails: productDetails,
+          applicationUserName: userId,
+          changeSubscriptionParam: oldPurchaseDetails != null
+              ? ChangeSubscriptionParam(
+                  oldPurchaseDetails: oldPurchaseDetails as GooglePlayPurchaseDetails,
+                  prorationMode: prorationMode,
+                )
+              : null,
+        );
+        return await _iap.buyNonConsumable(purchaseParam: googleParam);
+      } else {
+        final purchaseParam = PurchaseParam(
+          productDetails: productDetails,
+          applicationUserName: userId,
+        );
+        return await _iap.buyNonConsumable(purchaseParam: purchaseParam);
+      }
     } catch (e) {
       _lastError = e.toString();
       debugPrint('Error buying Play Store subscription: $e');
@@ -124,63 +150,89 @@ class PlayBillingService {
 
         case PurchaseStatus.purchased:
         case PurchaseStatus.restored:
-          final verified = await _verifyAndApplyPurchase(purchase, userId);
-          if (verified) {
-            onSubscriptionUpdated();
-          } else {
-            onError('Gagal memverifikasi langganan Google Play.');
+          final token = purchase.verificationData.serverVerificationData;
+          if (token.isEmpty || _verifyingTokens.contains(token)) {
+            continue; // Deduplicate in-flight token verifications
           }
 
-          if (purchase.pendingCompletePurchase) {
-            await _iap.completePurchase(purchase);
+          _isVerifying = true;
+          _verifyingTokens.add(token);
+
+          try {
+            final verified = await _verifyAndApplyPurchase(purchase, userId);
+            if (verified) {
+              onSubscriptionUpdated();
+              // Complete/Acknowledge purchase ONLY AFTER server verification succeeds
+              if (purchase.pendingCompletePurchase) {
+                await _completePurchaseSafely(purchase);
+              }
+            } else {
+              onError('Gagal memverifikasi langganan Google Play pada server.');
+            }
+          } catch (e) {
+            debugPrint('Purchase verification exception: $e');
+          } finally {
+            _verifyingTokens.remove(token);
+            _isVerifying = false;
           }
           break;
 
         case PurchaseStatus.error:
-          final errMessage = purchase.error?.message ?? 'Pembelian dibatalkan atau gagal.';
-          _lastError = errMessage;
-          onError('Google Play Billing: $errMessage');
+          // Cancellation by user is NOT an error
+          final isCancelled = purchase.error?.code == 'purchase_canceled' ||
+              purchase.error?.message?.contains('canceled') == true;
+          if (!isCancelled) {
+            final errMessage = purchase.error?.message ?? 'Pembelian gagal.';
+            _lastError = errMessage;
+            onError('Google Play Billing: $errMessage');
+          }
 
           if (purchase.pendingCompletePurchase) {
-            await _iap.completePurchase(purchase);
+            await _completePurchaseSafely(purchase);
           }
           break;
 
         case PurchaseStatus.canceled:
           if (purchase.pendingCompletePurchase) {
-            await _iap.completePurchase(purchase);
+            await _completePurchaseSafely(purchase);
           }
           break;
       }
     }
   }
 
-  /// Verifies purchase details and updates subscription record in Supabase
+  Future<void> _completePurchaseSafely(PurchaseDetails purchase) async {
+    try {
+      await _iap.completePurchase(purchase);
+    } catch (e) {
+      debugPrint('Complete purchase notice (already acknowledged or completed): $e');
+    }
+  }
+
+  /// Verifies purchase details with backend Edge Function
   Future<bool> _verifyAndApplyPurchase(PurchaseDetails purchase, String userId) async {
     try {
-      final plan = purchase.productID == yearlyProductId
-          ? PlanType.yearly
-          : PlanType.monthly;
+      final token = purchase.verificationData.serverVerificationData;
+      if (token.isEmpty) return false;
 
-      final now = DateTime.now();
-      final duration = plan == PlanType.yearly
-          ? const Duration(days: 365)
-          : const Duration(days: 30);
-
-      final subscription = Subscription(
-        userId: userId,
-        planType: plan,
-        status: SubscriptionStatus.active,
-        expiresAt: now.add(duration),
-        createdAt: now,
-        updatedAt: now,
-        lastExternalId: purchase.purchaseID ?? purchase.productID,
+      final res = await _repository.verifyPlayPurchase(
+        purchaseToken: token,
+        productId: purchase.productID,
       );
 
-      await _repository.upsertSubscription(subscription);
-      return true;
+      if (res['ok'] == true) {
+        final serverTimeStr = res['server_time'] as String?;
+        if (serverTimeStr != null) {
+          final serverTime = DateTime.tryParse(serverTimeStr);
+          if (serverTime != null) {
+            await TrustedTimeHelper.saveTrustedTime(userId, serverTime);
+          }
+        }
+        return true;
+      }
+      return false;
     } catch (e) {
-      debugPrint('Error applying Play Store purchase: $e');
+      debugPrint('Error verifying Play Store purchase with backend: $e');
       return false;
     }
   }

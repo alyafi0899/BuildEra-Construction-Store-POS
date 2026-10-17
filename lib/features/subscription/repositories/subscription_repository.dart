@@ -31,22 +31,33 @@ class SubscriptionRepository {
         .toList();
   }
 
-  Future<void> upsertSubscription(Subscription subscription) async {
-    await _client
-        .from('subscriptions')
-        .upsert(subscription.toMap(), onConflict: 'user_id');
-  }
+  /// Calls the Supabase Edge Function to verify Google Play Purchase
+  Future<Map<String, dynamic>> verifyPlayPurchase({
+    required String purchaseToken,
+    required String productId,
+  }) async {
+    try {
+      final response = await _client.functions.invoke(
+        'verify-play-purchase',
+        body: {
+          'purchaseToken': purchaseToken,
+          'productId': productId,
+        },
+      ).timeout(const Duration(seconds: 15));
 
-  Future<void> setBypassStatus(String userId, bool isBypassed) async {
-    final existing = await getSubscription(userId) ?? Subscription.free(userId);
-    final updated = existing.copyWith(
-      isBypassed: isBypassed,
-      updatedAt: DateTime.now(),
-    );
+      if (response.status != 200) {
+        final errorMsg =
+            response.data?['error'] ?? 'Verifikasi langganan Google Play gagal';
+        throw Exception(errorMsg);
+      }
 
-    await _client
-        .from('subscriptions')
-        .upsert(updated.toMap(), onConflict: 'user_id');
+      return response.data as Map<String, dynamic>;
+    } catch (e) {
+      if (e is TimeoutException) {
+        throw Exception('Koneksi verifikasi Google Play terputus (Timeout).');
+      }
+      rethrow;
+    }
   }
 
   /// Calls the Supabase Edge Function to create a Xendit Invoice

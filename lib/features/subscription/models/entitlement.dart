@@ -1,4 +1,4 @@
-import 'entitlement_config.dart';
+import '../config/entitlement_config.dart';
 
 enum EntitlementTier { free, premium }
 enum EntitlementSource { play, bypass, offlineCache }

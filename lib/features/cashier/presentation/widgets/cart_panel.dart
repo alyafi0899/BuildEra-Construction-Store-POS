@@ -669,7 +669,50 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
                     child: ElevatedButton.icon(
                       onPressed: (isEmpty || error != null)
                           ? null
-                          : () => PaymentDialog.show(context),
+                          : () async {
+                              final uid = ref.read(authStateProvider).value?.uid ?? '';
+                              final repo = ref.read(transactionRepositoryProvider);
+                              final allTransactions = await repo.getAllTransactions();
+                              final timeInfo = await TrustedTimeHelper.getSavedTimeInfo(uid);
+                              final currentJakartaTime = TrustedTimeHelper.getTrustedJakartaTime(
+                                offsetMs: timeInfo.offsetMs,
+                                lastTrusted: timeInfo.lastTrusted,
+                              );
+
+                              final check = CheckoutPolicy.canCheckout(
+                                cart: cart,
+                                entitlement: entitlement,
+                                todayTransactions: allTransactions,
+                                currentJakartaTime: currentJakartaTime,
+                              );
+
+                              if (!check.allowed) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(check.reason ?? 'Limit transaksi tercapai.'),
+                                      backgroundColor: AppTheme.danger,
+                                      action: SnackBarAction(
+                                        label: 'UPGRADE',
+                                        textColor: Colors.white,
+                                        onPressed: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                                builder: (_) => const SubscriptionPage()),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  );
+                                }
+                                return;
+                              }
+
+                              if (context.mounted) {
+                                PaymentDialog.show(context);
+                              }
+                            },
                       icon: Icon(error != null
                           ? Icons.lock_outline_rounded
                           : Icons.payments_rounded),

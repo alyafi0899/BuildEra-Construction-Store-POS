@@ -24,7 +24,7 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
   String? _tempMethod;
   PlanType? _tempPlan;
 
-  bool get _isAndroid => !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || true); // Optimized for Android build & test
+  bool get _isAndroid => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +63,7 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
                 onBack: () => setState(() => _isConfirming = false));
           }
 
-          if (sub?.status == SubscriptionStatus.pending && !_isAndroid) {
+          if (sub?.status == SubscriptionStatus.none && sub?.lastExternalId != null && !_isAndroid) {
             return _buildPendingUI(context, sub!.planType);
           }
 
@@ -543,7 +543,7 @@ class PricingSection extends ConsumerStatefulWidget {
 class _PricingSectionState extends ConsumerState<PricingSection> {
   bool _isYearly = false;
 
-  bool get _isAndroid => !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || true);
+  bool get _isAndroid => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
   @override
   Widget build(BuildContext context) {

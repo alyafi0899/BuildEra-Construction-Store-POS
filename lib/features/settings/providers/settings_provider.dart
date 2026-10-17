@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/store_settings.dart';
 import '../../../core/sync/services/local_database.dart';
+import '../../../core/utils/trusted_time_helper.dart';
 
 final settingsProvider =
     NotifierProvider<SettingsNotifier, StoreSettings>(SettingsNotifier.new);
@@ -203,6 +204,15 @@ class SettingsNotifier extends Notifier<StoreSettings> {
     final user = ref.read(authStateProvider).value;
     if (user == null) return;
     _initializedUid = user.uid;
+    try {
+      final res = await _supabase.rpc('get_server_time');
+      if (res != null) {
+        final serverTime = DateTime.tryParse(res.toString());
+        if (serverTime != null) {
+          await TrustedTimeHelper.saveTrustedTime(user.uid, serverTime);
+        }
+      }
+    } catch (_) {}
     await _loadSettings(user.uid);
   }
 
