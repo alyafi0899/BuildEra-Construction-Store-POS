@@ -1,30 +1,60 @@
 import 'package:flutter/foundation.dart';
 import '../sync/services/local_database.dart';
+import '../../features/subscription/config/entitlement_config.dart';
 
 class TrustedTimeHelper {
   static const String _timeMetaKey = 'last_trusted_timestamp';
   static const String _offsetMetaKey = 'server_time_offset_ms';
 
-  /// Returns trusted Asia/Jakarta time (UTC + 7) taking into account server time offset and rollback checks
-  static DateTime getTrustedJakartaTime({int? offsetMs, DateTime? lastTrusted}) {
-    final nowUtc = DateTime.now().toUtc();
-    final effectiveOffset = offsetMs ?? 0;
-    final adjustedUtc = nowUtc.add(Duration(milliseconds: effectiveOffset));
+  static DateTime? _anchorServerUtc;
+  static DateTime? _anchorDeviceUtc;
+  static Stopwatch? _stopwatch;
 
-    var trustedUtc = adjustedUtc;
+  /// Returns trusted UTC DateTime
+  static DateTime nowUtc({int? offsetMs, DateTime? lastTrusted}) {
+    final deviceNowUtc = DateTime.now().toUtc();
+    final effectiveOffset = offsetMs ?? 0;
+
+    // 1. Check for forward clock jump via Stopwatch
+    if (_anchorServerUtc != null && _anchorDeviceUtc != null && _stopwatch != null) {
+      final deviceDiff = deviceNowUtc.difference(_anchorDeviceUtc!);
+      final stopwatchDiff = _stopwatch!.elapsed;
+
+      if ((deviceDiff - stopwatchDiff).abs() > EntitlementConfig.maxAllowedClockTamperDrift) {
+        debugPrint('TrustedTimeHelper: Clock manipulation detected via Stopwatch! Using anchor + stopwatch.');
+        return _anchorServerUtc!.add(_stopwatch!.elapsed);
+      }
+    }
+
+    var trustedUtc = deviceNowUtc.add(Duration(milliseconds: effectiveOffset));
+
+    // 2. Check for backward clock rollback
     if (lastTrusted != null && trustedUtc.isBefore(lastTrusted)) {
-      debugPrint('TrustedTimeHelper: Device clock rollback detected! Falling back to last trusted time.');
+      debugPrint('TrustedTimeHelper: Backward clock rollback detected! Using last trusted time.');
       trustedUtc = lastTrusted;
     }
 
-    // Asia/Jakarta is UTC+7
-    return trustedUtc.add(const Duration(hours: 7));
+    return trustedUtc;
+  }
+
+  /// Returns trusted Asia/Jakarta DateTime (UTC + 7) ONLY for daily transaction quota day rollover
+  static DateTime nowJakarta({int? offsetMs, DateTime? lastTrusted}) {
+    return nowUtc(offsetMs: offsetMs, lastTrusted: lastTrusted).add(EntitlementConfig.asiaJakartaOffset);
+  }
+
+  /// Deprecated alias for nowJakarta
+  static DateTime getTrustedJakartaTime({int? offsetMs, DateTime? lastTrusted}) {
+    return nowJakarta(offsetMs: offsetMs, lastTrusted: lastTrusted);
   }
 
   /// Persists current trusted server time and offset to Hive metadata box
   static Future<void> saveTrustedTime(String uid, DateTime serverTime) async {
     final localNowUtc = DateTime.now().toUtc();
     final offsetMs = serverTime.toUtc().difference(localNowUtc).inMilliseconds;
+
+    _anchorServerUtc = serverTime.toUtc();
+    _anchorDeviceUtc = localNowUtc;
+    _stopwatch = Stopwatch()..start();
 
     await LocalDatabase.setMetadata(uid, _offsetMetaKey, offsetMs);
     await LocalDatabase.setMetadata(uid, _timeMetaKey, serverTime.toUtc().toIso8601String());

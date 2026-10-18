@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
-import 'package:in_app_purchase_android/src/billing_client_wrappers/billing_client_wrapper.dart';
 import '../repositories/subscription_repository.dart';
 import '../../../core/utils/trusted_time_helper.dart';
 
@@ -93,7 +92,7 @@ class PlayBillingService {
     ProductDetails productDetails, {
     String? userId,
     PurchaseDetails? oldPurchaseDetails,
-    ReplacementMode? replacementMode = ReplacementMode.withTimeProration,
+    dynamic replacementMode,
   }) async {
     if (!_isAvailable) return false;
 
@@ -160,10 +159,9 @@ class PlayBillingService {
           _verifyingTokens.add(token);
 
           try {
-            final verified = await _verifyAndApplyPurchase(purchase, userId);
+            final verified = await _verifyAndApplyPurchaseWithRetry(purchase, userId);
             if (verified) {
               onSubscriptionUpdated();
-              // Complete/Acknowledge purchase ONLY AFTER server verification succeeds
               if (purchase.pendingCompletePurchase) {
                 await _completePurchaseSafely(purchase);
               }
@@ -171,7 +169,12 @@ class PlayBillingService {
               onError('Gagal memverifikasi langganan Google Play pada server.');
             }
           } catch (e) {
-            debugPrint('Purchase verification exception: $e');
+            final errStr = e.toString();
+            if (errStr.contains('bound to another user')) {
+              onError('Pembelian ini terikat ke akun toko lain.');
+            } else {
+              onError('Gagal memverifikasi transaksi: ${e.toString().replaceAll('Exception:', '')}');
+            }
           } finally {
             _verifyingTokens.remove(token);
             _isVerifying = false;
@@ -211,31 +214,52 @@ class PlayBillingService {
     }
   }
 
-  /// Verifies purchase details with backend Edge Function
-  Future<bool> _verifyAndApplyPurchase(PurchaseDetails purchase, String userId) async {
-    try {
-      final token = purchase.verificationData.serverVerificationData;
-      if (token.isEmpty) return false;
+  /// Verifies purchase details with backend Edge Function with exponential backoff retry
+  Future<bool> _verifyAndApplyPurchaseWithRetry(PurchaseDetails purchase, String userId) async {
+    final token = purchase.verificationData.serverVerificationData;
+    if (token.isEmpty) return false;
 
-      final res = await _repository.verifyPlayPurchase(
-        purchaseToken: token,
-        productId: purchase.productID,
-      );
+    final backoffs = [
+      const Duration(seconds: 5),
+      const Duration(seconds: 15),
+      const Duration(seconds: 60),
+      const Duration(minutes: 5),
+    ];
 
-      if (res['ok'] == true) {
-        final serverTimeStr = res['server_time'] as String?;
-        if (serverTimeStr != null) {
-          final serverTime = DateTime.tryParse(serverTimeStr);
-          if (serverTime != null) {
-            await TrustedTimeHelper.saveTrustedTime(userId, serverTime);
+    int attempt = 0;
+    while (true) {
+      try {
+        final res = await _repository.verifyPlayPurchase(
+          purchaseToken: token,
+          productId: purchase.productID,
+        );
+
+        if (res['ok'] == true) {
+          final serverTimeStr = res['server_time'] as String?;
+          if (serverTimeStr != null) {
+            final serverTime = DateTime.tryParse(serverTimeStr);
+            if (serverTime != null) {
+              await TrustedTimeHelper.saveTrustedTime(userId, serverTime);
+            }
           }
+          return true;
         }
-        return true;
+        return false;
+      } catch (e) {
+        final errStr = e.toString().toLowerCase();
+        // Permanent client 4xx errors (bound to another user, forbidden, bad request) -> do not retry
+        if (errStr.contains('bound to another user') || errStr.contains('403') || errStr.contains('409') || errStr.contains('400')) {
+          rethrow;
+        }
+
+        attempt++;
+        if (attempt > backoffs.length) {
+          rethrow;
+        }
+
+        debugPrint('Play Billing verify error (attempt $attempt/${backoffs.length}). Retrying in ${backoffs[attempt - 1].inSeconds}s...');
+        await Future.delayed(backoffs[attempt - 1]);
       }
-      return false;
-    } catch (e) {
-      debugPrint('Error verifying Play Store purchase with backend: $e');
-      return false;
     }
   }
 

@@ -4,14 +4,22 @@ import {
   getGoogleAccessToken,
   getSubscriptionV2,
 } from "../_shared/google_play.ts";
+import {
+  mapSubscriptionState,
+  detectTrial,
+  extractAmount,
+  constantTimeEqual,
+} from "../_shared/play_mapping.ts";
+
+const VALID_PRODUCT_IDS = new Set(["buildera_monthly", "buildera_yearly"]);
 
 serve(async (req) => {
   try {
     const url = new URL(req.url);
-    const token = url.searchParams.get("token");
-    const rtdnToken = Deno.env.get("PLAY_RTDN_TOKEN");
+    const token = url.searchParams.get("token") ?? "";
+    const rtdnToken = Deno.env.get("PLAY_RTDN_TOKEN") ?? "";
 
-    if (!rtdnToken || token !== rtdnToken) {
+    if (!rtdnToken || !constantTimeEqual(token, rtdnToken)) {
       return new Response(JSON.stringify({ error: "Unauthorized token" }), {
         status: 401,
         headers: { "Content-Type": "application/json" },
@@ -58,40 +66,38 @@ serve(async (req) => {
     });
 
     const lineItem = playSub.lineItems?.[0];
-    const productId = lineItem?.productId ?? subNotif.subscriptionId ?? "buildera_monthly";
+    const productId = lineItem?.productId ?? subNotif.subscriptionId;
+
+    if (!productId || !VALID_PRODUCT_IDS.has(productId)) {
+      console.warn("RTDN notice: Unknown or missing product ID in notification");
+      return new Response(JSON.stringify({ ok: true, note: "Unknown product ID ignored" }), { status: 200 });
+    }
+
     const expiryTime = lineItem?.expiryTime;
     const autoRenewing = lineItem?.autoRenewingPlan != null;
     const ackState = playSub.acknowledgementState ?? "ACKNOWLEDGEMENT_STATE_UNSPECIFIED";
     const testPurchase = playSub.testPurchase != null;
-
-    let isTrial = false;
-    if (lineItem?.offerDetails?.offerStage === "FREE_TRIAL") {
-      isTrial = true;
-    }
+    const isTrial = detectTrial(playSub);
+    const amount = extractAmount(playSub);
 
     let userId = playSub.externalAccountIdentifiers?.obfuscatedExternalAccountId ?? null;
 
     // Lookup user_id from play_purchases if not returned directly by Google
-    if (!userId) {
-      const { data: existing } = await supabaseAdmin
-        .from("play_purchases")
-        .select("user_id")
-        .eq("purchase_token", purchaseToken)
-        .maybeSingle();
+    const { data: existing } = await supabaseAdmin
+      .from("play_purchases")
+      .select("user_id")
+      .eq("purchase_token", purchaseToken)
+      .maybeSingle();
 
-      if (existing) userId = existing.user_id;
+    if (existing && existing.user_id) {
+      // Do not rebind if Google reports a different user ID
+      userId = existing.user_id;
     }
 
-    const state = playSub.subscriptionState ?? "SUBSCRIPTION_STATE_UNSPECIFIED";
-    let mappedStatus = "none";
-    if (state === "SUBSCRIPTION_STATE_ACTIVE") mappedStatus = "active";
-    else if (state === "SUBSCRIPTION_STATE_IN_GRACE_PERIOD") mappedStatus = "grace";
-    else if (state === "SUBSCRIPTION_STATE_CANCELED") mappedStatus = "canceled";
-    else if (state === "SUBSCRIPTION_STATE_ON_HOLD") mappedStatus = "on_hold";
-    else if (state === "SUBSCRIPTION_STATE_PAUSED") mappedStatus = "paused";
-    else if (state === "SUBSCRIPTION_STATE_EXPIRED") mappedStatus = "expired";
+    const state = playSub.subscriptionState;
+    const mappedStatus = mapSubscriptionState(state);
 
-    await supabaseAdmin.rpc("apply_play_subscription", {
+    const { error: applyError } = await supabaseAdmin.rpc("apply_play_subscription", {
       p_purchase_token: purchaseToken,
       p_user_id: userId,
       p_product_id: productId,
@@ -104,11 +110,22 @@ serve(async (req) => {
       p_test_purchase: testPurchase,
       p_is_trial: isTrial,
       p_raw: playSub,
+      p_amount: amount > 0 ? amount : null,
     });
 
+    if (applyError) {
+      if (applyError.code === "P0409" || applyError.message?.includes("P0409")) {
+        console.warn("RTDN notice: Token bound to another user (P0409)");
+        return new Response(JSON.stringify({ ok: true, note: "Token bound to another user" }), { status: 200 });
+      }
+      console.error("RTDN RPC Error:", applyError.message);
+      // Return 500 so Pub/Sub retries transient database errors
+      return new Response(JSON.stringify({ error: "Database apply error" }), { status: 500 });
+    }
+
     return new Response(JSON.stringify({ ok: true, synced: true }), { status: 200 });
-  } catch (err) {
-    // Return 500 so Pub/Sub retries on transient errors
+  } catch (err: any) {
+    console.error("RTDN Error:", err.message ?? "Unknown error");
     return new Response(JSON.stringify({ error: "RTDN handling error" }), { status: 500 });
   }
 });

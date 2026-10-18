@@ -5,13 +5,19 @@ import {
   getGoogleAccessToken,
   getSubscriptionV2,
 } from "../_shared/google_play.ts";
+import {
+  mapSubscriptionState,
+  detectTrial,
+  extractAmount,
+  constantTimeEqual,
+} from "../_shared/play_mapping.ts";
 
 serve(async (req) => {
   try {
-    const authHeader = req.headers.get("x-reconcile-secret");
-    const reconcileSecret = Deno.env.get("RECONCILE_SECRET");
+    const authHeader = req.headers.get("x-reconcile-secret") ?? "";
+    const reconcileSecret = Deno.env.get("RECONCILE_SECRET") ?? "";
 
-    if (!reconcileSecret || authHeader !== reconcileSecret) {
+    if (!reconcileSecret || !constantTimeEqual(authHeader, reconcileSecret)) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { "Content-Type": "application/json" },
@@ -26,21 +32,26 @@ serve(async (req) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
     const accessToken = await getGoogleAccessToken(saJson);
 
-    // Find subscriptions expiring within 48 hours or unverified for > 7 days
-    const nowIso = new Date().toISOString();
-    const future48h = new Date(Date.now() + 48 * 3600 * 1000).toISOString();
+    const now = new Date();
+    const past3Days = new Date(now.getTime() - 3 * 86400 * 1000).toISOString();
+    const future48h = new Date(now.getTime() + 48 * 3600 * 1000).toISOString();
+    const past7Days = new Date(now.getTime() - 7 * 86400 * 1000).toISOString();
+    const past1Hour = new Date(now.getTime() - 3600 * 1000).toISOString();
 
+    // Select target tokens to reconcile
     const { data: targets, error } = await supabaseAdmin
       .from("play_purchases")
       .select("*")
-      .or(`expiry_time.lte.${future48h},last_synced_at.lte.${new Date(Date.now() - 7 * 86400 * 1000).toISOString()}`)
-      .eq("superseded", false);
+      .eq("superseded", false)
+      .or(`expiry_time.gte.${past3Days},expiry_time.lte.${future48h},last_synced_at.lte.${past7Days},created_at.lte.${past1Hour}`)
+      .limit(200);
 
     if (error) {
       throw error;
     }
 
     let processed = 0;
+    let failed = 0;
     let acknowledged = 0;
 
     for (const item of targets ?? []) {
@@ -57,24 +68,19 @@ serve(async (req) => {
         const autoRenewing = lineItem?.autoRenewingPlan != null;
         const ackState = playSub.acknowledgementState ?? "ACKNOWLEDGEMENT_STATE_UNSPECIFIED";
         const testPurchase = playSub.testPurchase != null;
+        const isTrial = detectTrial(playSub);
+        const amount = extractAmount(playSub);
 
-        let isTrial = false;
-        if (lineItem?.offerDetails?.offerStage === "FREE_TRIAL") {
-          isTrial = true;
-        }
+        const state = playSub.subscriptionState;
+        const mappedStatus = mapSubscriptionState(state);
 
-        const state = playSub.subscriptionState ?? "SUBSCRIPTION_STATE_UNSPECIFIED";
-        let mappedStatus = "none";
-        if (state === "SUBSCRIPTION_STATE_ACTIVE") mappedStatus = "active";
-        else if (state === "SUBSCRIPTION_STATE_IN_GRACE_PERIOD") mappedStatus = "grace";
-        else if (state === "SUBSCRIPTION_STATE_CANCELED") mappedStatus = "canceled";
-        else if (state === "SUBSCRIPTION_STATE_ON_HOLD") mappedStatus = "on_hold";
-        else if (state === "SUBSCRIPTION_STATE_PAUSED") mappedStatus = "paused";
-        else if (state === "SUBSCRIPTION_STATE_EXPIRED") mappedStatus = "expired";
+        // Backstop acknowledge: tokens in PENDING acknowledge state > 24 hours ago
+        const createdAt = new Date(item.created_at);
+        const isOlderThan24h = now.getTime() - createdAt.getTime() > 24 * 3600 * 1000;
 
-        // Acknowledge backstop: If pending acknowledge > 24 hours, acknowledge from server
         if (
           ackState === "ACKNOWLEDGEMENT_STATE_PENDING" &&
+          isOlderThan24h &&
           item.user_id &&
           ["active", "grace"].includes(mappedStatus)
         ) {
@@ -91,7 +97,7 @@ serve(async (req) => {
           }
         }
 
-        await supabaseAdmin.rpc("apply_play_subscription", {
+        const { error: rpcErr } = await supabaseAdmin.rpc("apply_play_subscription", {
           p_purchase_token: item.purchase_token,
           p_user_id: item.user_id,
           p_product_id: productId,
@@ -104,16 +110,25 @@ serve(async (req) => {
           p_test_purchase: testPurchase,
           p_is_trial: isTrial,
           p_raw: playSub,
+          p_amount: amount > 0 ? amount : null,
         });
 
-        processed++;
+        if (rpcErr) {
+          failed++;
+        } else {
+          processed++;
+        }
+
+        // Small delay between Google API calls to avoid rate limits
+        await new Promise((resolve) => setTimeout(resolve, 50));
       } catch (itemErr) {
-        console.error(`Reconcile error for token ${item.purchase_token}:`, itemErr);
+        failed++;
+        console.error(`Reconcile item error:`, itemErr);
       }
     }
 
     return new Response(
-      JSON.stringify({ ok: true, processed, acknowledged }),
+      JSON.stringify({ ok: true, processed, failed, acknowledged }),
       { status: 200, headers: { "Content-Type": "application/json" } }
     );
   } catch (err) {

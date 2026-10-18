@@ -64,6 +64,7 @@ serve(async (req) => {
           user_id: userId,
           plan_type: planType,
           status: 'active',
+          source: 'xendit',
           expires_at: newExpiry.toISOString(),
           grace_period_ends_at: gracePeriod.toISOString(),
           updated_at: now.toISOString(),

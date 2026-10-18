@@ -7,6 +7,7 @@ import 'package:buildera/shared/models/product.dart';
 import 'package:buildera/core/providers/feature_tour_provider.dart';
 import 'package:buildera/features/subscription/models/entitlement.dart';
 import 'package:buildera/features/subscription/services/checkout_policy.dart';
+import 'package:buildera/features/subscription/services/entitlement_evaluator.dart';
 import 'package:buildera/core/utils/trusted_time_helper.dart';
 import 'package:buildera/features/cashier/providers/cart_provider.dart';
 import 'package:buildera/features/cashier/models/cart_item.dart';
@@ -289,6 +290,44 @@ void main() {
 
       expect(trusted, isA<DateTime>());
       expect(trusted.isAfter(pastTime), isTrue);
+    });
+
+    test('EntitlementEvaluator strict 72h offline grace evaluation using UTC', () {
+      final nowUtc = DateTime.now().toUtc();
+      final freshVerified = nowUtc.subtract(const Duration(hours: 12));
+
+      final premiumSnapshot = {
+        'tier': 'premium',
+        'source': 'play',
+        'max_items_per_transaction': 999999,
+        'unlocked_features': ['analytics', 'excelImport', 'restock'],
+        'last_verified_at': freshVerified.toIso8601String(),
+      };
+
+      final validResult = EntitlementEvaluator.evaluateSnapshot(
+        rawSnapshot: premiumSnapshot,
+        currentTrustedUtc: nowUtc,
+      );
+      expect(validResult.isPremium, isTrue);
+
+      final expiredVerified = nowUtc.subtract(const Duration(hours: 80));
+      final staleSnapshot = Map<String, dynamic>.from(premiumSnapshot);
+      staleSnapshot['last_verified_at'] = expiredVerified.toIso8601String();
+
+      final staleResult = EntitlementEvaluator.evaluateSnapshot(
+        rawSnapshot: staleSnapshot,
+        currentTrustedUtc: nowUtc,
+      );
+      expect(staleResult.isFree, isTrue);
+
+      final legacySnapshot = Map<String, dynamic>.from(premiumSnapshot);
+      legacySnapshot.remove('last_verified_at');
+
+      final legacyResult = EntitlementEvaluator.evaluateSnapshot(
+        rawSnapshot: legacySnapshot,
+        currentTrustedUtc: nowUtc,
+      );
+      expect(legacyResult.isFree, isTrue);
     });
   });
 }

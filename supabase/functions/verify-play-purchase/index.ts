@@ -4,12 +4,20 @@ import {
   getGoogleAccessToken,
   getSubscriptionV2,
 } from "../_shared/google_play.ts";
+import {
+  mapSubscriptionState,
+  detectTrial,
+  extractAmount,
+  normalizePlan,
+} from "../_shared/play_mapping.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
+
+const VALID_PRODUCT_IDS = new Set(["buildera_monthly", "buildera_yearly"]);
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -54,11 +62,25 @@ serve(async (req) => {
     const body = await req.json();
     const { purchaseToken, productId } = body;
 
-    if (!purchaseToken || !productId) {
-      return new Response(JSON.stringify({ error: "Invalid parameters" }), {
+    if (!purchaseToken || !productId || !VALID_PRODUCT_IDS.has(productId)) {
+      return new Response(JSON.stringify({ error: "Invalid product or purchase parameters" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Check existing play_purchases binding in Supabase
+    const { data: existingPurchases } = await supabaseAdmin
+      .from("play_purchases")
+      .select("user_id")
+      .eq("purchase_token", purchaseToken)
+      .maybeSingle();
+
+    if (existingPurchases && existingPurchases.user_id && existingPurchases.user_id !== userId) {
+      return new Response(
+        JSON.stringify({ error: "Purchase token bound to another user" }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // 1. Get Google API OAuth Token
@@ -80,44 +102,24 @@ serve(async (req) => {
       });
     }
 
-    // 4. Validate obfuscatedExternalAccountId (userId check)
+    // 4. Validate obfuscatedExternalAccountId
     const extId = playSub.externalAccountIdentifiers?.obfuscatedExternalAccountId;
-    if (extId && extId !== userId) {
+    if (!extId || extId !== userId) {
       return new Response(
-        JSON.stringify({ error: "Purchase bound to another user" }),
+        JSON.stringify({ error: "Purchase not bound to current user" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // 5. Evaluate state and expiry
-    const state = playSub.subscriptionState ?? "SUBSCRIPTION_STATE_UNSPECIFIED";
+    // 5. Extract state, amount, trial, expiry
+    const state = playSub.subscriptionState;
+    const mappedStatus = mapSubscriptionState(state);
     const expiryTime = lineItem.expiryTime;
     const autoRenewing = lineItem.autoRenewingPlan != null;
     const ackState = playSub.acknowledgementState ?? "ACKNOWLEDGEMENT_STATE_UNSPECIFIED";
     const testPurchase = playSub.testPurchase != null;
-
-    // Detect free trial phase
-    let isTrial = false;
-    const offerDetails = lineItem.offerDetails;
-    if (offerDetails && offerDetails.offerStage === "FREE_TRIAL") {
-      isTrial = true;
-    }
-
-    // Map access state
-    let mappedStatus = "none";
-    if (state === "SUBSCRIPTION_STATE_ACTIVE") {
-      mappedStatus = "active";
-    } else if (state === "SUBSCRIPTION_STATE_IN_GRACE_PERIOD") {
-      mappedStatus = "grace";
-    } else if (state === "SUBSCRIPTION_STATE_CANCELED") {
-      mappedStatus = "canceled";
-    } else if (state === "SUBSCRIPTION_STATE_ON_HOLD") {
-      mappedStatus = "on_hold";
-    } else if (state === "SUBSCRIPTION_STATE_PAUSED") {
-      mappedStatus = "paused";
-    } else if (state === "SUBSCRIPTION_STATE_EXPIRED") {
-      mappedStatus = "expired";
-    }
+    const isTrial = detectTrial(playSub);
+    const amount = extractAmount(playSub);
 
     // 6. Apply subscription inside Supabase PostgreSQL transaction function
     const { data: applyResult, error: applyError } = await supabaseAdmin.rpc(
@@ -135,10 +137,18 @@ serve(async (req) => {
         p_test_purchase: testPurchase,
         p_is_trial: isTrial,
         p_raw: playSub,
+        p_amount: amount > 0 ? amount : null,
       }
     );
 
     if (applyError) {
+      if (applyError.code === "P0409" || applyError.message?.includes("P0409")) {
+        return new Response(
+          JSON.stringify({ error: "Purchase token bound to another user" }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      console.error(`Apply RPC Error for user ${userId.substring(0, 8)}...:`, applyError.message);
       return new Response(JSON.stringify({ error: "Failed to persist entitlement" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -151,16 +161,18 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         ok: true,
-        plan: productId.includes("yearly") ? "yearly" : "monthly",
+        plan: normalizePlan(productId),
         status: mappedStatus,
         expires_at: expiryTime,
         is_trial: isTrial,
         access: ["active", "grace", "canceled"].includes(mappedStatus),
+        ack_state: ackState,
         server_time: serverTime ?? new Date().toISOString(),
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (err) {
+  } catch (err: any) {
+    console.error("Verification Exception:", err.message ?? "Unknown error");
     return new Response(
       JSON.stringify({ error: "Verification process error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

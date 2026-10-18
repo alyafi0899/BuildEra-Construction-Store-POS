@@ -158,20 +158,52 @@ class SubscriptionNotifier extends Notifier<AsyncValue<Subscription?>> {
   }
 
   Future<void> buyPlayStoreSubscription(ProductDetails product) async {
+    final user = ref.read(authStateProvider).value;
+    if (user == null) return;
+    ref.read(billingUiStateProvider.notifier).setPending('Memproses pembelian Google Play...');
     final service = ref.read(playBillingServiceProvider);
-    await service.buySubscription(product);
+    await service.buySubscription(product, userId: user.uid);
   }
 
   Future<void> restorePlayStorePurchases() async {
+    final user = ref.read(authStateProvider).value;
+    if (user == null) return;
+    ref.read(billingUiStateProvider.notifier).setVerifying('Memeriksa riwayat langganan...');
     final service = ref.read(playBillingServiceProvider);
     await service.restorePurchases();
     await refresh();
+    await ref.read(entitlementProvider.notifier).refresh();
+    ref.read(billingUiStateProvider.notifier).setSuccess('Proses pemulihan selesai');
   }
 
   Future<void> cancelPending() async {
     await refresh();
   }
 }
+
+// ── Billing UI State Provider ───────────────────────────────────────────────
+
+enum BillingUiStatus { idle, pending, verifying, success, error }
+
+class BillingUiState {
+  final BillingUiStatus status;
+  final String? message;
+
+  const BillingUiState({this.status = BillingUiStatus.idle, this.message});
+}
+
+class BillingUiStateNotifier extends Notifier<BillingUiState> {
+  @override
+  BillingUiState build() => const BillingUiState();
+
+  void setPending([String? msg]) => state = BillingUiState(status: BillingUiStatus.pending, message: msg);
+  void setVerifying([String? msg]) => state = BillingUiState(status: BillingUiStatus.verifying, message: msg);
+  void setSuccess([String? msg]) => state = BillingUiState(status: BillingUiStatus.success, message: msg);
+  void setError(String msg) => state = BillingUiState(status: BillingUiStatus.error, message: msg);
+  void reset() => state = const BillingUiState();
+}
+
+final billingUiStateProvider = NotifierProvider<BillingUiStateNotifier, BillingUiState>(BillingUiStateNotifier.new);
 
 // ── Entitlement Provider (Single Source of Truth) ───────────────────────────
 

@@ -1,62 +1,93 @@
-# Google Play Billing Integration & Subscription Setup Guide
+# Google Play Billing Subscriptions & Freemium Entitlement System
 
-This document outlines the configuration, product architecture, and trial offer mapping for Google Play Billing Subscriptions in **BuildEra POS**.
+This document describes the complete architecture, database security rules, Edge Functions, client lifecycle, and manual setup instructions for **BuildEra POS**.
 
 ---
 
-## 1. Google Play Console Setup
+## 1. Architecture Overview
 
-### A. Merchant Account Setup
-1. Open [Google Play Console](https://play.google.com/console).
-2. Navigate to **Setup -> Payment Profile** and link your Google Merchant Account to enable in-app subscriptions.
-3. Upload at least one signed Android App Bundle (AAB) containing the `com.android.vending.BILLING` permission to the **Internal Testing** track.
+```
+┌────────────────────────┐      (1) buySubscription      ┌─────────────────────────┐
+│                        │─────────────────────────────>│                         │
+│  Flutter Client (POS)  │                              │  Google Play Billing    │
+│                        │<─────────────────────────────│                         │
+└────────────────────────┘      (2) Purchase Details    └─────────────────────────┘
+            │                                                        │
+            │ (3) verify-play-purchase                               │
+            ▼                                                        │
+┌────────────────────────┐                                           │
+│  verify-play-purchase  │ (4) subscriptionsv2.get                   │
+│  (Supabase Edge Func)  │───────────────────────────────────────────┤
+└────────────────────────┘                                           │ (5) Real-Time
+            │                                                        │     Developer
+            │ (6) apply_play_subscription                            │     Notifications
+            ▼                                                        ▼
+┌────────────────────────┐                              ┌─────────────────────────┐
+│  Supabase PostgreSQL   │<─────────────────────────────│        play-rtdn        │
+│  (DB + RLS Security)   │    (7) apply_play_sub        │  (Supabase Edge Func)   │
+└────────────────────────┘                              └─────────────────────────┘
+```
 
-### B. Product Subscriptions Configuration
-Navigate to **Monetize -> Products -> Subscriptions** and create two Subscription Products:
+---
 
-| Product ID | Billing Period | Price | Description |
+## 2. Google Play State & Database Status Mapping
+
+| Play State | Mapped Status | Access | Entitlement Tier |
 | :--- | :--- | :--- | :--- |
-| `buildera_monthly` | 1 Month | Rp 100.000 | Akses Paket Bulanan Full Features |
-| `buildera_yearly` | 1 Year | Rp 1.000.000 | Akses Paket Tahunan Full Features (Hemat 20%) |
+| `SUBSCRIPTION_STATE_ACTIVE` | `active` | Yes | `EntitlementTier.premium` |
+| `SUBSCRIPTION_STATE_IN_GRACE_PERIOD` | `grace` | Yes | `EntitlementTier.premium` |
+| `SUBSCRIPTION_STATE_CANCELED` | `canceled` | Yes (until `expiresAt`) | `EntitlementTier.premium` |
+| `SUBSCRIPTION_STATE_ON_HOLD` | `on_hold` | No | `EntitlementTier.free` |
+| `SUBSCRIPTION_STATE_PAUSED` | `paused` | No | `EntitlementTier.free` |
+| `SUBSCRIPTION_STATE_EXPIRED` | `expired` | No | `EntitlementTier.free` |
+| `SUBSCRIPTION_STATE_UNSPECIFIED` | `none` | No | `EntitlementTier.free` |
 
 ---
 
-## 2. Base Plan & Free Trial Offer Mapping
+## 3. Offline Grace Period (72 Hours) & Trusted Time
 
-### Free Trial Offers
-In Google Play Console, Free Trials are created as **Offers** under the Base Plan (`buildera_monthly` or `buildera_yearly`):
-
-1. Click on Base Plan -> **Add Offer**.
-2. Select **Free Trial** as the offer phase (e.g. 7 days or 14 days free trial).
-3. Specify the offer eligibility criteria (e.g. New customers only).
-
-### Server & Client Mapping (`subscriptionsv2` API)
-When a user subscribes via Google Play Billing:
-1. Google Play returns `PurchaseDetails` containing `purchaseToken` and `productID`.
-2. The Supabase Edge Function (`create-payment` / `verify-play-purchase`) queries Google Play Developer API:
-   `GET https://androidpublisher.googleapis.com/androidpublisher/v3/applications/{packageName}/purchases/subscriptionsv2/tokens/{token}`
-3. The server inspects `lineItems[0].offerDetails.offerTags` or `offerPhase`:
-   - If in a **Free Trial Phase** (`offerPhase == 'freeTrialPhase'`), the server sets `is_trial = true` and `status = 'active'` in the `subscriptions` table.
-   - The Flutter client maps `is_trial` to `Entitlement.premium(isTrial: true)`.
-   - The UI displays **"Paket Full Features (Masa Percobaan Trial)"**.
+- **Strict 72-Hour Limit**: Premium snapshot access requires `last_verified_at` server timestamp. If `(nowUtc - last_verified_at) > 72h`, entitlement drops to `EntitlementTier.free` until re-verified.
+- **Trusted Time**: `TrustedTimeHelper.nowUtc()` measures elapsed duration. Forward clock jumps are detected via `Stopwatch` (`maxAllowedClockTamperDrift`).
+- **Quota Limit**: Free tier enforces 3 max items per transaction and 10 max transactions per day (Asia/Jakarta day rollover).
 
 ---
 
-## 3. Subscription Status Mapping
+## 4. Manual Setup Instructions
 
-| Play Billing Status | Supabase `status` | Client `SubscriptionStatus` | Entitlement Tier |
-| :--- | :--- | :--- | :--- |
-| `SUBSCRIPTION_STATE_ACTIVE` | `active` | `SubscriptionStatus.active` | `EntitlementTier.premium` |
-| `SUBSCRIPTION_STATE_IN_GRACE_PERIOD` | `grace` | `SubscriptionStatus.grace` | `EntitlementTier.premium` |
-| `SUBSCRIPTION_STATE_CANCELED` | `canceled` | `SubscriptionStatus.canceled` | `EntitlementTier.premium` (until `expiresAt`) |
-| `SUBSCRIPTION_STATE_ON_HOLD` | `on_hold` | `SubscriptionStatus.on_hold` | `EntitlementTier.free` |
-| `SUBSCRIPTION_STATE_PAUSED` | `paused` | `SubscriptionStatus.paused` | `EntitlementTier.free` |
-| `SUBSCRIPTION_STATE_EXPIRED` | `expired` | `SubscriptionStatus.expired` | `EntitlementTier.free` |
+### 1. Google Play Console & Cloud Platform
+1. Create `buildera_monthly` and `buildera_yearly` subscription products in Play Console.
+2. Enable **Google Play Android Developer API** in Google Cloud Console.
+3. Create a **Service Account** with roles to view financial data and manage orders/subscriptions. Download JSON key.
 
----
+### 2. Pub/Sub RTDN Setup
+1. Create Pub/Sub Topic and Push Subscription pointing to:
+   `https://<project-ref>.supabase.co/functions/v1/play-rtdn?token=<PLAY_RTDN_TOKEN>`
+2. Grant Publisher role to `google-play-developer-notifications@system.gserviceaccount.com`.
 
-## 4. Offline Grace Tolerance (72 Hours)
+### 3. Supabase Secrets
+Execute CLI command:
+```bash
+supabase secrets set GOOGLE_SERVICE_ACCOUNT_JSON='{"type":"service_account",...}' ANDROID_PACKAGE_NAME='com.buildera.pos' PLAY_RTDN_TOKEN='your_rtdn_secret_token' RECONCILE_SECRET='your_reconcile_secret'
+```
 
-* When a paid user operates offline in airplane mode, `entitlementProvider` reads the cached `Entitlement` snapshot from local Hive storage.
-* If within **72 hours** (`offlineToleranceHours = 72`) of valid premium access, the app maintains full premium access (`EntitlementSource.offlineCache`).
-* The cashier is NEVER downgraded to free mode during an active sales day due to network disconnection.
+### 4. Database Migration & Deployment Order
+```bash
+# 1. Push SQL migrations
+supabase db push
+
+# 2. Deploy Edge Functions
+supabase functions deploy verify-play-purchase play-rtdn reconcile-play-subscriptions xendit-webhook
+```
+
+### 5. Verification SQL Query
+Run in SQL Editor to confirm no client write policies exist on subscription tables:
+```sql
+SELECT policyname, tablename, cmd, roles 
+FROM pg_policies 
+WHERE tablename IN ('subscriptions', 'subscription_history', 'play_purchases');
+```
+
+To set manual admin bypass via SQL:
+```sql
+UPDATE public.subscriptions SET is_bypassed = TRUE WHERE user_id = 'target-user-uuid';
+```
