@@ -23,26 +23,37 @@ export class GooglePlayApiError extends Error {
   }
 }
 
+function redactSensitiveBody(bodyText: string): string {
+  if (!bodyText) return "<empty response>";
+
+  const redacted = bodyText
+    .replace(/("(?:purchaseToken|purchase_token|token)"\s*:\s*")([^"]+)(")/gi, '$1[REDACTED]$3')
+    .replace(/((?:purchaseToken|purchase_token|token)=)([A-Za-z0-9._~-]+)/gi, '$1[REDACTED]');
+
+  return redacted;
+}
+
 export function sanitizeGooglePlayError(bodyText: string): string {
   if (!bodyText) return "<empty response>";
 
+  const safeText = redactSensitiveBody(bodyText);
+
   try {
-    const parsed = JSON.parse(bodyText);
+    const parsed = JSON.parse(safeText);
     const reason =
-      parsed?.error?.status ??
-      parsed?.error?.message ??
-      parsed?.error?.details?.[0]?.reason ??
       parsed?.error?.errors?.[0]?.reason ??
+      parsed?.error?.details?.[0]?.reason ??
+      parsed?.error?.status ??
       null;
 
     if (reason) {
-      return reason;
+      return String(reason);
     }
 
     const jsonText = JSON.stringify(parsed);
     return jsonText.length > 800 ? `${jsonText.slice(0, 800)}…` : jsonText;
   } catch {
-    const normalized = bodyText.replace(/\s+/g, " ").trim();
+    const normalized = safeText.replace(/\s+/g, " ").trim();
     return normalized.length > 800 ? `${normalized.slice(0, 800)}…` : normalized;
   }
 }
@@ -54,10 +65,9 @@ export function parseGooglePlayApiError(status: number, bodyText: string): Googl
   try {
     const parsed = JSON.parse(bodyText);
     reason =
-      parsed?.error?.status ??
-      parsed?.error?.message ??
-      parsed?.error?.details?.[0]?.reason ??
       parsed?.error?.errors?.[0]?.reason ??
+      parsed?.error?.details?.[0]?.reason ??
+      parsed?.error?.status ??
       null;
   } catch {
     // ignore parse failures and keep the sanitized body string

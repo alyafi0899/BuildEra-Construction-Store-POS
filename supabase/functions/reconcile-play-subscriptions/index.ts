@@ -13,6 +13,7 @@ import {
   constantTimeEqual,
   getOrderId,
   resolveBoundUser,
+  pickLineItem,
 } from "../_shared/play_mapping.ts";
 
 const VALID_PRODUCT_IDS = new Set(["buildera_monthly", "buildera_yearly"]);
@@ -47,6 +48,7 @@ export async function handleReconcile(req: Request): Promise<Response> {
       .from("play_purchases")
       .select("*")
       .eq("superseded", false)
+      .is("dead_reason", null)
       .gte("expiry_time", past3Days)
       .lte("expiry_time", future48h)
       .order("last_synced_at", { ascending: true })
@@ -60,6 +62,7 @@ export async function handleReconcile(req: Request): Promise<Response> {
       .from("play_purchases")
       .select("*")
       .eq("superseded", false)
+      .is("dead_reason", null)
       .in("subscription_state", ["active", "grace", "canceled"])
       .lte("last_synced_at", past7Days)
       .order("last_synced_at", { ascending: true })
@@ -73,6 +76,7 @@ export async function handleReconcile(req: Request): Promise<Response> {
       .from("play_purchases")
       .select("*")
       .eq("superseded", false)
+      .is("dead_reason", null)
       .eq("subscription_state", "none")
       .lte("created_at", past1Hour)
       .order("last_synced_at", { ascending: true })
@@ -92,6 +96,7 @@ export async function handleReconcile(req: Request): Promise<Response> {
     let failed = 0;
     let skipped = 0;
     let acknowledged = 0;
+    let consecutiveGoogleFailures = 0;
 
     for (const item of targets) {
       try {
@@ -104,18 +109,43 @@ export async function handleReconcile(req: Request): Promise<Response> {
           });
         } catch (err) {
           if (err instanceof GooglePlayApiError) {
-            if ([410, 404, 400].includes(err.status)) {
+            const reason = err.reason ?? "unknown";
+
+            if (err.status === 410 && (reason === "purchaseTokenNoLongerValid" || reason === "subscriptionNoLongerAvailable")) {
               skipped++;
+              consecutiveGoogleFailures = 0;
               await supabaseAdmin
                 .from("play_purchases")
-                .update({ superseded: true, updated_at: new Date().toISOString() })
+                .update({ dead_reason: reason, dead_at: new Date().toISOString(), updated_at: new Date().toISOString() })
                 .eq("purchase_token", item.purchase_token);
-              console.warn("Reconcile token marked inactive:", err.reason ?? err.message);
+              console.warn("Reconcile token marked dead:", reason);
               continue;
             }
+
+            if ([400, 404, 401, 403].includes(err.status)) {
+              failed++;
+              consecutiveGoogleFailures++;
+              const detail = reason === "purchaseTokenMismatch" ? " Periksa konfigurasi Google (package name / izin service account)" : "";
+              console.error("Reconcile failed Google Play token:", `${reason}${detail}`);
+              if (consecutiveGoogleFailures >= 5) {
+                return new Response(
+                  JSON.stringify({ error: "Periksa konfigurasi Google (package name / izin service account)" }),
+                  { status: 500, headers: { "Content-Type": "application/json" } }
+                );
+              }
+              continue;
+            }
+
             if ([409, 429].includes(err.status) || err.status >= 500 || !err.status) {
               failed++;
-              console.error("Reconcile transient Google Play error:", err.reason ?? err.message);
+              consecutiveGoogleFailures++;
+              console.error("Reconcile transient Google Play error:", reason);
+              if (consecutiveGoogleFailures >= 5) {
+                return new Response(
+                  JSON.stringify({ error: "Periksa konfigurasi Google (package name / izin service account)" }),
+                  { status: 500, headers: { "Content-Type": "application/json" } }
+                );
+              }
               continue;
             }
           }
@@ -123,16 +153,14 @@ export async function handleReconcile(req: Request): Promise<Response> {
         }
 
         playSub.purchaseToken = item.purchase_token;
-        const lineItem =
-          playSub.lineItems?.find((candidate: any) => candidate?.productId === item.product_id) ??
-          playSub.lineItems?.[0];
+        const lineItem = pickLineItem(playSub, item.product_id) ?? playSub.lineItems?.[0];
         const productId = lineItem?.productId ?? item.product_id;
         const expiryTime = lineItem?.expiryTime ?? item.expiry_time;
         const autoRenewing = lineItem?.autoRenewingPlan != null || item.auto_renewing;
         const ackState = playSub.acknowledgementState ?? "ACKNOWLEDGEMENT_STATE_UNSPECIFIED";
         const testPurchase = playSub.testPurchase != null || item.test_purchase;
-        const isTrial = detectTrial(playSub);
-        const amount = extractAmount(playSub) || Number(item.raw?.amount ?? 0) || 0;
+        const isTrial = detectTrial(playSub, productId);
+        const amount = extractAmount(playSub, productId) || Number(item.raw?.amount ?? 0) || 0;
         const state = playSub.subscriptionState;
         const mappedStatus = mapSubscriptionState(state);
 
@@ -143,30 +171,53 @@ export async function handleReconcile(req: Request): Promise<Response> {
               token: playSub.linkedPurchaseToken,
               accessToken,
             });
-            const linkedLineItem =
-              linkedSub.lineItems?.find((candidate: any) => candidate?.productId === productId) ??
-              linkedSub.lineItems?.[0];
+            const linkedLineItem = pickLineItem(linkedSub, productId) ?? linkedSub.lineItems?.[0];
             const linkedProductId = linkedLineItem?.productId ?? productId;
             const linkedBoundUser = await resolveBoundUser(linkedSub, null, supabaseAdmin);
             const linkedState = mapSubscriptionState(linkedSub.subscriptionState);
-            const { error: linkedRpcErr } = await supabaseAdmin.rpc("apply_play_subscription", {
-              p_purchase_token: item.purchase_token,
+            const linkedRpcArgs = {
+              p_purchase_token: playSub.linkedPurchaseToken,
               p_user_id: linkedBoundUser.userId ?? item.user_id ?? null,
               p_product_id: linkedProductId,
-              p_latest_order_id: getOrderId(linkedSub) ?? item.latest_order_id,
+              p_latest_order_id: getOrderId(linkedSub, linkedProductId) ?? item.latest_order_id,
               p_subscription_state: linkedState,
               p_expiry_time: linkedLineItem?.expiryTime ?? expiryTime,
               p_auto_renewing: linkedLineItem?.autoRenewingPlan != null || autoRenewing,
               p_acknowledgement_state: linkedSub.acknowledgementState ?? ackState,
               p_linked_purchase_token: linkedSub.linkedPurchaseToken ?? null,
               p_test_purchase: linkedSub.testPurchase != null || testPurchase,
-              p_is_trial: detectTrial(linkedSub) || isTrial,
+              p_is_trial: detectTrial(linkedSub, linkedProductId) || isTrial,
               p_raw: linkedSub,
-              p_amount: extractAmount(linkedSub) || amount || null,
+              p_amount: extractAmount(linkedSub, linkedProductId) || amount || null,
+            };
+
+            const { error: linkedRpcErr } = await supabaseAdmin.rpc("apply_play_subscription", linkedRpcArgs);
+            if (linkedRpcErr?.code === "23503" && linkedBoundUser.userId) {
+              const { error: retryError } = await supabaseAdmin.rpc("apply_play_subscription", { ...linkedRpcArgs, p_user_id: null });
+              if (retryError) {
+                throw retryError;
+              }
+            }
+
+            const { error: pendingRpcErr } = await supabaseAdmin.rpc("apply_play_subscription", {
+              p_purchase_token: item.purchase_token,
+              p_user_id: linkedBoundUser.userId ?? item.user_id ?? null,
+              p_product_id: productId,
+              p_latest_order_id: getOrderId(playSub, productId) ?? item.latest_order_id,
+              p_subscription_state: "none",
+              p_expiry_time: expiryTime,
+              p_auto_renewing: autoRenewing,
+              p_acknowledgement_state: ackState,
+              p_linked_purchase_token: playSub.linkedPurchaseToken ?? null,
+              p_test_purchase: testPurchase,
+              p_is_trial: isTrial,
+              p_raw: playSub,
+              p_amount: amount > 0 ? amount : null,
             });
 
-            if (linkedRpcErr) {
+            if (linkedRpcErr || pendingRpcErr) {
               failed++;
+              console.error("Reconcile linked recovery RPC error:", linkedRpcErr?.message ?? pendingRpcErr?.message);
             } else {
               processed++;
             }
@@ -199,11 +250,11 @@ export async function handleReconcile(req: Request): Promise<Response> {
         }
 
         const boundUser = await resolveBoundUser(playSub, null, supabaseAdmin);
-        const { error: rpcErr } = await supabaseAdmin.rpc("apply_play_subscription", {
+        const rpcArgs = {
           p_purchase_token: item.purchase_token,
           p_user_id: boundUser.userId ?? item.user_id ?? null,
           p_product_id: productId,
-          p_latest_order_id: getOrderId(playSub) ?? item.latest_order_id,
+          p_latest_order_id: getOrderId(playSub, productId) ?? item.latest_order_id,
           p_subscription_state: mappedStatus,
           p_expiry_time: expiryTime,
           p_auto_renewing: autoRenewing,
@@ -213,7 +264,12 @@ export async function handleReconcile(req: Request): Promise<Response> {
           p_is_trial: isTrial,
           p_raw: playSub,
           p_amount: amount > 0 ? amount : null,
-        });
+        };
+
+        let { error: rpcErr } = await supabaseAdmin.rpc("apply_play_subscription", rpcArgs);
+        if (rpcErr?.code === "23503" && boundUser.userId) {
+          ({ error: rpcErr } = await supabaseAdmin.rpc("apply_play_subscription", { ...rpcArgs, p_user_id: null }));
+        }
 
         if (rpcErr) {
           if (rpcErr.code === "P0409" || rpcErr.message?.includes("P0409")) {

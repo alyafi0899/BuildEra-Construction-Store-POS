@@ -19,37 +19,42 @@ export function mapSubscriptionState(state?: string): string {
   }
 }
 
-export function getOrderId(playSub: any): string | null {
+export function pickLineItem(playSub: any, productId?: string): any | null {
   const lineItems = Array.isArray(playSub?.lineItems) ? playSub.lineItems : [];
-  const productId = playSub?.productId;
-  const matchingLineItem =
-    productId != null
-      ? lineItems.find((item: any) => item?.productId === productId)
-      : undefined;
-  const chosenLineItem = matchingLineItem ?? lineItems[0];
+  const productKey = productId ?? playSub?.productId;
 
+  if (productKey) {
+    const match = lineItems.find((item: any) => item?.productId === productKey);
+    if (match) return match;
+  }
+
+  const preferred = lineItems.find((item: any) => typeof item?.latestSuccessfulOrderId === "string" && item.latestSuccessfulOrderId.length > 0);
+  if (preferred) return preferred;
+
+  return lineItems[0] ?? null;
+}
+
+export function getOrderId(playSub: any, productId?: string): string | null {
+  const chosenLineItem = pickLineItem(playSub, productId);
   return chosenLineItem?.latestSuccessfulOrderId ?? playSub?.latestOrderId ?? null;
 }
 
-export function detectTrial(playSub: any): boolean {
-  if (playSub?.is_trial === true) return true;
-
-  const lineItem = playSub?.lineItems?.[0];
+export function detectTrial(playSub: any, productId?: string): boolean {
+  const lineItem = pickLineItem(playSub, productId);
   if (!lineItem) return false;
 
   const offerPhase = lineItem.offerPhase;
-  if (offerPhase) {
-    if (offerPhase.freeTrial !== undefined) return true;
-    if (offerPhase.prorationPeriod?.originalOfferPhaseType === "FREE_TRIAL") {
-      return true;
-    }
+  if (!offerPhase) return false;
+
+  if (offerPhase.freeTrial !== undefined && offerPhase.freeTrial !== null) {
+    return true;
   }
 
-  return false;
+  return offerPhase.prorationPeriod?.originalOfferPhaseType === "FREE_TRIAL";
 }
 
-export function extractAmount(playSub: any): number {
-  const lineItem = playSub?.lineItems?.[0];
+export function extractAmount(playSub: any, productId?: string): number {
+  const lineItem = pickLineItem(playSub, productId);
   if (!lineItem) return 0;
 
   const recurringPrice = lineItem.autoRenewingPlan?.recurringPrice;
@@ -68,38 +73,43 @@ export async function resolveBoundUser(
   supabase?: { from: (table: string) => any }
 ): Promise<{ userId: string | null; via: string | null }> {
   const tokenCandidates = [
-    playSub?.purchaseToken,
-    playSub?.outOfAppPurchaseContext?.expiredPurchaseToken,
-    playSub?.linkedPurchaseToken,
-  ].filter((token) => typeof token === "string" && token.length > 0);
+    { token: playSub?.purchaseToken, via: "purchaseToken" },
+    { token: playSub?.outOfAppPurchaseContext?.expiredPurchaseToken, via: "outOfAppPurchaseContext.expiredPurchaseToken" },
+    { token: playSub?.linkedPurchaseToken, via: "linkedPurchaseToken" },
+  ].filter(({ token }) => typeof token === "string" && token.length > 0);
 
   const directIdCandidates = [
-    playSub?.externalAccountIdentifiers?.obfuscatedExternalAccountId,
-    playSub?.outOfAppPurchaseContext?.expiredExternalAccountIdentifiers?.obfuscatedExternalAccountId,
-  ].filter((id) => typeof id === "string" && id.length > 0);
+    {
+      id: playSub?.externalAccountIdentifiers?.obfuscatedExternalAccountId,
+      via: "externalAccountIdentifiers",
+    },
+    {
+      id: playSub?.outOfAppPurchaseContext?.expiredExternalAccountIdentifiers?.obfuscatedExternalAccountId,
+      via: "outOfAppPurchaseContext.expiredExternalAccountIdentifiers",
+    },
+  ].filter(({ id }) => typeof id === "string" && id.length > 0);
 
-  for (const [index, directId] of directIdCandidates.entries()) {
-    const via = index === 0 ? "externalAccountIdentifiers" : "expiredExternalAccountIdentifiers";
-    if (!jwtUserId || directId === jwtUserId) {
-      return { userId: directId, via };
+  for (const candidate of directIdCandidates) {
+    if (!jwtUserId || candidate.id === jwtUserId) {
+      return { userId: candidate.id, via: candidate.via };
     }
   }
 
   if (supabase) {
-    for (const token of tokenCandidates) {
+    for (const candidate of tokenCandidates) {
       const { data, error } = await supabase
         .from("play_purchases")
         .select("user_id")
-        .eq("purchase_token", token)
+        .eq("purchase_token", candidate.token)
         .maybeSingle();
 
       if (error) {
-        console.warn(`resolveBoundUser lookup failed for ${token}:`, error.message ?? error);
+        console.warn(`resolveBoundUser lookup failed for ${candidate.token}:`, error.message ?? error);
       }
 
       const matchedUserId = data?.user_id as string | undefined;
       if (matchedUserId && (!jwtUserId || matchedUserId === jwtUserId)) {
-        return { userId: matchedUserId, via: `play_purchases:${token}` };
+        return { userId: matchedUserId, via: `play_purchases:${candidate.via}` };
       }
     }
   }

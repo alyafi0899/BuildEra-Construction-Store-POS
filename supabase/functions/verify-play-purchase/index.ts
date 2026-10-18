@@ -13,6 +13,7 @@ import {
   normalizePlan,
   resolveBoundUser,
   getOrderId,
+  pickLineItem,
 } from "../_shared/play_mapping.ts";
 
 const corsHeaders = {
@@ -93,8 +94,7 @@ export async function handleVerify(req: Request): Promise<Response> {
     });
     playSub.purchaseToken = purchaseToken;
 
-    const matchingLineItem =
-      playSub.lineItems?.find((item: any) => item?.productId === productId) ?? playSub.lineItems?.[0];
+    const matchingLineItem = pickLineItem(playSub, productId);
 
     if (!matchingLineItem) {
       return new Response(JSON.stringify({ error: "Product ID mismatch" }), {
@@ -126,15 +126,79 @@ export async function handleVerify(req: Request): Promise<Response> {
     const autoRenewing = matchingLineItem.autoRenewingPlan != null;
     const ackState = playSub.acknowledgementState ?? "ACKNOWLEDGEMENT_STATE_UNSPECIFIED";
     const testPurchase = playSub.testPurchase != null;
-    const isTrial = detectTrial(playSub);
-    const amount = extractAmount(playSub);
+    const isTrial = detectTrial(playSub, productId);
+    const amount = extractAmount(playSub, productId);
     const boundUserId = boundUser.userId ?? userId;
 
-    const { error: applyError } = await supabaseAdmin.rpc("apply_play_subscription", {
+    if (state === "SUBSCRIPTION_STATE_PENDING_PURCHASE_CANCELED" && playSub.linkedPurchaseToken) {
+      try {
+        const linkedSub = await getSubscriptionV2({
+          packageName,
+          token: playSub.linkedPurchaseToken,
+          accessToken,
+        });
+        const linkedLineItem = pickLineItem(linkedSub, productId) ?? linkedSub.lineItems?.[0];
+        const linkedProductId = linkedLineItem?.productId ?? productId;
+        const linkedBoundUser = await resolveBoundUser(linkedSub, userId, supabaseAdmin);
+        const linkedState = mapSubscriptionState(linkedSub.subscriptionState);
+        const linkedRpcArgs = {
+          p_purchase_token: playSub.linkedPurchaseToken,
+          p_user_id: linkedBoundUser.userId ?? boundUserId,
+          p_product_id: linkedProductId,
+          p_latest_order_id: getOrderId(linkedSub, linkedProductId),
+          p_subscription_state: linkedState,
+          p_expiry_time: linkedLineItem?.expiryTime ?? expiryTime,
+          p_auto_renewing: linkedLineItem?.autoRenewingPlan != null || autoRenewing,
+          p_acknowledgement_state: linkedSub.acknowledgementState ?? ackState,
+          p_linked_purchase_token: linkedSub.linkedPurchaseToken ?? null,
+          p_test_purchase: linkedSub.testPurchase != null || testPurchase,
+          p_is_trial: detectTrial(linkedSub, linkedProductId) || isTrial,
+          p_raw: linkedSub,
+          p_amount: extractAmount(linkedSub, linkedProductId) || amount || null,
+        };
+        const { error: linkedApplyError } = await supabaseAdmin.rpc("apply_play_subscription", linkedRpcArgs);
+        if (linkedApplyError?.code === "23503" && linkedBoundUser.userId) {
+          const { error: retryError } = await supabaseAdmin.rpc("apply_play_subscription", { ...linkedRpcArgs, p_user_id: null });
+          if (retryError) {
+            throw retryError;
+          }
+        }
+
+        const pendingRpcArgs = {
+          p_purchase_token: purchaseToken,
+          p_user_id: boundUserId,
+          p_product_id: productId,
+          p_latest_order_id: getOrderId(playSub, productId),
+          p_subscription_state: "none",
+          p_expiry_time: expiryTime,
+          p_auto_renewing: autoRenewing,
+          p_acknowledgement_state: ackState,
+          p_linked_purchase_token: playSub.linkedPurchaseToken ?? null,
+          p_test_purchase: testPurchase,
+          p_is_trial: isTrial,
+          p_raw: playSub,
+          p_amount: amount > 0 ? amount : null,
+        };
+        const { error: pendingApplyError } = await supabaseAdmin.rpc("apply_play_subscription", pendingRpcArgs);
+        if (pendingApplyError?.code === "23503") {
+          const { error: retryError } = await supabaseAdmin.rpc("apply_play_subscription", { ...pendingRpcArgs, p_user_id: null });
+          if (retryError) {
+            throw retryError;
+          }
+        }
+        if (linkedApplyError || pendingApplyError) {
+          throw linkedApplyError ?? pendingApplyError;
+        }
+      } catch (recoveryErr) {
+        console.warn("Recovery for pending purchase canceled failed:", recoveryErr);
+      }
+    }
+
+    const rpcArgs = {
       p_purchase_token: purchaseToken,
       p_user_id: boundUserId,
       p_product_id: productId,
-      p_latest_order_id: getOrderId(playSub),
+      p_latest_order_id: getOrderId(playSub, productId),
       p_subscription_state: mappedStatus,
       p_expiry_time: expiryTime,
       p_auto_renewing: autoRenewing,
@@ -144,7 +208,12 @@ export async function handleVerify(req: Request): Promise<Response> {
       p_is_trial: isTrial,
       p_raw: playSub,
       p_amount: amount > 0 ? amount : null,
-    });
+    };
+
+    let { error: applyError } = await supabaseAdmin.rpc("apply_play_subscription", rpcArgs);
+    if (applyError?.code === "23503" && boundUserId) {
+      ({ error: applyError } = await supabaseAdmin.rpc("apply_play_subscription", { ...rpcArgs, p_user_id: null }));
+    }
 
     if (applyError) {
       if (applyError.code === "P0409" || applyError.message?.includes("P0409")) {

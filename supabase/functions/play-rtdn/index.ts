@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { importJWK, jwtVerify } from "https://deno.land/x/jose@v4.14.4/index.ts";
+import { createRemoteJWKSet, decodeProtectedHeader, jwtVerify } from "https://deno.land/x/jose@v4.14.4/index.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import {
   getGoogleAccessToken,
@@ -13,14 +13,20 @@ import {
   constantTimeEqual,
   resolveBoundUser,
   getOrderId,
+  pickLineItem,
 } from "../_shared/play_mapping.ts";
 
 const VALID_PRODUCT_IDS = new Set(["buildera_monthly", "buildera_yearly"]);
+const GOOGLE_JWKS = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
+let playPubsubWarningShown = false;
 
 async function validatePlayPubSubRequest(req: Request): Promise<boolean> {
   const serviceAccountEmail = Deno.env.get("PLAY_PUBSUB_SERVICE_ACCOUNT") ?? "";
   if (!serviceAccountEmail) {
-    console.warn("PLAY_PUBSUB_SERVICE_ACCOUNT not set; falling back to query-token validation only.");
+    if (!playPubsubWarningShown) {
+      console.warn("PLAY_PUBSUB_SERVICE_ACCOUNT not set; falling back to query-token validation only.");
+      playPubsubWarningShown = true;
+    }
     return true;
   }
 
@@ -31,22 +37,24 @@ async function validatePlayPubSubRequest(req: Request): Promise<boolean> {
   }
 
   const audience = Deno.env.get("PLAY_RTDN_AUDIENCE") ?? new URL(req.url).origin + new URL(req.url).pathname;
-  const jwksUrl = "https://www.googleapis.com/oauth2/v3/certs";
-  const jwks = await fetch(jwksUrl).then((res) => res.json());
-  const keys = jwks.keys ?? [];
-  const key = keys.find((item: any) => item.use === "sig" && item.kid === JSON.parse(atob(bearerToken.split(".")[0])).kid);
-  if (!key) {
+
+  try {
+    const protectedHeader = decodeProtectedHeader(bearerToken);
+    const kid = typeof protectedHeader.kid === "string" ? protectedHeader.kid : null;
+    if (!kid) {
+      return false;
+    }
+
+    const { payload } = await jwtVerify(bearerToken, GOOGLE_JWKS, {
+      audience,
+      issuer: "https://accounts.google.com",
+    });
+
+    const email = payload.email as string | undefined;
+    return Boolean(email && email === serviceAccountEmail && payload.email_verified === true);
+  } catch {
     return false;
   }
-
-  const imported = await importJWK(key, "RS256");
-  const { payload } = await jwtVerify(bearerToken, imported, {
-    audience,
-    issuer: "https://accounts.google.com",
-  });
-
-  const email = payload.email as string | undefined;
-  return Boolean(email && email === serviceAccountEmail && payload.email_verified === true);
 }
 
 export async function handleRtdn(req: Request): Promise<Response> {
@@ -121,7 +129,7 @@ export async function handleRtdn(req: Request): Promise<Response> {
     }
 
     playSub.purchaseToken = purchaseToken;
-    const lineItem = playSub.lineItems?.[0];
+    const lineItem = pickLineItem(playSub, subNotif.subscriptionId);
     const productId = lineItem?.productId ?? subNotif.subscriptionId;
 
     if (!productId || !VALID_PRODUCT_IDS.has(productId)) {
@@ -133,17 +141,77 @@ export async function handleRtdn(req: Request): Promise<Response> {
     const autoRenewing = lineItem?.autoRenewingPlan != null;
     const ackState = playSub.acknowledgementState ?? "ACKNOWLEDGEMENT_STATE_UNSPECIFIED";
     const testPurchase = playSub.testPurchase != null;
-    const isTrial = detectTrial(playSub);
-    const amount = extractAmount(playSub);
+    const isTrial = detectTrial(playSub, productId);
+    const amount = extractAmount(playSub, productId);
     const state = playSub.subscriptionState;
     const mappedStatus = mapSubscriptionState(state);
     const boundUser = await resolveBoundUser(playSub, null, supabaseAdmin);
 
-    const { error: applyError } = await supabaseAdmin.rpc("apply_play_subscription", {
+    if (state === "SUBSCRIPTION_STATE_PENDING_PURCHASE_CANCELED" && playSub.linkedPurchaseToken) {
+      try {
+        const linkedSub = await getSubscriptionV2({
+          packageName,
+          token: playSub.linkedPurchaseToken,
+          accessToken,
+        });
+        const linkedLineItem = pickLineItem(linkedSub, productId);
+        const linkedBoundUser = await resolveBoundUser(linkedSub, null, supabaseAdmin);
+        const linkedProductId = linkedLineItem?.productId ?? productId;
+        const linkedState = mapSubscriptionState(linkedSub.subscriptionState);
+
+        const { error: linkedApplyError } = await supabaseAdmin.rpc("apply_play_subscription", {
+          p_purchase_token: playSub.linkedPurchaseToken,
+          p_user_id: linkedBoundUser.userId ?? boundUser.userId ?? null,
+          p_product_id: linkedProductId,
+          p_latest_order_id: getOrderId(linkedSub, linkedProductId),
+          p_subscription_state: linkedState,
+          p_expiry_time: linkedLineItem?.expiryTime ?? expiryTime,
+          p_auto_renewing: linkedLineItem?.autoRenewingPlan != null || autoRenewing,
+          p_acknowledgement_state: linkedSub.acknowledgementState ?? ackState,
+          p_linked_purchase_token: linkedSub.linkedPurchaseToken ?? null,
+          p_test_purchase: linkedSub.testPurchase != null || testPurchase,
+          p_is_trial: detectTrial(linkedSub, linkedProductId) || isTrial,
+          p_raw: linkedSub,
+          p_amount: extractAmount(linkedSub, linkedProductId) || amount || null,
+        });
+
+        const { error: pendingApplyError } = await supabaseAdmin.rpc("apply_play_subscription", {
+          p_purchase_token: purchaseToken,
+          p_user_id: boundUser.userId ?? null,
+          p_product_id: productId,
+          p_latest_order_id: getOrderId(playSub, productId),
+          p_subscription_state: "none",
+          p_expiry_time: expiryTime,
+          p_auto_renewing: autoRenewing,
+          p_acknowledgement_state: ackState,
+          p_linked_purchase_token: playSub.linkedPurchaseToken ?? null,
+          p_test_purchase: testPurchase,
+          p_is_trial: isTrial,
+          p_raw: playSub,
+          p_amount: amount > 0 ? amount : null,
+        });
+
+        if (linkedApplyError || pendingApplyError) {
+          const firstError = linkedApplyError ?? pendingApplyError;
+          if (firstError.code === "P0409" || firstError.message?.includes("P0409")) {
+            console.warn("RTDN notice: Token bound to another user (P0409)");
+            return new Response(JSON.stringify({ ok: true, note: "Token bound to another user" }), { status: 200 });
+          }
+          console.error("RTDN PENDING_PURCHASE_CANCELED RPC Error:", firstError.message);
+          return new Response(JSON.stringify({ error: "Database apply error" }), { status: 500 });
+        }
+
+        return new Response(JSON.stringify({ ok: true, synced: true, recovery: "linked_purchase_token" }), { status: 200 });
+      } catch (err) {
+        console.warn("RTDN linked recovery failed:", err);
+      }
+    }
+
+    const rpcArgs = {
       p_purchase_token: purchaseToken,
       p_user_id: boundUser.userId,
       p_product_id: productId,
-      p_latest_order_id: getOrderId(playSub),
+      p_latest_order_id: getOrderId(playSub, productId),
       p_subscription_state: mappedStatus,
       p_expiry_time: expiryTime,
       p_auto_renewing: autoRenewing,
@@ -153,7 +221,13 @@ export async function handleRtdn(req: Request): Promise<Response> {
       p_is_trial: isTrial,
       p_raw: playSub,
       p_amount: amount > 0 ? amount : null,
-    });
+    };
+
+    let { error: applyError } = await supabaseAdmin.rpc("apply_play_subscription", rpcArgs);
+    if (applyError?.code === "23503" && boundUser.userId) {
+      const retryArgs = { ...rpcArgs, p_user_id: null };
+      ({ error: applyError } = await supabaseAdmin.rpc("apply_play_subscription", retryArgs));
+    }
 
     if (applyError) {
       if (applyError.code === "P0409" || applyError.message?.includes("P0409")) {
