@@ -613,7 +613,7 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
               final cart = ref.watch(cartProvider);
               final transactionsAsync = ref.watch(transactionsProvider);
               final todayTransactions = transactionsAsync.value ?? <Transaction>[];
-              final nowJakarta = TrustedTimeHelper.getTrustedJakartaTime();
+              final nowJakarta = TrustedTimeHelper.nowJakarta();
 
               final policyResult = CheckoutPolicy.canCheckout(
                 cart: cart,

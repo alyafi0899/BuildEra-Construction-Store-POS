@@ -60,6 +60,21 @@ class TrustedTimeHelper {
     await LocalDatabase.setMetadata(uid, _timeMetaKey, serverTime.toUtc().toIso8601String());
   }
 
+  /// Fetches get_server_time RPC from Supabase and saves trusted time anchor
+  static Future<void> syncFromServer(SupabaseClient client, String uid) async {
+    try {
+      final res = await client.rpc('get_server_time');
+      if (res != null) {
+        final serverTime = DateTime.tryParse(res.toString());
+        if (serverTime != null) {
+          await saveTrustedTime(uid, serverTime);
+        }
+      }
+    } catch (e) {
+      debugPrint('TrustedTimeHelper syncFromServer notice (offline/failed): $e');
+    }
+  }
+
   /// Retrieves saved offset and last trusted timestamp from Hive metadata
   static Future<({int offsetMs, DateTime? lastTrusted})> getSavedTimeInfo(String uid) async {
     try {

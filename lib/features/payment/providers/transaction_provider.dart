@@ -166,7 +166,7 @@ class TransactionRepository {
     final entitlement = _ref.read(entitlementProvider);
     final allTransactions = await getAllTransactions();
     final timeInfo = await TrustedTimeHelper.getSavedTimeInfo(_uid);
-    final currentJakartaTime = TrustedTimeHelper.getTrustedJakartaTime(
+    final currentJakartaTime = TrustedTimeHelper.nowJakarta(
       offsetMs: timeInfo.offsetMs,
       lastTrusted: timeInfo.lastTrusted,
     );

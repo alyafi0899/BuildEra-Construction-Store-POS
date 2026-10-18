@@ -6,6 +6,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../models/subscription.dart';
 import '../models/entitlement.dart';
 import '../config/entitlement_config.dart';
+import '../services/entitlement_evaluator.dart';
 import '../models/subscription_history.dart';
 import '../repositories/subscription_repository.dart';
 import '../services/play_billing_service.dart';
@@ -269,7 +270,8 @@ class EntitlementNotifier extends Notifier<Entitlement> {
       state = freeEntitlement;
       if (uid != null) {
         final map = freeEntitlement.toMap();
-        map['last_verified_at'] = DateTime.now().toIso8601String();
+        map['last_verified_at'] = DateTime.now().toUtc().toIso8601String();
+        map['cached_at'] = DateTime.now().toUtc().toIso8601String();
         await LocalDatabase.setMetadata(uid, 'cached_entitlement', map);
       }
       return;
@@ -285,7 +287,8 @@ class EntitlementNotifier extends Notifier<Entitlement> {
     state = premiumEntitlement;
     if (uid != null) {
       final map = premiumEntitlement.toMap();
-      map['last_verified_at'] = DateTime.now().toIso8601String();
+      map['last_verified_at'] = DateTime.now().toUtc().toIso8601String();
+      map['cached_at'] = DateTime.now().toUtc().toIso8601String();
       await LocalDatabase.setMetadata(uid, 'cached_entitlement', map);
     }
   }
@@ -297,27 +300,22 @@ class EntitlementNotifier extends Notifier<Entitlement> {
     try {
       final rawMap = await LocalDatabase.getMetadata(user.uid, 'cached_entitlement');
       if (rawMap != null && rawMap is Map) {
-        final map = Map<String, dynamic>.from(rawMap);
-        final cached = Entitlement.fromMap(map);
-        
-        final lastVerifiedStr = map['last_verified_at'] as String?;
-        final lastVerified = lastVerifiedStr != null ? DateTime.tryParse(lastVerifiedStr) : null;
+        final timeInfo = await TrustedTimeHelper.getSavedTimeInfo(user.uid);
+        final currentTrustedUtc = TrustedTimeHelper.nowUtc(
+          offsetMs: timeInfo.offsetMs,
+          lastTrusted: timeInfo.lastTrusted,
+        );
 
-        if (cached.isPremium && lastVerified != null) {
-          final timeInfo = await TrustedTimeHelper.getSavedTimeInfo(user.uid);
-          final nowJakarta = TrustedTimeHelper.getTrustedJakartaTime(
-            offsetMs: timeInfo.offsetMs,
-            lastTrusted: timeInfo.lastTrusted,
-          );
-
-          final diffHours = nowJakarta.toUtc().difference(lastVerified.toUtc()).inHours;
-          if (diffHours <= EntitlementConfig.offlineToleranceHours) {
-            state = cached;
-            return;
-          } else {
-            debugPrint('Entitlement offline snapshot expired (> 72h). Downgrading to free.');
-            state = Entitlement.free(source: EntitlementSource.offlineCache);
-            return;
+        final evaluated = EntitlementEvaluator.evaluateSnapshot(
+          rawSnapshot: Map<String, dynamic>.from(rawMap),
+          currentTrustedUtc: currentTrustedUtc,
+        );
+        state = evaluated;
+      }
+    } catch (e) {
+      debugPrint('Entitlement snapshot read error: $e');
+    }
+  }
           }
         }
         state = cached;

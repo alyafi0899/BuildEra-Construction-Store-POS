@@ -69,7 +69,7 @@ class Subscription {
     this.isTrial = false,
   });
 
-  bool get isPremium {
+  bool isPremium([DateTime? nowUtc]) {
     if (isBypassed) {
       return true;
     }
@@ -82,13 +82,13 @@ class Subscription {
       return false;
     }
 
-    final now = DateTime.now();
-    if (gracePeriodEndsAt != null && gracePeriodEndsAt!.isBefore(now)) {
+    final now = nowUtc ?? DateTime.now().toUtc();
+    if (gracePeriodEndsAt != null && gracePeriodEndsAt!.toUtc().isBefore(now)) {
       return false;
     }
     if (gracePeriodEndsAt == null &&
         expiresAt != null &&
-        expiresAt!.isBefore(now)) {
+        expiresAt!.toUtc().isBefore(now)) {
       return false;
     }
 

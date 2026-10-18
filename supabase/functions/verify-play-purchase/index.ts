@@ -19,7 +19,7 @@ const corsHeaders = {
 
 const VALID_PRODUCT_IDS = new Set(["buildera_monthly", "buildera_yearly"]);
 
-serve(async (req) => {
+export async function handleVerify(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }

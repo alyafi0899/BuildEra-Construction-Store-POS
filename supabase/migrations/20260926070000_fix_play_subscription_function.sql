@@ -22,6 +22,11 @@ $$;
 GRANT EXECUTE ON FUNCTION public.get_server_time() TO authenticated, anon, service_role;
 
 -- 3. Hardened apply_play_subscription function
+-- Drop any previous function overload to avoid Postgres 42725 ambiguity errors
+DROP FUNCTION IF EXISTS public.apply_play_subscription(text, uuid, text, text, text, timestamptz, boolean, text, text, boolean, boolean, jsonb);
+DROP FUNCTION IF EXISTS public.apply_play_subscription(text, uuid, text, text, text, timestamptz, boolean, text, text, boolean, boolean, jsonb, numeric);
+DROP FUNCTION IF EXISTS public.apply_play_subscription CASCADE;
+
 CREATE OR REPLACE FUNCTION public.apply_play_subscription(
   p_purchase_token TEXT,
   p_user_id UUID,

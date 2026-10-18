@@ -12,7 +12,7 @@ import {
   constantTimeEqual,
 } from "../_shared/play_mapping.ts";
 
-serve(async (req) => {
+export async function handleReconcile(req: Request): Promise<Response> {
   try {
     const authHeader = req.headers.get("x-reconcile-secret") ?? "";
     const reconcileSecret = Deno.env.get("RECONCILE_SECRET") ?? "";
@@ -38,23 +38,49 @@ serve(async (req) => {
     const past7Days = new Date(now.getTime() - 7 * 86400 * 1000).toISOString();
     const past1Hour = new Date(now.getTime() - 3600 * 1000).toISOString();
 
-    // Select target tokens to reconcile
-    const { data: targets, error } = await supabaseAdmin
+    // Query 1: Expiry in [now - 3 days, now + 48 hours]
+    const { data: expTargets } = await supabaseAdmin
       .from("play_purchases")
       .select("*")
       .eq("superseded", false)
-      .or(`expiry_time.gte.${past3Days},expiry_time.lte.${future48h},last_synced_at.lte.${past7Days},created_at.lte.${past1Hour}`)
-      .limit(200);
+      .gte("expiry_time", past3Days)
+      .lte("expiry_time", future48h)
+      .order("last_synced_at", { ascending: true })
+      .limit(100);
 
-    if (error) {
-      throw error;
+    // Query 2: Active-like states not synced in > 7 days
+    const { data: staleTargets } = await supabaseAdmin
+      .from("play_purchases")
+      .select("*")
+      .eq("superseded", false)
+      .in("subscription_state", ["active", "grace", "canceled"])
+      .lte("last_synced_at", past7Days)
+      .order("last_synced_at", { ascending: true })
+      .limit(50);
+
+    // Query 3: Pending state 'none' created > 1 hour ago
+    const { data: pendingTargets } = await supabaseAdmin
+      .from("play_purchases")
+      .select("*")
+      .eq("superseded", false)
+      .eq("subscription_state", "none")
+      .lte("created_at", past1Hour)
+      .order("last_synced_at", { ascending: true })
+      .limit(50);
+
+    // Deduplicate merged targets
+    const targetMap = new Map<string, any>();
+    for (const t of [...(expTargets ?? []), ...(staleTargets ?? []), ...(pendingTargets ?? [])]) {
+      targetMap.set(t.purchase_token, t);
     }
+    const targets = Array.from(targetMap.values()).slice(0, 200);
 
     let processed = 0;
     let failed = 0;
+    let skipped = 0;
     let acknowledged = 0;
 
-    for (const item of targets ?? []) {
+    for (const item of targets) {
       try {
         const playSub = await getSubscriptionV2({
           packageName,
@@ -119,16 +145,15 @@ serve(async (req) => {
           processed++;
         }
 
-        // Small delay between Google API calls to avoid rate limits
         await new Promise((resolve) => setTimeout(resolve, 50));
       } catch (itemErr) {
-        failed++;
-        console.error(`Reconcile item error:`, itemErr);
+        skipped++;
+        console.error(`Reconcile item skipped error:`, itemErr);
       }
     }
 
     return new Response(
-      JSON.stringify({ ok: true, processed, failed, acknowledged }),
+      JSON.stringify({ ok: true, processed, failed, skipped, acknowledged }),
       { status: 200, headers: { "Content-Type": "application/json" } }
     );
   } catch (err) {
@@ -137,4 +162,6 @@ serve(async (req) => {
       headers: { "Content-Type": "application/json" },
     });
   }
-});
+}
+
+serve(handleReconcile);
