@@ -10,7 +10,6 @@ import 'package:buildera/features/subscription/services/checkout_policy.dart';
 import 'package:buildera/core/utils/trusted_time_helper.dart';
 import 'package:buildera/features/cashier/providers/cart_provider.dart';
 import 'package:buildera/features/cashier/models/cart_item.dart';
-import 'package:buildera/shared/models/transaction.dart';
 
 void main() {
   group('Auth & Security Model Tests', () {

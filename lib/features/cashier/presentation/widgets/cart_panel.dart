@@ -16,6 +16,7 @@ import '../../../../core/utils/trusted_time_helper.dart';
 import '../../../../shared/models/transaction.dart';
 import '../../../../core/localization/localization_provider.dart';
 import '../../../payment/providers/transaction_provider.dart';
+import '../../../auth/providers/auth_provider.dart';
 
 class CartPanel extends StatelessWidget {
   const CartPanel({super.key});

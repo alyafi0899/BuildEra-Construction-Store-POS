@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
+import 'package:in_app_purchase_android/src/billing_client_wrappers/billing_client_wrapper.dart';
 import '../repositories/subscription_repository.dart';
 import '../../../core/utils/trusted_time_helper.dart';
 
@@ -92,7 +93,7 @@ class PlayBillingService {
     ProductDetails productDetails, {
     String? userId,
     PurchaseDetails? oldPurchaseDetails,
-    ProrationMode prorationMode = ProrationMode.immediateWithTimeProration,
+    ReplacementMode? replacementMode = ReplacementMode.withTimeProration,
   }) async {
     if (!_isAvailable) return false;
 
@@ -104,7 +105,7 @@ class PlayBillingService {
           changeSubscriptionParam: oldPurchaseDetails != null
               ? ChangeSubscriptionParam(
                   oldPurchaseDetails: oldPurchaseDetails as GooglePlayPurchaseDetails,
-                  prorationMode: prorationMode,
+                  replacementMode: replacementMode,
                 )
               : null,
         );
@@ -179,10 +180,11 @@ class PlayBillingService {
 
         case PurchaseStatus.error:
           // Cancellation by user is NOT an error
-          final isCancelled = purchase.error?.code == 'purchase_canceled' ||
-              purchase.error?.message?.contains('canceled') == true;
+          final err = purchase.error;
+          final isCancelled = err?.code == 'purchase_canceled' ||
+              (err != null && err.message.contains('canceled'));
           if (!isCancelled) {
-            final errMessage = purchase.error?.message ?? 'Pembelian gagal.';
+            final errMessage = err?.message ?? 'Pembelian gagal.';
             _lastError = errMessage;
             onError('Google Play Billing: $errMessage');
           }
