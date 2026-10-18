@@ -16,7 +16,6 @@ import '../../../../core/utils/trusted_time_helper.dart';
 import '../../../../shared/models/transaction.dart';
 import '../../../../core/localization/localization_provider.dart';
 import '../../../payment/providers/transaction_provider.dart';
-import '../../../auth/providers/auth_provider.dart';
 
 class CartPanel extends StatelessWidget {
   const CartPanel({super.key});
@@ -301,7 +300,8 @@ class _CartHeaderSection extends ConsumerWidget {
         const Icon(Icons.shopping_cart_rounded,
             color: AppTheme.accent, size: 20),
         const SizedBox(width: 10),
-        Text(strings.shoppingCart, style: Theme.of(context).textTheme.titleLarge),
+        Text(strings.shoppingCart,
+            style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(width: 8),
         if (itemCount > 0)
           Container(
@@ -322,7 +322,9 @@ class _CartHeaderSection extends ConsumerWidget {
             onPressed: () async {
               final ok = await showConfirmDialog(context,
                   title: strings.clearCart,
-                  content: strings.isEnglish ? 'Clear all items in this cart?' : 'Yakin kosongkan semua item di antrian ini?',
+                  content: strings.isEnglish
+                      ? 'Clear all items in this cart?'
+                      : 'Yakin kosongkan semua item di antrian ini?',
                   confirmLabel: strings.clearCart,
                   confirmColor: AppTheme.warning);
               if (ok) ref.read(cartProvider.notifier).clear();
@@ -454,7 +456,8 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
                 onTap: () => setState(() => _isExpanded = !_isExpanded),
                 borderRadius: BorderRadius.circular(8),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -527,7 +530,8 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
             const SizedBox(height: 8),
             Row(children: [
               const Text('Diskon Transaksi',
-                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                  style:
+                      TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
               const Spacer(),
               SizedBox(
                 width: 50,
@@ -538,7 +542,8 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
                   underline: const SizedBox(),
                   style: const TextStyle(fontSize: 12, color: AppTheme.accent),
                   items: const [
-                    DropdownMenuItem(value: DiscountType.fixed, child: Text('Rp')),
+                    DropdownMenuItem(
+                        value: DiscountType.fixed, child: Text('Rp')),
                     DropdownMenuItem(
                         value: DiscountType.percentage, child: Text('%')),
                   ],
@@ -572,8 +577,9 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
                     ),
                     onChanged: (v) {
                       final numericValue = Formatters.parsePrice(v);
-                      ref.read(cartProvider.notifier).setTransDiscount(
-                          numericValue, transDiscountType);
+                      ref
+                          .read(cartProvider.notifier)
+                          .setTransDiscount(numericValue, transDiscountType);
                     },
                     inputFormatters: [CurrencyInputFormatter()],
                     onSubmitted: (_) =>
@@ -585,7 +591,8 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
             const SizedBox(height: 8),
             Row(children: [
               const Text('PPN (11%)',
-                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                  style:
+                      TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
               const Spacer(),
               Switch.adaptive(
                 value: taxEnabled,
@@ -598,8 +605,8 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
                 child: Text(
                   Formatters.currency(taxAmount),
                   textAlign: TextAlign.right,
-                  style:
-                      const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                  style: const TextStyle(
+                      color: AppTheme.textSecondary, fontSize: 13),
                 ),
               ),
             ]),
@@ -612,7 +619,8 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
               final entitlement = ref.watch(entitlementProvider);
               final cart = ref.watch(cartProvider);
               final transactionsAsync = ref.watch(transactionsProvider);
-              final todayTransactions = transactionsAsync.value ?? <Transaction>[];
+              final todayTransactions =
+                  transactionsAsync.value ?? <Transaction>[];
               final nowJakarta = TrustedTimeHelper.nowJakarta();
 
               final policyResult = CheckoutPolicy.canCheckout(
@@ -628,7 +636,9 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (entitlement.isFree && policyResult.allowed && remainingQuota <= 3) ...[
+                  if (entitlement.isFree &&
+                      policyResult.allowed &&
+                      remainingQuota <= 3) ...[
                     Padding(
                       padding: const EdgeInsets.only(bottom: 6),
                       child: Text(
@@ -671,10 +681,15 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
                       onPressed: (isEmpty || error != null)
                           ? null
                           : () async {
-                              final resolvedEntitlement = await ref.read(entitlementProvider.notifier).ensureResolved();
-                              final repo = ref.read(transactionRepositoryProvider);
-                              final allTransactions = await repo.getAllTransactions();
-                              final currentJakartaTime = TrustedTimeHelper.nowJakarta();
+                              final resolvedEntitlement = await ref
+                                  .read(entitlementProvider.notifier)
+                                  .ensureResolved();
+                              final repo =
+                                  ref.read(transactionRepositoryProvider);
+                              final allTransactions =
+                                  await repo.getAllTransactions();
+                              final currentJakartaTime =
+                                  TrustedTimeHelper.nowJakarta();
 
                               final check = CheckoutPolicy.canCheckout(
                                 cart: cart,
@@ -687,7 +702,8 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text(check.reason ?? 'Limit transaksi tercapai.'),
+                                      content: Text(check.reason ??
+                                          'Limit transaksi tercapai.'),
                                       backgroundColor: AppTheme.danger,
                                       action: SnackBarAction(
                                         label: 'UPGRADE',
@@ -696,7 +712,8 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
                                           Navigator.push(
                                             context,
                                             MaterialPageRoute(
-                                                builder: (_) => const SubscriptionPage()),
+                                                builder: (_) =>
+                                                    const SubscriptionPage()),
                                           );
                                         },
                                       ),
@@ -717,8 +734,9 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
                       style: ElevatedButton.styleFrom(
                         textStyle: const TextStyle(
                             fontSize: 15, fontWeight: FontWeight.w800),
-                        backgroundColor:
-                            error != null ? AppTheme.textMuted : AppTheme.accent,
+                        backgroundColor: error != null
+                            ? AppTheme.textMuted
+                            : AppTheme.accent,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
@@ -786,7 +804,7 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
     _priceCtrl = TextEditingController(text: item.soldPrice.toStringAsFixed(0));
     _discountCtrl =
         TextEditingController(text: item.discountValue.toStringAsFixed(0));
-    
+
     _qtyFocus = FocusNode(debugLabel: 'QtyFocus_${widget.itemId}');
     _priceFocus = FocusNode(debugLabel: 'PriceFocus_${widget.itemId}');
     _discountFocus = FocusNode(debugLabel: 'DiscFocus_${widget.itemId}');
@@ -819,7 +837,9 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
   void dispose() {
     // SAFE FIX: Use ref.container.read instead of ref.read during dispose to avoid unmounted error
     try {
-      ref.container.read(cartFocusRegistryProvider.notifier).unregister(widget.itemId);
+      ref.container
+          .read(cartFocusRegistryProvider.notifier)
+          .unregister(widget.itemId);
     } catch (_) {}
 
     _qtyCtrl.dispose();
@@ -914,8 +934,8 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
 
     // Sync controllers if changed externally
     if (!_qtyFocus.hasFocus) {
-      final qStr = item.quantity % 1 == 0 
-          ? item.quantity.toInt().toString() 
+      final qStr = item.quantity % 1 == 0
+          ? item.quantity.toInt().toString()
           : item.quantity.toStringAsFixed(5).replaceAll(RegExp(r'\.?0+$'), '');
       if (_qtyCtrl.text != qStr) {
         _qtyCtrl.text = qStr;
@@ -1260,8 +1280,8 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                                 isExpanded: true,
                                 underline: const SizedBox(),
                                 dropdownColor: AppTheme.surfaceAlt,
-                                icon: const Icon(Icons.arrow_drop_down,
-                                    size: 14),
+                                icon:
+                                    const Icon(Icons.arrow_drop_down, size: 14),
                                 style: const TextStyle(
                                     color: AppTheme.accent,
                                     fontSize: 10,
@@ -1559,7 +1579,8 @@ class _CartInputGroup extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 9, color: AppTheme.textMuted)),
+        Text(label,
+            style: const TextStyle(fontSize: 9, color: AppTheme.textMuted)),
         const SizedBox(height: 2),
         child,
       ],
