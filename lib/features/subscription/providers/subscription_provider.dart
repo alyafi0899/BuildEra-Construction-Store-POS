@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,7 +6,6 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/subscription.dart';
 import '../models/entitlement.dart';
-import '../config/entitlement_config.dart';
 import '../services/entitlement_evaluator.dart';
 import '../models/subscription_history.dart';
 import '../repositories/subscription_repository.dart';
@@ -211,6 +211,9 @@ final billingUiStateProvider = NotifierProvider<BillingUiStateNotifier, BillingU
 final entitlementProvider = NotifierProvider<EntitlementNotifier, Entitlement>(EntitlementNotifier.new);
 
 class EntitlementNotifier extends Notifier<Entitlement> {
+  Timer? _expiryTimer;
+  Timer? _periodicTimer;
+
   @override
   Entitlement build() {
     ref.listen(authStateProvider, (previous, next) {
@@ -218,6 +221,7 @@ class EntitlementNotifier extends Notifier<Entitlement> {
       if (user != null) {
         refresh();
       } else {
+        _cancelTimers();
         state = Entitlement.free(source: EntitlementSource.offlineCache);
       }
     });
@@ -225,15 +229,17 @@ class EntitlementNotifier extends Notifier<Entitlement> {
     ref.listen(subscriptionStateProvider, (previous, next) {
       next.when(
         data: (sub) {
-          _updateFromSubscription(sub);
+          _updateFromSubscription(sub, isFromRemote: true);
         },
         error: (err, stack) {
           _loadCachedSnapshotOrKeep();
         },
-        loading: () {
-          // Stale-while-revalidate: keep current entitlement during background updates
-        },
+        loading: () {},
       );
+    });
+
+    ref.onDispose(() {
+      _cancelTimers();
     });
 
     final user = ref.read(authStateProvider).value;
@@ -241,39 +247,78 @@ class EntitlementNotifier extends Notifier<Entitlement> {
       Future.microtask(() => refresh());
     }
 
-    return Entitlement.free(source: EntitlementSource.offlineCache);
+    return Entitlement.unresolved();
+  }
+
+  void _cancelTimers() {
+    _expiryTimer?.cancel();
+    _expiryTimer = null;
+    _periodicTimer?.cancel();
+    _periodicTimer = null;
+  }
+
+  void _scheduleTimers() {
+    _cancelTimers();
+
+    final validUntil = state.validUntil;
+    if (validUntil != null) {
+      final now = TrustedTimeHelper.nowUtc();
+      final diff = validUntil.difference(now);
+      if (diff.isNegative) {
+        Future.microtask(() => refresh());
+      } else {
+        _expiryTimer = Timer(diff, () => refresh());
+      }
+    }
+
+    _periodicTimer = Timer.periodic(const Duration(minutes: 5), (_) => refresh());
+  }
+
+  Future<Entitlement> ensureResolved({Duration timeout = const Duration(seconds: 3)}) async {
+    if (state.isResolved) return state;
+    try {
+      await refresh().timeout(timeout);
+    } catch (_) {}
+    return state;
   }
 
   Future<void> refresh() async {
     final user = ref.read(authStateProvider).value;
     if (user == null) {
+      _cancelTimers();
       state = Entitlement.free(source: EntitlementSource.offlineCache);
       return;
     }
 
+    await TrustedTimeHelper.init(user.uid);
     await _loadCachedSnapshotOrKeep();
 
     try {
+      final client = ref.read(supabaseClientProvider);
+      await TrustedTimeHelper.syncFromServer(client, user.uid);
+
       final sub = await ref.read(subscriptionRepositoryProvider).getSubscription(user.uid);
-      await _updateFromSubscription(sub ?? Subscription.free(user.uid));
+      await _updateFromSubscription(sub ?? Subscription.free(user.uid), isFromRemote: true);
     } catch (_) {
       await _loadCachedSnapshotOrKeep();
     }
   }
 
-  Future<void> _updateFromSubscription(Subscription? sub) async {
+  Future<void> _updateFromSubscription(Subscription? sub, {bool isFromRemote = false}) async {
     final user = ref.read(authStateProvider).value;
     final uid = user?.uid;
+    final nowServerUtc = TrustedTimeHelper.nowUtc();
 
-    if (sub == null || !sub.isPremium) {
+    if (sub == null || !sub.isPremiumAt(nowServerUtc)) {
       final freeEntitlement = Entitlement.free(source: EntitlementSource.play);
       state = freeEntitlement;
-      if (uid != null) {
+      if (uid != null && isFromRemote) {
         final map = freeEntitlement.toMap();
-        map['last_verified_at'] = DateTime.now().toUtc().toIso8601String();
-        map['cached_at'] = DateTime.now().toUtc().toIso8601String();
+        map['last_verified_at'] = nowServerUtc.toIso8601String();
+        map['cached_at'] = nowServerUtc.toIso8601String();
         await LocalDatabase.setMetadata(uid, 'cached_entitlement', map);
       }
+      _scheduleTimers();
       return;
     }
 
@@ -285,12 +330,13 @@ class EntitlementNotifier extends Notifier<Entitlement> {
     );
 
     state = premiumEntitlement;
-    if (uid != null) {
+    if (uid != null && isFromRemote) {
       final map = premiumEntitlement.toMap();
-      map['last_verified_at'] = DateTime.now().toUtc().toIso8601String();
-      map['cached_at'] = DateTime.now().toUtc().toIso8601String();
+      map['last_verified_at'] = nowServerUtc.toIso8601String();
+      map['cached_at'] = nowServerUtc.toIso8601String();
       await LocalDatabase.setMetadata(uid, 'cached_entitlement', map);
     }
+    _scheduleTimers();
   }
 
   Future<void> _loadCachedSnapshotOrKeep() async {
@@ -300,25 +346,14 @@ class EntitlementNotifier extends Notifier<Entitlement> {
     try {
       final rawMap = await LocalDatabase.getMetadata(user.uid, 'cached_entitlement');
       if (rawMap != null && rawMap is Map) {
-        final timeInfo = await TrustedTimeHelper.getSavedTimeInfo(user.uid);
-        final currentTrustedUtc = TrustedTimeHelper.nowUtc(
-          offsetMs: timeInfo.offsetMs,
-          lastTrusted: timeInfo.lastTrusted,
-        );
+        final currentTrustedUtc = TrustedTimeHelper.nowUtc();
 
         final evaluated = EntitlementEvaluator.evaluateSnapshot(
           rawSnapshot: Map<String, dynamic>.from(rawMap),
           currentTrustedUtc: currentTrustedUtc,
         );
         state = evaluated;
-      }
-    } catch (e) {
-      debugPrint('Entitlement snapshot read error: $e');
-    }
-  }
-          }
-        }
-        state = cached;
+        _scheduleTimers();
       }
     } catch (e) {
       debugPrint('Entitlement snapshot read error: $e');
@@ -350,12 +385,3 @@ class GatewayNotifier extends Notifier<GatewayState> {
 }
 
 final gatewayStateProvider = NotifierProvider<GatewayNotifier, GatewayState>(GatewayNotifier.new);
-
-final dailyTransactionCountProvider = FutureProvider<int>((ref) async {
-  final repo = ref.watch(transactionRepositoryProvider);
-  final all = await repo.getAllTransactions();
-  final now = DateTime.now();
-  return all.where((t) {
-    return TrustedTimeHelper.isSameJakartaDay(t.createdAt, now);
-  }).length;
-});

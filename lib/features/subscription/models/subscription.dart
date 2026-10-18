@@ -26,7 +26,7 @@ enum SubscriptionStatus {
   active,
   canceled,
   grace,
-  on_hold,
+  onHold,
   paused,
   expired,
   none;
@@ -36,6 +36,7 @@ enum SubscriptionStatus {
     final val = value.toLowerCase().trim();
     if (val == 'trial') return SubscriptionStatus.active;
     if (val == 'pending') return SubscriptionStatus.none;
+    if (val == 'on_hold' || val == 'onhold') return SubscriptionStatus.onHold;
     return SubscriptionStatus.values.firstWhere(
       (e) => e.name == val,
       orElse: () => SubscriptionStatus.none,
@@ -69,7 +70,9 @@ class Subscription {
     this.isTrial = false,
   });
 
-  bool isPremium([DateTime? nowUtc]) {
+  bool get isPremium => isPremiumAt(DateTime.now().toUtc());
+
+  bool isPremiumAt(DateTime nowUtc) {
     if (isBypassed) {
       return true;
     }
@@ -82,7 +85,7 @@ class Subscription {
       return false;
     }
 
-    final now = nowUtc ?? DateTime.now().toUtc();
+    final now = nowUtc.toUtc();
     if (gracePeriodEndsAt != null && gracePeriodEndsAt!.toUtc().isBefore(now)) {
       return false;
     }
@@ -95,28 +98,34 @@ class Subscription {
     return true;
   }
 
-  bool get isGracePeriod {
+  bool isGracePeriodAt(DateTime nowUtc) {
     if (planType == PlanType.free || expiresAt == null) return false;
-    final now = DateTime.now();
-    return now.isAfter(expiresAt!) &&
-        (gracePeriodEndsAt == null || now.isBefore(gracePeriodEndsAt!));
+    final now = nowUtc.toUtc();
+    return now.isAfter(expiresAt!.toUtc()) &&
+        (gracePeriodEndsAt == null || now.isBefore(gracePeriodEndsAt!.toUtc()));
   }
 
-  int get daysRemaining {
+  bool get isGracePeriod => isGracePeriodAt(DateTime.now().toUtc());
+
+  int daysRemainingAt(DateTime nowUtc) {
     if (expiresAt == null) return 0;
-    final diff = expiresAt!.difference(DateTime.now()).inDays;
+    final diff = expiresAt!.toUtc().difference(nowUtc.toUtc()).inDays;
     return diff < 0 ? 0 : diff;
   }
+
+  int get daysRemaining => daysRemainingAt(DateTime.now().toUtc());
 
   int get daysActive {
     return DateTime.now().difference(createdAt).inDays;
   }
 
-  bool get isNearExpiry {
+  bool isNearExpiryAt(DateTime nowUtc) {
     if (isBypassed) return false;
-    final remaining = daysRemaining;
-    return isPremium && remaining <= 5;
+    final remaining = daysRemainingAt(nowUtc);
+    return isPremiumAt(nowUtc) && remaining <= 5;
   }
+
+  bool get isNearExpiry => isNearExpiryAt(DateTime.now().toUtc());
 
   factory Subscription.free(String userId) {
     return Subscription(
@@ -157,7 +166,7 @@ class Subscription {
     return {
       'user_id': userId,
       'plan_type': planType.name,
-      'status': status.name,
+      'status': status == SubscriptionStatus.onHold ? 'on_hold' : status.name,
       'expires_at': expiresAt?.toIso8601String(),
       'updated_at': DateTime.now().toIso8601String(),
       'last_external_id': lastExternalId,

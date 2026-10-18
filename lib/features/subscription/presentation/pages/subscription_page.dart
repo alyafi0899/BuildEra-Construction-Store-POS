@@ -10,6 +10,7 @@ import '../../providers/subscription_provider.dart';
 import '../../services/play_billing_service.dart';
 import '../widgets/subscription_agreement_dialog.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../core/utils/trusted_time_helper.dart';
 import 'payment_gateway_page.dart';
 
 class SubscriptionPage extends ConsumerStatefulWidget {
@@ -72,15 +73,15 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (sub != null && sub.isNearExpiry) _buildExpiryWarning(sub),
+                if (sub != null && sub.isNearExpiryAt(TrustedTimeHelper.nowUtc())) _buildExpiryWarning(sub),
                 _buildStatusCard(context, sub),
                 const SizedBox(height: 24),
                 if (_isAndroid) _buildGooglePlayHeaderBanner(),
                 const SizedBox(height: 32),
-                if (!(sub?.isPremium ?? false) ||
+                if (!(sub?.isPremiumAt(TrustedTimeHelper.nowUtc()) ?? false) ||
                     (sub?.isBypassed != true &&
                         sub?.expiresAt != null &&
-                        sub!.expiresAt!.isBefore(DateTime.now())))
+                        sub!.expiresAt!.toUtc().isBefore(TrustedTimeHelper.nowUtc())))
                   PricingSection(
                     onUpgrade: (plan) => _handleUpgrade(context, ref, plan),
                     currentSub: sub,
@@ -265,7 +266,10 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
   }
 
   Widget _buildStatusCard(BuildContext context, dynamic sub) {
-    final isPremium = sub?.isPremium ?? false;
+    final nowUtc = TrustedTimeHelper.nowUtc();
+    final isPremium = sub is Subscription
+        ? sub.isPremiumAt(nowUtc)
+        : (sub?.isPremium ?? false);
     final statusText = isPremium
         ? 'AKTIF'
         : (sub?.status.toString().split('.').last.toUpperCase() ?? 'FREE');
@@ -548,7 +552,7 @@ class _PricingSectionState extends ConsumerState<PricingSection> {
   @override
   Widget build(BuildContext context) {
     final isAlreadyYearly = widget.currentSub?.planType == PlanType.yearly &&
-        widget.currentSub?.isPremium == true;
+        widget.currentSub?.isPremiumAt(TrustedTimeHelper.nowUtc()) == true;
 
     final productsAsync = _isAndroid ? ref.watch(playBillingProductsProvider) : null;
 

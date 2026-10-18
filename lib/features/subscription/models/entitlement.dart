@@ -13,6 +13,7 @@ class Entitlement {
   final int? maxTransactionsPerDay; // null = unlimited
   final Set<PremiumFeature> unlockedFeatures;
   final bool isTrial;
+  final bool isResolved;
 
   const Entitlement({
     required this.tier,
@@ -22,6 +23,7 @@ class Entitlement {
     this.maxTransactionsPerDay,
     required this.unlockedFeatures,
     this.isTrial = false,
+    this.isResolved = true,
   });
 
   bool get isPremium => tier == EntitlementTier.premium;
@@ -32,8 +34,21 @@ class Entitlement {
     return unlockedFeatures.contains(feature);
   }
 
+  factory Entitlement.unresolved() {
+    return Entitlement(
+      tier: EntitlementTier.free,
+      source: EntitlementSource.offlineCache,
+      maxItemsPerTransaction: EntitlementConfig.freeMaxItemsPerTransaction,
+      maxTransactionsPerDay: EntitlementConfig.freeMaxTransactionsPerDay,
+      unlockedFeatures: const {},
+      isTrial: false,
+      isResolved: false,
+    );
+  }
+
   factory Entitlement.free({
     EntitlementSource source = EntitlementSource.offlineCache,
+    bool isResolved = true,
   }) {
     return Entitlement(
       tier: EntitlementTier.free,
@@ -42,6 +57,7 @@ class Entitlement {
       maxTransactionsPerDay: EntitlementConfig.freeMaxTransactionsPerDay,
       unlockedFeatures: const {},
       isTrial: false,
+      isResolved: isResolved,
     );
   }
 
@@ -49,6 +65,7 @@ class Entitlement {
     EntitlementSource source = EntitlementSource.play,
     DateTime? validUntil,
     bool isTrial = false,
+    bool isResolved = true,
   }) {
     return Entitlement(
       tier: EntitlementTier.premium,
@@ -58,6 +75,7 @@ class Entitlement {
       maxTransactionsPerDay: null,
       unlockedFeatures: PremiumFeature.values.toSet(),
       isTrial: isTrial,
+      isResolved: isResolved,
     );
   }
 
@@ -73,7 +91,7 @@ class Entitlement {
     };
   }
 
-  factory Entitlement.fromMap(Map<String, dynamic> map) {
+  factory Entitlement.fromMap(Map<String, dynamic> map, {bool isResolved = true}) {
     final tier = EntitlementTier.values.byName(map['tier'] as String? ?? 'free');
     final source = EntitlementSource.values.byName(map['source'] as String? ?? 'offlineCache');
     final validUntilStr = map['valid_until'] as String?;
@@ -87,6 +105,7 @@ class Entitlement {
         source: source,
         validUntil: validUntil,
         isTrial: isTrial,
+        isResolved: isResolved,
       );
     }
 
@@ -98,6 +117,7 @@ class Entitlement {
       maxTransactionsPerDay: maxTrans ?? EntitlementConfig.freeMaxTransactionsPerDay,
       unlockedFeatures: {},
       isTrial: false,
+      isResolved: isResolved,
     );
   }
 }

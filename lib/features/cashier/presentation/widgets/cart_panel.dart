@@ -671,18 +671,14 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
                       onPressed: (isEmpty || error != null)
                           ? null
                           : () async {
-                              final uid = ref.read(authStateProvider).value?.uid ?? '';
+                              final resolvedEntitlement = await ref.read(entitlementProvider.notifier).ensureResolved();
                               final repo = ref.read(transactionRepositoryProvider);
                               final allTransactions = await repo.getAllTransactions();
-                              final timeInfo = await TrustedTimeHelper.getSavedTimeInfo(uid);
-                              final currentJakartaTime = TrustedTimeHelper.getTrustedJakartaTime(
-                                offsetMs: timeInfo.offsetMs,
-                                lastTrusted: timeInfo.lastTrusted,
-                              );
+                              final currentJakartaTime = TrustedTimeHelper.nowJakarta();
 
                               final check = CheckoutPolicy.canCheckout(
                                 cart: cart,
-                                entitlement: entitlement,
+                                entitlement: resolvedEntitlement,
                                 todayTransactions: allTransactions,
                                 currentJakartaTime: currentJakartaTime,
                               );

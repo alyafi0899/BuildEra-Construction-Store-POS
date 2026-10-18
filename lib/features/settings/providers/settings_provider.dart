@@ -204,15 +204,7 @@ class SettingsNotifier extends Notifier<StoreSettings> {
     final user = ref.read(authStateProvider).value;
     if (user == null) return;
     _initializedUid = user.uid;
-    try {
-      final res = await _supabase.rpc('get_server_time');
-      if (res != null) {
-        final serverTime = DateTime.tryParse(res.toString());
-        if (serverTime != null) {
-          await TrustedTimeHelper.saveTrustedTime(user.uid, serverTime);
-        }
-      }
-    } catch (_) {}
+    await TrustedTimeHelper.syncFromServer(_supabase, user.uid);
     await _loadSettings(user.uid);
   }
 

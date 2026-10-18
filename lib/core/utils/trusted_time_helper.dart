@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../sync/services/local_database.dart';
 import '../../features/subscription/config/entitlement_config.dart';
 
@@ -6,88 +7,102 @@ class TrustedTimeHelper {
   static const String _timeMetaKey = 'last_trusted_timestamp';
   static const String _offsetMetaKey = 'server_time_offset_ms';
 
-  static DateTime? _anchorServerUtc;
-  static DateTime? _anchorDeviceUtc;
-  static Stopwatch? _stopwatch;
+  static int _cachedOffsetMs = 0;
+  static DateTime? _lastTrustedUtc;
+  static DateTime? _maxSeenUtc;
+  static bool _isInitialized = false;
 
-  /// Returns trusted UTC DateTime
-  static DateTime nowUtc({int? offsetMs, DateTime? lastTrusted}) {
-    final deviceNowUtc = DateTime.now().toUtc();
-    final effectiveOffset = offsetMs ?? 0;
+  /// Loads saved offset and last trusted timestamp from Hive into in-memory state.
+  static Future<void> init(String uid) async {
+    try {
+      final offsetRaw = await LocalDatabase.getMetadata(uid, _offsetMetaKey);
+      _cachedOffsetMs = offsetRaw is int ? offsetRaw : 0;
 
-    // 1. Check for forward clock jump via Stopwatch
-    if (_anchorServerUtc != null && _anchorDeviceUtc != null && _stopwatch != null) {
-      final deviceDiff = deviceNowUtc.difference(_anchorDeviceUtc!);
-      final stopwatchDiff = _stopwatch!.elapsed;
+      final lastTrustedRaw = await LocalDatabase.getMetadata(uid, _timeMetaKey);
+      _lastTrustedUtc = lastTrustedRaw is String ? DateTime.tryParse(lastTrustedRaw)?.toUtc() : null;
+      _maxSeenUtc = _lastTrustedUtc;
+      _isInitialized = true;
+    } catch (_) {
+      _cachedOffsetMs = 0;
+      _isInitialized = true;
+    }
+  }
 
-      if ((deviceDiff - stopwatchDiff).abs() > EntitlementConfig.maxAllowedClockTamperDrift) {
-        debugPrint('TrustedTimeHelper: Clock manipulation detected via Stopwatch! Using anchor + stopwatch.');
-        return _anchorServerUtc!.add(_stopwatch!.elapsed);
+  /// Returns trusted UTC DateTime based on cached server offset and monotonic clamp.
+  ///
+  /// Note on Stopwatch and Sleep:
+  /// Dart's Stopwatch does NOT advance while the device is sleeping on OS level
+  /// (e.g. Android/iOS deep sleep), which causes false positive clock manipulation
+  /// triggers if compared against wall time after wake-up.
+  /// Therefore, on app resume, a server resync is triggered. When offline or between
+  /// syncs, we apply a monotonic maxSeenDeviceUtc clamp guard so the trusted clock
+  /// never moves backwards due to user device clock manipulation/rollback.
+  static DateTime nowUtc() {
+    final rawDeviceUtc = DateTime.now().toUtc();
+    var calculated = rawDeviceUtc.add(Duration(milliseconds: _cachedOffsetMs));
+
+    if (_lastTrustedUtc != null && calculated.isBefore(_lastTrustedUtc!)) {
+      calculated = _lastTrustedUtc!;
+    }
+
+    if (_maxSeenUtc != null) {
+      if (calculated.isBefore(_maxSeenUtc!)) {
+        calculated = _maxSeenUtc!;
+      } else {
+        _maxSeenUtc = calculated;
       }
+    } else {
+      _maxSeenUtc = calculated;
     }
 
-    var trustedUtc = deviceNowUtc.add(Duration(milliseconds: effectiveOffset));
-
-    // 2. Check for backward clock rollback
-    if (lastTrusted != null && trustedUtc.isBefore(lastTrusted)) {
-      debugPrint('TrustedTimeHelper: Backward clock rollback detected! Using last trusted time.');
-      trustedUtc = lastTrusted;
-    }
-
-    return trustedUtc;
+    return calculated;
   }
 
-  /// Returns trusted Asia/Jakarta DateTime (UTC + 7) ONLY for daily transaction quota day rollover
-  static DateTime nowJakarta({int? offsetMs, DateTime? lastTrusted}) {
-    return nowUtc(offsetMs: offsetMs, lastTrusted: lastTrusted).add(EntitlementConfig.asiaJakartaOffset);
+  /// Returns trusted Asia/Jakarta DateTime (UTC + 7) ONLY for daily transaction quota day rollover.
+  static DateTime nowJakarta() {
+    return nowUtc().add(EntitlementConfig.asiaJakartaOffset);
   }
 
-  /// Deprecated alias for nowJakarta
-  static DateTime getTrustedJakartaTime({int? offsetMs, DateTime? lastTrusted}) {
-    return nowJakarta(offsetMs: offsetMs, lastTrusted: lastTrusted);
-  }
-
-  /// Persists current trusted server time and offset to Hive metadata box
+  /// Persists current trusted server time and offset to Hive metadata box and in-memory cache
   static Future<void> saveTrustedTime(String uid, DateTime serverTime) async {
+    final serverUtc = serverTime.toUtc();
     final localNowUtc = DateTime.now().toUtc();
-    final offsetMs = serverTime.toUtc().difference(localNowUtc).inMilliseconds;
+    final offsetMs = serverUtc.difference(localNowUtc).inMilliseconds;
 
-    _anchorServerUtc = serverTime.toUtc();
-    _anchorDeviceUtc = localNowUtc;
-    _stopwatch = Stopwatch()..start();
+    _cachedOffsetMs = offsetMs;
+    _lastTrustedUtc = serverUtc;
+    if (_maxSeenUtc == null || serverUtc.isAfter(_maxSeenUtc!)) {
+      _maxSeenUtc = serverUtc;
+    }
+    _isInitialized = true;
 
     await LocalDatabase.setMetadata(uid, _offsetMetaKey, offsetMs);
-    await LocalDatabase.setMetadata(uid, _timeMetaKey, serverTime.toUtc().toIso8601String());
+    await LocalDatabase.setMetadata(uid, _timeMetaKey, serverUtc.toIso8601String());
   }
 
   /// Fetches get_server_time RPC from Supabase and saves trusted time anchor
-  static Future<void> syncFromServer(SupabaseClient client, String uid) async {
+  static Future<DateTime?> syncFromServer(SupabaseClient client, String uid) async {
     try {
       final res = await client.rpc('get_server_time');
       if (res != null) {
-        final serverTime = DateTime.tryParse(res.toString());
+        final serverTime = DateTime.tryParse(res.toString())?.toUtc();
         if (serverTime != null) {
           await saveTrustedTime(uid, serverTime);
+          return serverTime;
         }
       }
     } catch (e) {
       debugPrint('TrustedTimeHelper syncFromServer notice (offline/failed): $e');
     }
+    return null;
   }
 
   /// Retrieves saved offset and last trusted timestamp from Hive metadata
   static Future<({int offsetMs, DateTime? lastTrusted})> getSavedTimeInfo(String uid) async {
-    try {
-      final offsetRaw = await LocalDatabase.getMetadata(uid, _offsetMetaKey);
-      final offsetMs = offsetRaw is int ? offsetRaw : 0;
-
-      final lastTrustedRaw = await LocalDatabase.getMetadata(uid, _timeMetaKey);
-      final lastTrusted = lastTrustedRaw is String ? DateTime.tryParse(lastTrustedRaw) : null;
-
-      return (offsetMs: offsetMs, lastTrusted: lastTrusted);
-    } catch (_) {
-      return (offsetMs: 0, lastTrusted: null);
+    if (!_isInitialized) {
+      await init(uid);
     }
+    return (offsetMs: _cachedOffsetMs, lastTrusted: _lastTrustedUtc);
   }
 
   /// Checks if two Jakarta DateTime objects fall on the same day in Asia/Jakarta

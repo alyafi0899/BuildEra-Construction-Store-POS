@@ -163,13 +163,9 @@ class TransactionRepository {
     String? cashierName,
     String? notes,
   }) async {
-    final entitlement = _ref.read(entitlementProvider);
+    final entitlement = await _ref.read(entitlementProvider.notifier).ensureResolved();
     final allTransactions = await getAllTransactions();
-    final timeInfo = await TrustedTimeHelper.getSavedTimeInfo(_uid);
-    final currentJakartaTime = TrustedTimeHelper.nowJakarta(
-      offsetMs: timeInfo.offsetMs,
-      lastTrusted: timeInfo.lastTrusted,
-    );
+    final currentJakartaTime = TrustedTimeHelper.nowJakarta();
 
     final policyResult = CheckoutPolicy.canCheckout(
       cart: cart,
