@@ -246,9 +246,9 @@ class PlayBillingService {
         }
         return false;
       } catch (e) {
-        final errStr = e.toString().toLowerCase();
-        // Permanent client 4xx errors (bound to another user, forbidden, bad request) -> do not retry
-        if (errStr.contains('bound to another user') || errStr.contains('403') || errStr.contains('409') || errStr.contains('400')) {
+        final isPermanent = e is PlayVerifyException &&
+            (e.statusCode == 400 || e.statusCode == 403 || e.statusCode == 409);
+        if (isPermanent || e.toString().contains('Pembelian ini terikat ke akun toko lain') || e.toString().contains('Pembelian tidak dapat diverifikasi')) {
           rethrow;
         }
 

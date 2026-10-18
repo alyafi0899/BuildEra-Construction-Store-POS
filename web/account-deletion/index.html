@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hapus Akun - BuildEra</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --surface: #111827;
+        --surface-alt: #1f2937;
+        --text: #e5e7eb;
+        --muted: #9ca3af;
+        --accent: #60a5fa;
+        --danger: #f87171;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Arial, Helvetica, sans-serif;
+        background: linear-gradient(135deg, var(--bg), #111827 45%, #0f172a);
+        color: var(--text);
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 32px 16px;
+      }
+      .card {
+        width: min(760px, 100%);
+        background: rgba(17, 24, 39, 0.96);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 18px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+        padding: 32px;
+      }
+      h1 { margin: 0 0 16px; font-size: clamp(2rem, 3vw, 2.6rem); }
+      p, li { color: var(--muted); line-height: 1.7; }
+      .badge {
+        display: inline-block;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: rgba(96,165,250,0.12);
+        color: var(--accent);
+        font-weight: 700;
+        margin-bottom: 16px;
+      }
+      .cta {
+        display: inline-block;
+        margin-top: 8px;
+        background: var(--danger);
+        color: white;
+        text-decoration: none;
+        font-weight: 700;
+        padding: 12px 18px;
+        border-radius: 10px;
+      }
+      .meta {
+        margin-top: 22px;
+        border-top: 1px solid rgba(148,163,184,0.2);
+        padding-top: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="badge">Account Deletion</div>
+      <h1>Hapus Akun BuildEra</h1>
+      <p>
+        Anda dapat meminta penghapusan data akun secara permanen dari BuildEra.
+      </p>
+      <ol>
+        <li>Kirimi email ke <strong>wenyafi@gmail.com</strong> dengan subjek: <strong>Permintaan Hapus Akun BuildEra</strong>.</li>
+        <li>Masukkan alamat email akun yang terdaftar, nama toko atau pengguna, serta tanggal request terakhi.</li>
+        <li>Tim kami akan memproses permintaan dalam <strong>30 hari kerja</strong> sesuai kebijakan data.</li>
+      </ol>
+      <p>
+        Penghapusan akun mencakup data profil, riwayat transaksi, data operasional toko, catatan langganan, dan metadata terkait yang tersimpan di sistem kami.
+      </p>
+      <a class="cta" href="mailto:wenyafi@gmail.com?subject=Permintaan%20Hapus%20Akun%20BuildEra">Kirim Permintaan Hapus Akun</a>
+      <div class="meta">
+        <p>Untuk kebutuhan dukungan lain, silakan hubungi support email yang sama.</p>
+      </div>
+    </main>
+  </body>
+</html>

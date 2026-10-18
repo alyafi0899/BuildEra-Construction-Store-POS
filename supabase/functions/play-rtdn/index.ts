@@ -57,11 +57,24 @@ async function validatePlayPubSubRequest(req: Request): Promise<boolean> {
   }
 }
 
-export async function handleRtdn(req: Request): Promise<Response> {
+export async function handleRtdn(
+  req: Request,
+  deps: {
+    supabase?: any;
+    google?: {
+      getAccessToken?: (saJson: string) => Promise<string>;
+      getSubscriptionV2?: (args: { packageName: string; token: string; accessToken: string }) => Promise<any>;
+      acknowledge?: (args: { packageName: string; subscriptionId: string; token: string; accessToken: string }) => Promise<boolean>;
+    };
+    now?: () => Date;
+    env?: Record<string, string | undefined>;
+  } = {}
+): Promise<Response> {
   try {
     const url = new URL(req.url);
     const token = url.searchParams.get("token") ?? "";
-    const rtdnToken = Deno.env.get("PLAY_RTDN_TOKEN") ?? "";
+    const env = deps.env ?? Deno.env.toObject();
+    const rtdnToken = env.PLAY_RTDN_TOKEN ?? "";
 
     if (!rtdnToken || !constantTimeEqual(token, rtdnToken)) {
       return new Response(JSON.stringify({ error: "Unauthorized token" }), {
@@ -86,7 +99,7 @@ export async function handleRtdn(req: Request): Promise<Response> {
     const decodedStr = atob(body.message.data);
     const notification = JSON.parse(decodedStr);
 
-    const packageName = Deno.env.get("ANDROID_PACKAGE_NAME") ?? "";
+    const packageName = env.ANDROID_PACKAGE_NAME ?? "";
     if (notification.packageName && notification.packageName !== packageName) {
       return new Response(JSON.stringify({ ok: true, note: "Package name mismatch ignored" }), { status: 200 });
     }
@@ -101,15 +114,16 @@ export async function handleRtdn(req: Request): Promise<Response> {
     }
 
     const purchaseToken = subNotif.purchaseToken;
-    const saJson = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_JSON") ?? "";
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-    const accessToken = await getGoogleAccessToken(saJson);
+    const saJson = env.GOOGLE_SERVICE_ACCOUNT_JSON ?? "";
+    const supabaseUrl = env.SUPABASE_URL ?? "";
+    const supabaseServiceKey = env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+    const supabaseAdmin = deps.supabase ?? createClient(supabaseUrl, supabaseServiceKey);
+    const google = deps.google ?? { getAccessToken: getGoogleAccessToken, getSubscriptionV2, acknowledge: acknowledgeSubscription };
+    const accessToken = await google.getAccessToken!(saJson);
 
     let playSub;
     try {
-      playSub = await getSubscriptionV2({
+      playSub = await google.getSubscriptionV2!({
         packageName,
         token: purchaseToken,
         accessToken,
@@ -149,7 +163,7 @@ export async function handleRtdn(req: Request): Promise<Response> {
 
     if (state === "SUBSCRIPTION_STATE_PENDING_PURCHASE_CANCELED" && playSub.linkedPurchaseToken) {
       try {
-        const linkedSub = await getSubscriptionV2({
+        const linkedSub = await google.getSubscriptionV2!({
           packageName,
           token: playSub.linkedPurchaseToken,
           accessToken,
@@ -236,6 +250,25 @@ export async function handleRtdn(req: Request): Promise<Response> {
       }
       console.error("RTDN RPC Error:", applyError.message);
       return new Response(JSON.stringify({ error: "Database apply error" }), { status: 500 });
+    }
+
+    if (
+      (boundUser.via?.includes("expiredExternalAccountIdentifiers") ||
+        boundUser.via?.includes("expiredPurchaseToken") ||
+        boundUser.via?.startsWith("play_purchases:")) &&
+      ackState === "ACKNOWLEDGEMENT_STATE_PENDING" &&
+      ["active", "grace"].includes(mappedStatus)
+    ) {
+      try {
+        await google.acknowledge!({
+          packageName,
+          subscriptionId: productId,
+          token: purchaseToken,
+          accessToken,
+        });
+      } catch (ackErr) {
+        console.warn("RTDN acknowledge after bound-user sync failed:", ackErr);
+      }
     }
 
     return new Response(JSON.stringify({ ok: true, synced: true }), { status: 200 });

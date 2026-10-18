@@ -24,7 +24,19 @@ const corsHeaders = {
 
 const VALID_PRODUCT_IDS = new Set(["buildera_monthly", "buildera_yearly"]);
 
-export async function handleVerify(req: Request): Promise<Response> {
+export async function handleVerify(
+  req: Request,
+  deps: {
+    supabase?: any;
+    google?: {
+      getAccessToken?: (saJson: string) => Promise<string>;
+      getSubscriptionV2?: (args: { packageName: string; token: string; accessToken: string }) => Promise<any>;
+      acknowledge?: (args: { packageName: string; subscriptionId: string; token: string; accessToken: string }) => Promise<boolean>;
+    };
+    now?: () => Date;
+    env?: Record<string, string | undefined>;
+  } = {}
+): Promise<Response> {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -38,10 +50,11 @@ export async function handleVerify(req: Request): Promise<Response> {
       });
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-    const saJson = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_JSON") ?? "";
-    const packageName = Deno.env.get("ANDROID_PACKAGE_NAME") ?? "";
+    const env = deps.env ?? Deno.env.toObject();
+    const supabaseUrl = env.SUPABASE_URL ?? "";
+    const supabaseServiceKey = env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+    const saJson = env.GOOGLE_SERVICE_ACCOUNT_JSON ?? "";
+    const packageName = env.ANDROID_PACKAGE_NAME ?? "";
 
     if (!saJson || !packageName) {
       return new Response(
@@ -50,7 +63,7 @@ export async function handleVerify(req: Request): Promise<Response> {
       );
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    const supabaseAdmin = deps.supabase ?? createClient(supabaseUrl, supabaseServiceKey);
 
     const token = authHeader.replace(/^Bearer\s+/i, "");
     const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
@@ -86,8 +99,9 @@ export async function handleVerify(req: Request): Promise<Response> {
       );
     }
 
-    const accessToken = await getGoogleAccessToken(saJson);
-    const playSub = await getSubscriptionV2({
+    const google = deps.google ?? { getAccessToken: getGoogleAccessToken, getSubscriptionV2, acknowledge: acknowledgeSubscription };
+    const accessToken = await google.getAccessToken!(saJson);
+    const playSub = await google.getSubscriptionV2!({
       packageName,
       token: purchaseToken,
       accessToken,
@@ -132,7 +146,7 @@ export async function handleVerify(req: Request): Promise<Response> {
 
     if (state === "SUBSCRIPTION_STATE_PENDING_PURCHASE_CANCELED" && playSub.linkedPurchaseToken) {
       try {
-        const linkedSub = await getSubscriptionV2({
+        const linkedSub = await google.getSubscriptionV2!({
           packageName,
           token: playSub.linkedPurchaseToken,
           accessToken,
@@ -230,12 +244,13 @@ export async function handleVerify(req: Request): Promise<Response> {
     }
 
     if (
-      (boundUser.via === "expiredExternalAccountIdentifiers" ||
+      (boundUser.via?.includes("expiredExternalAccountIdentifiers") ||
+        boundUser.via?.includes("expiredPurchaseToken") ||
         boundUser.via?.startsWith("play_purchases:")) &&
       playSub.acknowledgementState === "ACKNOWLEDGEMENT_STATE_PENDING"
     ) {
       try {
-        await acknowledgeSubscription({
+        await google.acknowledge!({
           packageName,
           subscriptionId: productId,
           token: purchaseToken,

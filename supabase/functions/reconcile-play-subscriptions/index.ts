@@ -97,6 +97,7 @@ export async function handleReconcile(req: Request): Promise<Response> {
     let skipped = 0;
     let acknowledged = 0;
     let consecutiveGoogleFailures = 0;
+    let lastGoogleFailure: { status?: number; reason?: string } | null = null;
 
     for (const item of targets) {
       try {
@@ -107,9 +108,12 @@ export async function handleReconcile(req: Request): Promise<Response> {
             token: item.purchase_token,
             accessToken,
           });
+          consecutiveGoogleFailures = 0;
+          lastGoogleFailure = null;
         } catch (err) {
           if (err instanceof GooglePlayApiError) {
             const reason = err.reason ?? "unknown";
+            lastGoogleFailure = { status: err.status, reason };
 
             if (err.status === 410 && (reason === "purchaseTokenNoLongerValid" || reason === "subscriptionNoLongerAvailable")) {
               skipped++;
@@ -140,12 +144,6 @@ export async function handleReconcile(req: Request): Promise<Response> {
               failed++;
               consecutiveGoogleFailures++;
               console.error("Reconcile transient Google Play error:", reason);
-              if (consecutiveGoogleFailures >= 5) {
-                return new Response(
-                  JSON.stringify({ error: "Periksa konfigurasi Google (package name / izin service account)" }),
-                  { status: 500, headers: { "Content-Type": "application/json" } }
-                );
-              }
               continue;
             }
           }

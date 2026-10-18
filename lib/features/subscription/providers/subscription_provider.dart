@@ -61,28 +61,12 @@ class PlayBillingBootstrapNotifier extends Notifier<void> {
       } catch (_) {
         // fail silently; initialization should never block POS startup
       }
-    });
+    }, fireImmediately: true);
   }
 }
 
 final playBillingProductsProvider = FutureProvider<List<ProductDetails>>((ref) async {
   final service = ref.watch(playBillingServiceProvider);
-  final user = ref.watch(authStateProvider).value;
-  if (user != null) {
-    try {
-      await service.initialize(
-        userId: user.uid,
-        onSubscriptionUpdated: () {
-          ref.read(subscriptionStateProvider.notifier).refresh();
-        },
-        onError: (error) {
-          debugPrint('Play Billing error notice: $error');
-        },
-      );
-    } catch (e) {
-      debugPrint('Play Billing background init notice (failing silently): $e');
-    }
-  }
   return service.products;
 });
 

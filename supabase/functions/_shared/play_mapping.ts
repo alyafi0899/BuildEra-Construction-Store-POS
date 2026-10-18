@@ -19,6 +19,15 @@ export function mapSubscriptionState(state?: string): string {
   }
 }
 
+export const BindingVia = {
+  externalAccountIdentifiers: "externalAccountIdentifiers",
+  expiredExternalAccountIdentifiers: "outOfAppPurchaseContext.expiredExternalAccountIdentifiers",
+  expiredPurchaseToken: "outOfAppPurchaseContext.expiredPurchaseToken",
+  purchaseToken: "purchaseToken",
+  linkedPurchaseToken: "linkedPurchaseToken",
+  playPurchases: "play_purchases",
+} as const;
+
 export function pickLineItem(playSub: any, productId?: string): any | null {
   const lineItems = Array.isArray(playSub?.lineItems) ? playSub.lineItems : [];
   const productKey = productId ?? playSub?.productId;
@@ -73,25 +82,32 @@ export async function resolveBoundUser(
   supabase?: { from: (table: string) => any }
 ): Promise<{ userId: string | null; via: string | null }> {
   const tokenCandidates = [
-    { token: playSub?.purchaseToken, via: "purchaseToken" },
-    { token: playSub?.outOfAppPurchaseContext?.expiredPurchaseToken, via: "outOfAppPurchaseContext.expiredPurchaseToken" },
-    { token: playSub?.linkedPurchaseToken, via: "linkedPurchaseToken" },
+    { token: playSub?.purchaseToken, via: BindingVia.purchaseToken },
+    { token: playSub?.outOfAppPurchaseContext?.expiredPurchaseToken, via: BindingVia.expiredPurchaseToken },
+    { token: playSub?.linkedPurchaseToken, via: BindingVia.linkedPurchaseToken },
   ].filter(({ token }) => typeof token === "string" && token.length > 0);
 
   const directIdCandidates = [
     {
       id: playSub?.externalAccountIdentifiers?.obfuscatedExternalAccountId,
-      via: "externalAccountIdentifiers",
+      via: BindingVia.externalAccountIdentifiers,
     },
     {
       id: playSub?.outOfAppPurchaseContext?.expiredExternalAccountIdentifiers?.obfuscatedExternalAccountId,
-      via: "outOfAppPurchaseContext.expiredExternalAccountIdentifiers",
+      via: BindingVia.expiredExternalAccountIdentifiers,
     },
   ].filter(({ id }) => typeof id === "string" && id.length > 0);
 
   for (const candidate of directIdCandidates) {
-    if (!jwtUserId || candidate.id === jwtUserId) {
-      return { userId: candidate.id, via: candidate.via };
+    const userId = candidate.id;
+    if (!jwtUserId || userId === jwtUserId) {
+      if (supabase && jwtUserId === null) {
+        const { data: authUser } = await supabase.from("auth.users").select("id").eq("id", userId).maybeSingle();
+        if (!authUser?.id) {
+          return { userId: null, via: null };
+        }
+      }
+      return { userId, via: candidate.via };
     }
   }
 
@@ -104,12 +120,24 @@ export async function resolveBoundUser(
         .maybeSingle();
 
       if (error) {
-        console.warn(`resolveBoundUser lookup failed for ${candidate.token}:`, error.message ?? error);
+        const prefix = candidate.token.slice(0, 8);
+        console.warn(`resolveBoundUser lookup failed for ${prefix}…:`, error.message ?? error);
       }
 
       const matchedUserId = data?.user_id as string | undefined;
-      if (matchedUserId && (!jwtUserId || matchedUserId === jwtUserId)) {
-        return { userId: matchedUserId, via: `play_purchases:${candidate.via}` };
+      if (matchedUserId) {
+        if (jwtUserId && matchedUserId !== jwtUserId) {
+          continue;
+        }
+
+        if (jwtUserId === null) {
+          const { data: authUser } = await supabase.from("auth.users").select("id").eq("id", matchedUserId).maybeSingle();
+          if (!authUser?.id) {
+            continue;
+          }
+        }
+
+        return { userId: matchedUserId, via: `${BindingVia.playPurchases}:${candidate.via}` };
       }
     }
   }

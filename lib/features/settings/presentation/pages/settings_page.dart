@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../../core/config/app_contacts.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/image_helper.dart';
 import '../../../../core/utils/backup_helper.dart';
@@ -255,6 +257,77 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         }
       }
     });
+  }
+
+  Future<void> _openExternalLink(String url, {required String label}) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      if (mounted) showError(context, 'Link $label tidak valid.');
+      return;
+    }
+
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (mounted) showError(context, 'Tidak dapat membuka $label saat ini.');
+    }
+  }
+
+  Future<void> _showSupportAndPrivacyDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Dukungan & Privasi'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Hubungi tim support, lihat kebijakan privasi, atau mulai permintaan penghapusan data akun.',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.icon(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                    _openExternalLink(
+                      'mailto:${AppContacts.supportEmail}?subject=${Uri.encodeComponent('Permintaan Bantuan BuildEra')}',
+                      label: 'email support',
+                    );
+                  },
+                  icon: const Icon(Icons.mail_outline_rounded),
+                  label: const Text('Email Support'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                    _openExternalLink(AppContacts.privacyPolicyUrl, label: 'kebijakan privasi');
+                  },
+                  icon: const Icon(Icons.privacy_tip_outlined),
+                  label: const Text('Privacy Policy'),
+                ),
+                FilledButton.tonalIcon(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                    _openExternalLink(AppContacts.accountDeletionUrl, label: 'halaman penghapusan akun');
+                  },
+                  icon: const Icon(Icons.delete_forever_rounded),
+                  label: const Text('Hapus Akun'),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Tutup'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showLanguageSelectionDialog(BuildContext context, WidgetRef ref) {
@@ -606,6 +679,17 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 subtitle:
                     'Ekspor seluruh data produk, transaksi, piutang, & restock ke 1 file Master Excel',
                 onTap: _handleBackupExcel,
+              ),
+              const SizedBox(height: 20),
+
+              _categoryGroupHeader('DUKUNGAN & PRIVASI'),
+              _CategoryCard(
+                icon: Icons.support_agent_rounded,
+                iconColor: Colors.blue,
+                title: 'Support & Data Protection',
+                subtitle:
+                    'Email bantuan, kebijakan privasi, dan jalur penghapusan akun Anda',
+                onTap: _showSupportAndPrivacyDialog,
               ),
               const SizedBox(height: 20),
 

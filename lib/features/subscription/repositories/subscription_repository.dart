@@ -3,6 +3,16 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/subscription.dart';
 import '../models/subscription_history.dart';
 
+class PlayVerifyException implements Exception {
+  final int? statusCode;
+  final String message;
+
+  const PlayVerifyException({this.statusCode, required this.message});
+
+  @override
+  String toString() => message;
+}
+
 class SubscriptionRepository {
   final SupabaseClient _client;
 
@@ -46,15 +56,38 @@ class SubscriptionRepository {
       ).timeout(const Duration(seconds: 15));
 
       if (response.status != 200) {
-        final errorMsg =
-            response.data?['error'] ?? 'Verifikasi langganan Google Play gagal';
-        throw Exception(errorMsg);
+        final errorMsg = response.data?['error'] ?? 'Verifikasi langganan Google Play gagal';
+        final statusCode = response.status;
+
+        if (statusCode == 403 || statusCode == 409) {
+          throw PlayVerifyException(
+            statusCode: statusCode,
+            message: 'Pembelian ini terikat ke akun toko lain.',
+          );
+        }
+        if (statusCode == 400) {
+          throw PlayVerifyException(
+            statusCode: statusCode,
+            message: 'Pembelian tidak dapat diverifikasi. Hubungi developer.',
+          );
+        }
+        if (statusCode >= 500 || statusCode == 503) {
+          throw PlayVerifyException(
+            statusCode: statusCode,
+            message: 'Layanan verifikasi Google Play sedang tidak tersedia. Silakan coba lagi.',
+          );
+        }
+
+        throw PlayVerifyException(statusCode: statusCode, message: errorMsg);
       }
 
       return response.data as Map<String, dynamic>;
     } catch (e) {
       if (e is TimeoutException) {
-        throw Exception('Koneksi verifikasi Google Play terputus (Timeout).');
+        throw PlayVerifyException(
+          statusCode: 504,
+          message: 'Layanan verifikasi Google Play sedang tidak tersedia. Silakan coba lagi.',
+        );
       }
       rethrow;
     }

@@ -17,6 +17,15 @@ Security is no longer an afterthought. BuildEra now features a multi-layered pro
 
 ---
 
+## 📩 Support, Privacy & Account Deletion
+BuildEra includes a direct support flow and user-data controls for compliance and customer care.
+- **Support email**: wenyafi@gmail.com
+- **Privacy policy**: https://alyafi0899.github.io/BuildEra-Construction-Store-POS/privacy-policy/
+- **Account deletion request**: https://alyafi0899.github.io/BuildEra-Construction-Store-POS/account-deletion/
+- **SLA**: account deletion requests are processed within 30 days.
+
+---
+
 ## ⚡ Performance & Low-Spec Optimization
 BuildEra is now rigorously optimized for older hardware (Old POS PCs/Monitors) commonly found in traditional stores:
 - **Zero-Latency Rendering**: Replaced GPU-heavy Blur/Backdrop filters with high-performance solid overlays, increasing scrolling smoothness by up to 300% on integrated graphics.
