@@ -3,7 +3,7 @@ import {
   mapSubscriptionState,
   detectTrial,
   extractAmount,
-  normalizePlan,
+  getOrderId,
   constantTimeEqual,
 } from "../_shared/play_mapping.ts";
 
@@ -12,6 +12,7 @@ Deno.test("mapSubscriptionState converts Google states correctly", () => {
   assertEquals(mapSubscriptionState("SUBSCRIPTION_STATE_IN_GRACE_PERIOD"), "grace");
   assertEquals(mapSubscriptionState("SUBSCRIPTION_STATE_CANCELED"), "canceled");
   assertEquals(mapSubscriptionState("SUBSCRIPTION_STATE_EXPIRED"), "expired");
+  assertEquals(mapSubscriptionState("SUBSCRIPTION_STATE_PENDING_PURCHASE_CANCELED"), "none");
   assertEquals(mapSubscriptionState("UNKNOWN"), "none");
 });
 
@@ -19,19 +20,32 @@ Deno.test("detectTrial identifies free trial phases", () => {
   const trialSub = {
     lineItems: [
       {
-        offerDetails: {
-          offerStage: "FREE_TRIAL",
+        offerPhase: {
+          freeTrial: {},
         },
       },
     ],
   };
   assertEquals(detectTrial(trialSub), true);
 
+  const prorationTrialSub = {
+    lineItems: [
+      {
+        offerPhase: {
+          prorationPeriod: {
+            originalOfferPhaseType: "FREE_TRIAL",
+          },
+        },
+      },
+    ],
+  };
+  assertEquals(detectTrial(prorationTrialSub), true);
+
   const regularSub = {
     lineItems: [
       {
-        offerDetails: {
-          offerStage: "REGULAR",
+        offerPhase: {
+          freeTrial: undefined,
         },
       },
     ],
@@ -53,6 +67,25 @@ Deno.test("extractAmount parses recurring price units and nanos", () => {
     ],
   };
   assertEquals(extractAmount(priceSub), 100000);
+});
+
+Deno.test("getOrderId prefers latestSuccessfulOrderId from matching line item", () => {
+  const sub = {
+    productId: "buildera_yearly",
+    latestOrderId: "deprecated-order",
+    lineItems: [
+      {
+        productId: "buildera_monthly",
+        latestSuccessfulOrderId: "old-order",
+      },
+      {
+        productId: "buildera_yearly",
+        latestSuccessfulOrderId: "fresh-order",
+      },
+    ],
+  };
+
+  assertEquals(getOrderId(sub), "fresh-order");
 });
 
 Deno.test("constantTimeEqual performs secure string comparison", () => {

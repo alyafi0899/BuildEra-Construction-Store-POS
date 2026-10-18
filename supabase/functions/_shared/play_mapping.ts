@@ -12,25 +12,39 @@ export function mapSubscriptionState(state?: string): string {
       return "paused";
     case "SUBSCRIPTION_STATE_EXPIRED":
       return "expired";
+    case "SUBSCRIPTION_STATE_PENDING_PURCHASE_CANCELED":
+      return "none";
     default:
       return "none";
   }
 }
 
+export function getOrderId(playSub: any): string | null {
+  const lineItems = Array.isArray(playSub?.lineItems) ? playSub.lineItems : [];
+  const productId = playSub?.productId;
+  const matchingLineItem =
+    productId != null
+      ? lineItems.find((item: any) => item?.productId === productId)
+      : undefined;
+  const chosenLineItem = matchingLineItem ?? lineItems[0];
+
+  return chosenLineItem?.latestSuccessfulOrderId ?? playSub?.latestOrderId ?? null;
+}
+
 export function detectTrial(playSub: any): boolean {
   if (playSub?.is_trial === true) return true;
+
   const lineItem = playSub?.lineItems?.[0];
   if (!lineItem) return false;
 
-  const offerDetails = lineItem.offerDetails;
-  if (offerDetails) {
-    if (offerDetails.offerStage === "FREE_TRIAL" || offerDetails.offerPhase === "freeTrialPhase") {
-      return true;
-    }
-    if (Array.isArray(offerDetails.offerTags) && offerDetails.offerTags.includes("free-trial")) {
+  const offerPhase = lineItem.offerPhase;
+  if (offerPhase) {
+    if (offerPhase.freeTrial !== undefined) return true;
+    if (offerPhase.prorationPeriod?.originalOfferPhaseType === "FREE_TRIAL") {
       return true;
     }
   }
+
   return false;
 }
 
@@ -46,6 +60,51 @@ export function extractAmount(playSub: any): number {
   }
 
   return 0;
+}
+
+export async function resolveBoundUser(
+  playSub: any,
+  jwtUserId?: string | null,
+  supabase?: { from: (table: string) => any }
+): Promise<{ userId: string | null; via: string | null }> {
+  const tokenCandidates = [
+    playSub?.purchaseToken,
+    playSub?.outOfAppPurchaseContext?.expiredPurchaseToken,
+    playSub?.linkedPurchaseToken,
+  ].filter((token) => typeof token === "string" && token.length > 0);
+
+  const directIdCandidates = [
+    playSub?.externalAccountIdentifiers?.obfuscatedExternalAccountId,
+    playSub?.outOfAppPurchaseContext?.expiredExternalAccountIdentifiers?.obfuscatedExternalAccountId,
+  ].filter((id) => typeof id === "string" && id.length > 0);
+
+  for (const [index, directId] of directIdCandidates.entries()) {
+    const via = index === 0 ? "externalAccountIdentifiers" : "expiredExternalAccountIdentifiers";
+    if (!jwtUserId || directId === jwtUserId) {
+      return { userId: directId, via };
+    }
+  }
+
+  if (supabase) {
+    for (const token of tokenCandidates) {
+      const { data, error } = await supabase
+        .from("play_purchases")
+        .select("user_id")
+        .eq("purchase_token", token)
+        .maybeSingle();
+
+      if (error) {
+        console.warn(`resolveBoundUser lookup failed for ${token}:`, error.message ?? error);
+      }
+
+      const matchedUserId = data?.user_id as string | undefined;
+      if (matchedUserId && (!jwtUserId || matchedUserId === jwtUserId)) {
+        return { userId: matchedUserId, via: `play_purchases:${token}` };
+      }
+    }
+  }
+
+  return { userId: null, via: null };
 }
 
 export function normalizePlan(productId?: string): string {

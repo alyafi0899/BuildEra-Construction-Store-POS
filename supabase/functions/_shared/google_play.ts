@@ -6,6 +6,66 @@ export interface GoogleServiceAccount {
   private_key: string;
 }
 
+export class GooglePlayApiError extends Error {
+  status: number;
+  reason: string | null;
+  sanitizedBody: string;
+
+  constructor(status: number, reason: string | null, sanitizedBody: string) {
+    const message = reason
+      ? `Google Play API error (${status}): ${reason}`
+      : `Google Play API error (${status})`;
+    super(message);
+    this.name = "GooglePlayApiError";
+    this.status = status;
+    this.reason = reason;
+    this.sanitizedBody = sanitizedBody;
+  }
+}
+
+export function sanitizeGooglePlayError(bodyText: string): string {
+  if (!bodyText) return "<empty response>";
+
+  try {
+    const parsed = JSON.parse(bodyText);
+    const reason =
+      parsed?.error?.status ??
+      parsed?.error?.message ??
+      parsed?.error?.details?.[0]?.reason ??
+      parsed?.error?.errors?.[0]?.reason ??
+      null;
+
+    if (reason) {
+      return reason;
+    }
+
+    const jsonText = JSON.stringify(parsed);
+    return jsonText.length > 800 ? `${jsonText.slice(0, 800)}…` : jsonText;
+  } catch {
+    const normalized = bodyText.replace(/\s+/g, " ").trim();
+    return normalized.length > 800 ? `${normalized.slice(0, 800)}…` : normalized;
+  }
+}
+
+export function parseGooglePlayApiError(status: number, bodyText: string): GooglePlayApiError {
+  const sanitized = sanitizeGooglePlayError(bodyText);
+  let reason: string | null = null;
+
+  try {
+    const parsed = JSON.parse(bodyText);
+    reason =
+      parsed?.error?.status ??
+      parsed?.error?.message ??
+      parsed?.error?.details?.[0]?.reason ??
+      parsed?.error?.errors?.[0]?.reason ??
+      null;
+  } catch {
+    // ignore parse failures and keep the sanitized body string
+  }
+
+  return new GooglePlayApiError(status, reason ?? sanitized, sanitized);
+}
+
 let cachedAccessToken: { token: string; expiresAt: number } | null = null;
 
 export async function getGoogleAccessToken(serviceAccountJson: string): Promise<string> {
@@ -76,7 +136,7 @@ export async function getSubscriptionV2({
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Google Play API Error (${res.status}): ${body}`);
+    throw parseGooglePlayApiError(res.status, body);
   }
 
   return await res.json();
@@ -116,5 +176,5 @@ export async function acknowledgeSubscription({
     return true;
   }
 
-  throw new Error(`Acknowledge failed (${res.status}): ${body}`);
+  throw parseGooglePlayApiError(res.status, body);
 }

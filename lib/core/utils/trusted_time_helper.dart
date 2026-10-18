@@ -63,6 +63,28 @@ class TrustedTimeHelper {
     return nowUtc().add(EntitlementConfig.asiaJakartaOffset);
   }
 
+  /// Backward-compatible helper used by existing security tests and any older call sites.
+  /// This mirrors the trusted-clock logic while returning Jakarta local time.
+  static DateTime getTrustedJakartaTime({
+    int offsetMs = 0,
+    DateTime? lastTrusted,
+    DateTime? maxSeenUtc,
+  }) {
+    final rawDeviceUtc = DateTime.now().toUtc();
+    var calculated = rawDeviceUtc.add(Duration(milliseconds: offsetMs));
+
+    if (lastTrusted != null && calculated.isBefore(lastTrusted)) {
+      calculated = lastTrusted;
+    }
+
+    final observedMax = maxSeenUtc ?? lastTrusted ?? calculated;
+    if (calculated.isBefore(observedMax)) {
+      calculated = observedMax;
+    }
+
+    return calculated.add(EntitlementConfig.asiaJakartaOffset);
+  }
+
   /// Persists current trusted server time and offset to Hive metadata box and in-memory cache
   static Future<void> saveTrustedTime(String uid, DateTime serverTime) async {
     final serverUtc = serverTime.toUtc();

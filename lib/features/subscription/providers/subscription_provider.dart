@@ -10,7 +10,6 @@ import '../services/entitlement_evaluator.dart';
 import '../models/subscription_history.dart';
 import '../repositories/subscription_repository.dart';
 import '../services/play_billing_service.dart';
-import '../../payment/providers/transaction_provider.dart';
 import '../../../core/sync/services/local_database.dart';
 import '../../../core/utils/trusted_time_helper.dart';
 
@@ -24,6 +23,47 @@ final playBillingServiceProvider = Provider<PlayBillingService>((ref) {
   ref.onDispose(() => service.dispose());
   return service;
 });
+
+final playBillingBootstrapProvider = NotifierProvider<PlayBillingBootstrapNotifier, void>(PlayBillingBootstrapNotifier.new);
+
+class PlayBillingBootstrapNotifier extends Notifier<void> {
+  String? _bootedUserId;
+
+  PlayBillingService get _service => ref.read(playBillingServiceProvider);
+
+  @override
+  void build() {
+    ref.keepAlive();
+
+    ref.listen(authStateProvider, (previous, next) async {
+      final user = next.value;
+      if (kIsWeb || defaultTargetPlatform != TargetPlatform.android || user == null) {
+        _bootedUserId = null;
+        return;
+      }
+
+      if (_bootedUserId == user.uid) return;
+      _bootedUserId = user.uid;
+
+      try {
+        await _service.initialize(
+          userId: user.uid,
+          onSubscriptionUpdated: () {
+            ref.read(subscriptionStateProvider.notifier).refresh();
+          },
+          onError: (error) {
+            final normalized = error.contains('bound to another user')
+                ? 'Pembelian ini terikat ke akun toko lain.'
+                : 'Pembelian Google Play gagal: $error';
+            ref.read(billingUiStateProvider.notifier).setError(normalized);
+          },
+        );
+      } catch (_) {
+        // fail silently; initialization should never block POS startup
+      }
+    });
+  }
+}
 
 final playBillingProductsProvider = FutureProvider<List<ProductDetails>>((ref) async {
   final service = ref.watch(playBillingServiceProvider);

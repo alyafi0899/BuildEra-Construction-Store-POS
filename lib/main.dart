@@ -28,6 +28,7 @@ import 'features/payment/providers/transaction_provider.dart';
 import 'features/debts/providers/debt_repository.dart';
 import 'features/auth/presentation/widgets/auth_gate.dart';
 import 'features/auth/providers/auth_provider.dart';
+import 'features/subscription/providers/subscription_provider.dart';
 import 'core/sync/services/local_database.dart';
 import 'core/sync/providers/sync_provider.dart';
 import 'core/providers/navigation_provider.dart';
@@ -264,6 +265,7 @@ class KonstruksiPosApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(playBillingBootstrapProvider);
     final mode = ref.watch(themeProvider);
     final appSettings = ref.watch(appSettingsProvider);
 

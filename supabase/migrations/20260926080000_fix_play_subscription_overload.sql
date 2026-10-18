@@ -43,7 +43,6 @@ GRANT EXECUTE ON FUNCTION public.get_server_time() TO authenticated, anon, servi
 -- 4. Clean up any previous function overloads before re-creating
 DROP FUNCTION IF EXISTS public.apply_play_subscription(text, uuid, text, text, text, timestamptz, boolean, text, text, boolean, boolean, jsonb);
 DROP FUNCTION IF EXISTS public.apply_play_subscription(text, uuid, text, text, text, timestamptz, boolean, text, text, boolean, boolean, jsonb, numeric);
-DROP FUNCTION IF EXISTS public.apply_play_subscription CASCADE;
 
 -- 5. Re-create apply_play_subscription function with 13 parameters
 CREATE OR REPLACE FUNCTION public.apply_play_subscription(

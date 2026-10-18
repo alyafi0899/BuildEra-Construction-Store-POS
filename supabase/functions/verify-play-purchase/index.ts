@@ -1,14 +1,18 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import {
+  acknowledgeSubscription,
   getGoogleAccessToken,
   getSubscriptionV2,
+  GooglePlayApiError,
 } from "../_shared/google_play.ts";
 import {
   mapSubscriptionState,
   detectTrial,
   extractAmount,
   normalizePlan,
+  resolveBoundUser,
+  getOrderId,
 } from "../_shared/play_mapping.ts";
 
 const corsHeaders = {
@@ -47,8 +51,7 @@ export async function handleVerify(req: Request): Promise<Response> {
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Verify JWT and get user from Auth header
-    const token = authHeader.replace("Bearer ", "");
+    const token = authHeader.replace(/^Bearer\s+/i, "");
     const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
 
     if (userError || !userData.user) {
@@ -69,7 +72,6 @@ export async function handleVerify(req: Request): Promise<Response> {
       });
     }
 
-    // Check existing play_purchases binding in Supabase
     const { data: existingPurchases } = await supabaseAdmin
       .from("play_purchases")
       .select("user_id")
@@ -83,63 +85,66 @@ export async function handleVerify(req: Request): Promise<Response> {
       );
     }
 
-    // 1. Get Google API OAuth Token
     const accessToken = await getGoogleAccessToken(saJson);
-
-    // 2. Fetch Subscription Info from Google Play API (subscriptionsv2)
     const playSub = await getSubscriptionV2({
       packageName,
       token: purchaseToken,
       accessToken,
     });
+    playSub.purchaseToken = purchaseToken;
 
-    // 3. Validate productId in lineItems
-    const lineItem = playSub.lineItems?.[0];
-    if (!lineItem || lineItem.productId !== productId) {
+    const matchingLineItem =
+      playSub.lineItems?.find((item: any) => item?.productId === productId) ?? playSub.lineItems?.[0];
+
+    if (!matchingLineItem) {
       return new Response(JSON.stringify({ error: "Product ID mismatch" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // 4. Validate obfuscatedExternalAccountId
     const extId = playSub.externalAccountIdentifiers?.obfuscatedExternalAccountId;
-    if (!extId || extId !== userId) {
+    const boundUser = await resolveBoundUser(playSub, userId, supabaseAdmin);
+
+    if (extId) {
+      if (extId !== userId) {
+        return new Response(
+          JSON.stringify({ error: "Purchase not bound to current user" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    } else if (!boundUser.userId || boundUser.userId !== userId) {
       return new Response(
         JSON.stringify({ error: "Purchase not bound to current user" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // 5. Extract state, amount, trial, expiry
     const state = playSub.subscriptionState;
     const mappedStatus = mapSubscriptionState(state);
-    const expiryTime = lineItem.expiryTime;
-    const autoRenewing = lineItem.autoRenewingPlan != null;
+    const expiryTime = matchingLineItem.expiryTime;
+    const autoRenewing = matchingLineItem.autoRenewingPlan != null;
     const ackState = playSub.acknowledgementState ?? "ACKNOWLEDGEMENT_STATE_UNSPECIFIED";
     const testPurchase = playSub.testPurchase != null;
     const isTrial = detectTrial(playSub);
     const amount = extractAmount(playSub);
+    const boundUserId = boundUser.userId ?? userId;
 
-    // 6. Apply subscription inside Supabase PostgreSQL transaction function
-    const { data: applyResult, error: applyError } = await supabaseAdmin.rpc(
-      "apply_play_subscription",
-      {
-        p_purchase_token: purchaseToken,
-        p_user_id: userId,
-        p_product_id: productId,
-        p_latest_order_id: playSub.latestOrderId ?? null,
-        p_subscription_state: mappedStatus,
-        p_expiry_time: expiryTime,
-        p_auto_renewing: autoRenewing,
-        p_acknowledgement_state: ackState,
-        p_linked_purchase_token: playSub.linkedPurchaseToken ?? null,
-        p_test_purchase: testPurchase,
-        p_is_trial: isTrial,
-        p_raw: playSub,
-        p_amount: amount > 0 ? amount : null,
-      }
-    );
+    const { error: applyError } = await supabaseAdmin.rpc("apply_play_subscription", {
+      p_purchase_token: purchaseToken,
+      p_user_id: boundUserId,
+      p_product_id: productId,
+      p_latest_order_id: getOrderId(playSub),
+      p_subscription_state: mappedStatus,
+      p_expiry_time: expiryTime,
+      p_auto_renewing: autoRenewing,
+      p_acknowledgement_state: ackState,
+      p_linked_purchase_token: playSub.linkedPurchaseToken ?? null,
+      p_test_purchase: testPurchase,
+      p_is_trial: isTrial,
+      p_raw: playSub,
+      p_amount: amount > 0 ? amount : null,
+    });
 
     if (applyError) {
       if (applyError.code === "P0409" || applyError.message?.includes("P0409")) {
@@ -155,7 +160,23 @@ export async function handleVerify(req: Request): Promise<Response> {
       });
     }
 
-    // 7. Get server time for client time anchor
+    if (
+      (boundUser.via === "expiredExternalAccountIdentifiers" ||
+        boundUser.via?.startsWith("play_purchases:")) &&
+      playSub.acknowledgementState === "ACKNOWLEDGEMENT_STATE_PENDING"
+    ) {
+      try {
+        await acknowledgeSubscription({
+          packageName,
+          subscriptionId: productId,
+          token: purchaseToken,
+          accessToken,
+        });
+      } catch (ackErr) {
+        console.warn("Server-side acknowledge after rebind failed:", ackErr);
+      }
+    }
+
     const { data: serverTime } = await supabaseAdmin.rpc("get_server_time");
 
     return new Response(
@@ -172,10 +193,37 @@ export async function handleVerify(req: Request): Promise<Response> {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {
-    console.error("Verification Exception:", err.message ?? "Unknown error");
+    if (err instanceof GooglePlayApiError) {
+      const status = err.status;
+      if ([400, 404, 410].includes(status)) {
+        return new Response(JSON.stringify({ error: "Purchase verification failed" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if ([401, 403].includes(status)) {
+        console.error("Google Play auth error:", err.reason ?? err.message);
+        return new Response(JSON.stringify({ error: "Google Play authorization failed" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if ([409, 429].includes(status) || status >= 500 || !status) {
+        return new Response(JSON.stringify({ error: "Service temporarily unavailable" }), {
+          status: 503,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    console.error("Verification Exception:", err?.message ?? "Unknown error");
     return new Response(
       JSON.stringify({ error: "Verification process error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}
+
+if (import.meta.main) {
+  serve(handleVerify);
+}
