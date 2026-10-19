@@ -5,6 +5,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
     <!-- Remove all media and external storage permissions to comply with Google Play Photo Picker policy -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove" />
