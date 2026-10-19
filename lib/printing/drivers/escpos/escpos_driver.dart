@@ -57,8 +57,11 @@ class EscPosDriver {
       }
 
       // 4.1 NOTES
-      if ((tx?.notes?.isNotEmpty ?? false) || (debt?.notes?.isNotEmpty ?? false) || (purchase?.notes?.isNotEmpty ?? false)) {
-        sectionBuilder.buildNotes(tx?.notes ?? debt?.notes ?? purchase?.notes ?? '');
+      if ((tx?.notes?.isNotEmpty ?? false) ||
+          (debt?.notes?.isNotEmpty ?? false) ||
+          (purchase?.notes?.isNotEmpty ?? false)) {
+        sectionBuilder
+            .buildNotes(tx?.notes ?? debt?.notes ?? purchase?.notes ?? '');
       }
 
       // 5. PAYMENT HISTORY (For Debt)
@@ -137,7 +140,7 @@ class EscPosBuilder {
   }
 
   void text(String text, {bool newline = true}) {
-    _bytes.addAll(latin1.encode(text));
+    _bytes.addAll(ascii.encode(sanitizeForPrinter(text)));
     if (newline) _bytes.add(0x0A);
   }
 
@@ -163,6 +166,8 @@ class EscPosBuilder {
 
   /// Splits a text into two parts (left and right aligned)
   void row(String left, String right) {
+    left = sanitizeForPrinter(left);
+    right = sanitizeForPrinter(right);
     int spaces = charsPerLine - (left.length + right.length);
     if (spaces < 1) {
       text(left);
@@ -253,7 +258,8 @@ class ReceiptSectionBuilder {
       }
 
       // Line 2: Qty x Price ... Subtotal
-      final qtyStr = '${Formatters.decimal(item.quantity)} ${item.unitName} x ${Formatters.currency(item.soldPrice)}';
+      final qtyStr =
+          '${Formatters.decimal(item.quantity)} ${item.unitName} x ${Formatters.currency(item.soldPrice)}';
       final subtotalStr = Formatters.currency(item.subtotal);
       b.row(qtyStr, subtotalStr);
 
@@ -276,7 +282,8 @@ class ReceiptSectionBuilder {
         b.text(nLine);
       }
 
-      final qtyStr = '${Formatters.decimal(item.quantity)} ${item.unitName} x ${Formatters.currency(item.purchasePrice)}';
+      final qtyStr =
+          '${Formatters.decimal(item.quantity)} ${item.unitName} x ${Formatters.currency(item.purchasePrice)}';
       final subtotalStr = Formatters.currency(item.subtotal);
       b.row(qtyStr, subtotalStr);
 
@@ -427,6 +434,7 @@ class ReceiptSectionBuilder {
   }
 
   List<String> _wrapText(String text, int width) {
+    text = sanitizeForPrinter(text);
     List<String> lines = [];
     while (text.length > width) {
       int spaceIndex = text.lastIndexOf(' ', width);
@@ -439,3 +447,25 @@ class ReceiptSectionBuilder {
   }
 }
 
+String sanitizeForPrinter(String input) {
+  const replacements = {
+    '–': '-',
+    '—': '-',
+    '‘': "'",
+    '’': "'",
+    '“': '"',
+    '”': '"',
+    '•': '*',
+    '…': '...',
+    '×': 'x',
+    '\u00A0': ' ',
+    '\t': ' ',
+  };
+  final replaced = input.replaceAllMapped(
+    RegExp('[${replacements.keys.map(RegExp.escape).join()}]'),
+    (match) => replacements[match[0]]!,
+  );
+  return String.fromCharCodes(
+    replaced.runes.map((rune) => rune >= 0x20 && rune <= 0x7E ? rune : 0x3F),
+  );
+}
