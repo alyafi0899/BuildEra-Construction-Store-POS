@@ -17,4 +17,4 @@ This project includes an app-level and web-level flow for data deletion requests
 
 ## Notes
 - The app exposes these links via `lib/core/config/app_contacts.dart`.
-- The static web pages live under `web/privacy-policy/` and `web/account-deletion/`.
+- The static pages are published from `docs/privacy-policy/` and `docs/account-deletion/`.

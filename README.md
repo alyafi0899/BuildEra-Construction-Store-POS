@@ -24,6 +24,8 @@ BuildEra includes a direct support flow and user-data controls for compliance an
 - **Account deletion request**: https://alyafi0899.github.io/BuildEra-Construction-Store-POS/account-deletion/
 - **SLA**: account deletion requests are processed within 30 days.
 
+To publish these pages, open **GitHub → Settings → Pages**, choose **Deploy from a branch**, select the default branch and the `/docs` folder, then save. After deployment, open both URLs above and confirm they return HTTP 200.
+
 ---
 
 ## ⚡ Performance & Low-Spec Optimization
