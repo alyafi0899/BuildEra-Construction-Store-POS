@@ -62,10 +62,8 @@ class _SetupPinPageState extends ConsumerState<SetupPinPage> {
     setState(() => _loading = true);
     try {
       final settings = ref.read(settingsProvider);
-      // Explicitly update both securityPin and businessName (temporary) to bypass AuthGate
       final updated = settings.copyWith(
         securityPin: _pinCtrl.text,
-        businessName: settings.businessName.isEmpty ? 'Toko Saya' : settings.businessName,
       );
       
       await ref.read(settingsProvider.notifier).updateSettings(updated);

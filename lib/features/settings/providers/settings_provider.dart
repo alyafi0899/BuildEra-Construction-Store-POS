@@ -39,6 +39,19 @@ class SettingsNotifier extends Notifier<StoreSettings> {
   SupabaseClient get _supabase => ref.read(supabaseClientProvider);
   Future<Box> _getBox(String uid) => LocalDatabase.openBox(uid, 'settings');
 
+  void _addAvailableValues(
+    Map<String, dynamic> target,
+    Map<String, dynamic> source,
+  ) {
+    for (final entry in source.entries) {
+      final value = entry.value;
+      if (value != null &&
+          (value is! String || value.trim().isNotEmpty)) {
+        target[entry.key] = value;
+      }
+    }
+  }
+
   void _listenForRemoteSettings(String uid) {
     if (_settingsChannelUid == uid) return;
     _settingsChannel?.unsubscribe();
@@ -64,8 +77,14 @@ class SettingsNotifier extends Notifier<StoreSettings> {
 
   Future<void> _applyRemoteSettings(
       String uid, Map<String, dynamic> remoteRow) async {
-    final merged = Map<String, dynamic>.from(state.toMap())
-      ..addAll(LocalDatabase.sanitize(remoteRow));
+    final merged = Map<String, dynamic>.from(state.toMap());
+    final remoteSettings = LocalDatabase.sanitize(remoteRow);
+    final remotePin = remoteSettings['security_pin'];
+    if (remotePin == null ||
+        remotePin is String && remotePin.trim().isEmpty) {
+      remoteSettings.remove('security_pin');
+    }
+    merged.addAll(remoteSettings);
     // Brand images are device-local and must not be overwritten by remote rows.
     merged['logo_url'] = state.logoUrl;
     merged['qris_image_path'] = state.qrisImagePath;
@@ -119,6 +138,9 @@ class SettingsNotifier extends Notifier<StoreSettings> {
 
         if (response != null) {
           final data = Map<String, dynamic>.from(metadata);
+          if (cachedSettings != null) {
+            _addAvailableValues(data, cachedSettings.toMap());
+          }
           final remoteData = LocalDatabase.sanitize(response);
           for (final entry in remoteData.entries) {
             final value = entry.value;
@@ -143,6 +165,9 @@ class SettingsNotifier extends Notifier<StoreSettings> {
           return;
         } else {
           final settingsMap = Map<String, dynamic>.from(metadata);
+          if (cachedSettings != null) {
+            _addAvailableValues(settingsMap, cachedSettings.toMap());
+          }
           if (cachedSettings?.logoUrl != null) {
             settingsMap['logo_url'] = cachedSettings!.logoUrl;
           }
@@ -177,6 +202,9 @@ class SettingsNotifier extends Notifier<StoreSettings> {
         if (retries == 0) {
           debugPrint('Supabase Settings Fatal Error: $e');
           final fallbackData = Map<String, dynamic>.from(metadata);
+          if (cachedSettings != null) {
+            _addAvailableValues(fallbackData, cachedSettings.toMap());
+          }
           if (cachedSettings?.logoUrl != null) {
             fallbackData['logo_url'] = cachedSettings!.logoUrl;
           }

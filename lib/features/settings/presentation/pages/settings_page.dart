@@ -1579,7 +1579,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 onPressed: () => Navigator.pop(context),
                 child: const Text('BATAL')),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 if (!formKey.currentState!.validate()) return;
 
                 if (step == 0) {
@@ -1599,9 +1599,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   final settings = ref
                       .read(settingsProvider)
                       .copyWith(securityPin: newPinCtrl.text);
-                  ref.read(settingsProvider.notifier).updateSettings(settings);
-                  Navigator.pop(context);
-                  showSuccess(context, 'PIN berhasil diperbarui');
+                  try {
+                    await ref
+                        .read(settingsProvider.notifier)
+                        .updateSettings(settings);
+                    if (!dialogContext.mounted) return;
+                    Navigator.pop(dialogContext);
+                    if (mounted) {
+                      showSuccess(this.context, 'PIN berhasil diperbarui');
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      showError(this.context, 'Gagal memperbarui PIN: $e');
+                    }
+                  }
                 }
               },
               child: Text(step == 2 ? 'SIMPAN' : 'LANJUT'),

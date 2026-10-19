@@ -69,8 +69,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
            return const SplashScreen(status: 'Memuat Pengaturan...');
         }
         
-        // If settings are loaded and businessName is empty, it's a new account
-        if (settings.businessName.isEmpty) {
+        if ((settings.securityPin?.length ?? 0) < 4) {
            return const SetupPinPage();
         }
 
