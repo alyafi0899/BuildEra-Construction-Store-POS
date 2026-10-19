@@ -20,6 +20,7 @@ import '../../../../core/utils/barcode_helper.dart';
 import '../../providers/barcode_history_provider.dart';
 
 import '../../models/product_financials.dart';
+import 'product_barcode_scanner_page.dart';
 
 final _uuid = Uuid();
 
@@ -157,6 +158,49 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
       });
       _applyProfitPercentage();
     }
+  }
+
+  Future<void> _scanBarcode() async {
+    final barcode = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => const ProductBarcodeScannerPage(),
+      ),
+    );
+    if (!mounted || barcode == null) return;
+    setState(() {
+      _barcode
+        ..text = barcode
+        ..selection = TextSelection.collapsed(offset: barcode.length);
+    });
+  }
+
+  Widget _buildBarcodeSuffixIcon({required bool showScanner}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (showScanner)
+          IconButton(
+            icon: const Icon(Icons.camera_alt_rounded, size: 18),
+            tooltip: 'Scan Barcode',
+            onPressed: _scanBarcode,
+          ),
+        _generatingBarcode
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : IconButton(
+                icon: const Icon(
+                  Icons.auto_fix_high_rounded,
+                  size: 18,
+                  color: AppTheme.accent,
+                ),
+                tooltip: 'Generate Barcode',
+                onPressed: _generateBarcode,
+              ),
+      ],
+    );
   }
 
   void _applyProfitPercentage() {
@@ -710,13 +754,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                             labelText: 'Barcode',
                             hintText: 'Scan atau ketik barcode',
                             prefixIcon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
-                            suffixIcon: _generatingBarcode
-                                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                                : IconButton(
-                                    icon: const Icon(Icons.auto_fix_high_rounded, size: 18, color: AppTheme.accent),
-                                    tooltip: 'Generate Barcode',
-                                    onPressed: _generateBarcode,
-                                  ),
+                            suffixIcon: _buildBarcodeSuffixIcon(showScanner: true),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -835,13 +873,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                           labelText: 'Barcode',
                                           hintText: 'Scan atau ketik barcode',
                                           prefixIcon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
-                                          suffixIcon: _generatingBarcode 
-                                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                                            : IconButton(
-                                                icon: const Icon(Icons.auto_fix_high_rounded, size: 18, color: AppTheme.accent),
-                                                tooltip: 'Generate Barcode',
-                                                onPressed: _generateBarcode,
-                                              ),
+                                          suffixIcon: _buildBarcodeSuffixIcon(showScanner: false),
                                         ),
                                       ),
                                     ),
