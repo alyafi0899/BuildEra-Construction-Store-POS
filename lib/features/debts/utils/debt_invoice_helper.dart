@@ -11,7 +11,7 @@ import '../models/debt.dart';
 import '../models/debt_payment.dart';
 import '../../settings/models/store_settings.dart';
 import '../../../printing/services/windows_raw_spooler.dart';
-import '../../../printing/services/bluetooth_printer_service.dart';
+import '../../../printing/services/bluetooth_receipt_printing.dart';
 
 class DebtInvoiceHelper {
   static String? get _downloadsPath {
@@ -62,36 +62,13 @@ class DebtInvoiceHelper {
 
     if (Platform.isAndroid &&
         transport == PrinterTransport.escposBluetooth) {
-      final address = settings.invoicePrinterUrl;
-      if (address == null || address.isEmpty) {
-        throw StateError(
-          'Pilih dan hubungkan printer Bluetooth di Pengaturan Printer '
-          'sebelum mencetak.',
-        );
-      }
-
-      final receipt = ReceiptDocument(
-        title: 'NOTA PIUTANG',
-        lines: [],
-        metadata: {
-          'customer': customer,
-          'debt': debt,
-          'payments': payments,
-          'settings': settings,
-          'transaction': transaction,
-        },
-      );
-      final profile = PrinterProfile(
-        id: 'debt-receipt-bluetooth',
-        name: 'Bluetooth Debt Receipt',
-        transport: transport,
-        paperWidthMm: settings.receiptWidth,
-        marginMm: settings.receiptMargin,
-      );
-      await BluetoothPrinterService().printReceipt(
-        address: address,
-        receipt: receipt,
-        profile: profile,
+      await printBluetoothReceipt(
+        address: settings.invoicePrinterUrl ?? '',
+        settings: settings,
+        transaction: transaction,
+        customer: customer,
+        debt: debt,
+        payments: payments,
       );
       return;
     }
@@ -118,6 +95,7 @@ class DebtInvoiceHelper {
         transport: transport,
         paperWidthMm: settings.receiptWidth,
         marginMm: settings.receiptMargin,
+        defaults: {'autoCut': settings.autoCut},
       );
 
       final result = await PrintOrchestrator().printReceipt(receipt, profile);
@@ -150,6 +128,7 @@ class DebtInvoiceHelper {
         transport: transport,
         paperWidthMm: settings.receiptWidth,
         marginMm: settings.receiptMargin,
+        defaults: {'autoCut': settings.autoCut},
       );
 
       final result = await PrintOrchestrator().printReceipt(receipt, profile);

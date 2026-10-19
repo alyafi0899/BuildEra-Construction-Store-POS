@@ -380,8 +380,8 @@ class _PrintActionBtn extends StatelessWidget {
   final String label;
   final IconData icon;
   final Color color;
-  final VoidCallback onPrint;
-  final VoidCallback onDownload;
+  final Future<void> Function() onPrint;
+  final Future<void> Function() onDownload;
 
   const _PrintActionBtn({
     required this.label, 
@@ -417,7 +417,7 @@ class _PrintActionBtn extends StatelessWidget {
             children: [
               Expanded(
                 child: TextButton.icon(
-                  onPressed: onPrint,
+                  onPressed: () => _runAction(context, onPrint),
                   icon: const Icon(Icons.print_rounded, size: 14),
                   label: const Text('CETAK', style: TextStyle(fontSize: 10)),
                   style: TextButton.styleFrom(foregroundColor: color),
@@ -426,7 +426,7 @@ class _PrintActionBtn extends StatelessWidget {
               Container(width: 1, height: 20, color: color.withValues(alpha: 0.2)),
               Expanded(
                 child: TextButton.icon(
-                  onPressed: onDownload,
+                  onPressed: () => _runAction(context, onDownload),
                   icon: const Icon(Icons.download_rounded, size: 14),
                   label: const Text('UNDUH', style: TextStyle(fontSize: 10)),
                   style: TextButton.styleFrom(foregroundColor: color),
@@ -437,5 +437,16 @@ class _PrintActionBtn extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _runAction(
+      BuildContext context, Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (e) {
+      if (context.mounted) {
+        showError(context, 'Gagal mencetak nota pembelian: $e');
+      }
+    }
   }
 }

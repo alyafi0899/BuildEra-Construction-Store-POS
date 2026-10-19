@@ -86,9 +86,19 @@ class _PurchaseCheckoutDialogState extends ConsumerState<PurchaseCheckoutDialog>
               subtitle: 'Ukuran 58mm/80mm untuk gudang',
               icon: Icons.receipt_long_rounded,
               color: AppTheme.accent,
-              onTap: () {
+              onTap: () async {
+                final messenger = ScaffoldMessenger.of(context);
                 Navigator.pop(context);
-                PurchaseInvoiceHelper.printInvoice(purchase, settings);
+                try {
+                  await PurchaseInvoiceHelper.printInvoice(purchase, settings);
+                } catch (e) {
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text('Gagal mencetak nota pembelian: $e'),
+                      backgroundColor: AppTheme.danger,
+                    ),
+                  );
+                }
               },
             ),
             const SizedBox(height: 12),
@@ -97,9 +107,19 @@ class _PurchaseCheckoutDialogState extends ConsumerState<PurchaseCheckoutDialog>
               subtitle: 'Dokumen PDF resmi untuk arsip',
               icon: Icons.picture_as_pdf_rounded,
               color: AppTheme.info,
-              onTap: () {
+              onTap: () async {
+                final messenger = ScaffoldMessenger.of(context);
                 Navigator.pop(context);
-                PurchaseInvoiceHelper.printInvoiceA4(purchase, settings);
+                try {
+                  await PurchaseInvoiceHelper.printInvoiceA4(purchase, settings);
+                } catch (e) {
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text('Gagal mencetak nota pembelian: $e'),
+                      backgroundColor: AppTheme.danger,
+                    ),
+                  );
+                }
               },
             ),
           ],

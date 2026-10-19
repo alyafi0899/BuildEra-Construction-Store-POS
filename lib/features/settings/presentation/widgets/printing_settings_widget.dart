@@ -11,11 +11,13 @@ class PrintingSettingsWidget extends StatelessWidget {
   final TextEditingController widthCtrl;
   final TextEditingController marginCtrl;
   final bool useFastPrint;
+  final bool autoCut;
   final String printerTransport;
   final String invoiceDesign;
   final String printMethod;
   final String? invoicePrinterUrl;
   final ValueChanged<bool> onFastPrintChanged;
+  final ValueChanged<bool> onAutoCutChanged;
   final ValueChanged<String> onTransportChanged;
   final ValueChanged<String> onDesignChanged;
   final ValueChanged<String> onMethodChanged;
@@ -26,11 +28,13 @@ class PrintingSettingsWidget extends StatelessWidget {
     required this.widthCtrl,
     required this.marginCtrl,
     required this.useFastPrint,
+    required this.autoCut,
     required this.printerTransport,
     required this.invoiceDesign,
     required this.printMethod,
     this.invoicePrinterUrl,
     required this.onFastPrintChanged,
+    required this.onAutoCutChanged,
     required this.onTransportChanged,
     required this.onDesignChanged,
     required this.onMethodChanged,
@@ -235,6 +239,18 @@ class PrintingSettingsWidget extends StatelessWidget {
                     activeTrackColor: AppTheme.accent,
                     contentPadding: EdgeInsets.zero,
                   ),
+                  SwitchListTile.adaptive(
+                    value: autoCut,
+                    onChanged: onAutoCutChanged,
+                    title: const Text('Potong Kertas Otomatis',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 14)),
+                    subtitle: const Text(
+                        'Matikan jika printer tidak memiliki pemotong otomatis.',
+                        style: TextStyle(fontSize: 12)),
+                    activeTrackColor: AppTheme.accent,
+                    contentPadding: EdgeInsets.zero,
+                  ),
                   if (useFastPrint) ...[
                     const Divider(height: 24),
                     Row(
@@ -320,9 +336,9 @@ class PrintingSettingsWidget extends StatelessWidget {
                         defaultTargetPlatform == TargetPlatform.android) ...[
                       const SizedBox(height: 8),
                       const Text(
-                        'Pasangkan printer Bluetooth Classic (SPP) melalui '
-                        'Pengaturan Bluetooth Android terlebih dahulu. '
-                        'Printer BLE saja belum didukung.',
+                        'Jika printer tidak muncul di daftar, printer mungkin '
+                        'hanya mendukung BLE dan belum didukung. Pasangkan '
+                        'printer dari Pengaturan Bluetooth Android terlebih dahulu.',
                         style: TextStyle(
                           fontSize: 12,
                           color: AppTheme.textSecondary,

@@ -78,7 +78,9 @@ class EscPosDriver {
       // 7. FINAL FOOTER
       sectionBuilder.buildFinalFooter(isDebt: debt != null);
 
-      final bytes = builder.build();
+      final bytes = builder.build(
+        cut: profile.defaults['autoCut'] != false,
+      );
 
       return PrintResult(
         success: true,
@@ -156,11 +158,12 @@ class EscPosBuilder {
     _bytes.addAll([0x1D, 0x56, 0x01]);
   }
 
-  Uint8List build() {
-    emptyLine();
-    emptyLine();
-    emptyLine();
-    cut();
+  Uint8List build({bool cut = true}) {
+    final feedLines = cut ? 3 : 5;
+    for (var i = 0; i < feedLines; i++) {
+      emptyLine();
+    }
+    if (cut) this.cut();
     return Uint8List.fromList(_bytes);
   }
 

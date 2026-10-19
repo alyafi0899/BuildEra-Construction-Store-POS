@@ -53,6 +53,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   // State for non-text settings
   List<BankAccount> _bankAccounts = [];
   bool _useFastPrint = false;
+  bool _autoCut = true;
   String _printerTransport = 'pdf';
   String _invoiceDesign = 'classic';
   String _printMethod = 'pdf';
@@ -86,6 +87,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     _receiptWidthCtrl.text = settings.receiptWidth.toString();
     _receiptMarginCtrl.text = settings.receiptMargin.toString();
     _useFastPrint = settings.useFastPrint;
+    _autoCut = settings.autoCut;
     _printerTransport = settings.printerTransport;
     _invoiceDesign = settings.invoiceDesign;
     _printMethod = settings.printMethod;
@@ -108,6 +110,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       receiptWidth: double.tryParse(_receiptWidthCtrl.text) ?? 80.0,
       receiptMargin: double.tryParse(_receiptMarginCtrl.text) ?? 4.0,
       useFastPrint: _useFastPrint,
+      autoCut: _autoCut,
       printerTransport: _printerTransport,
       invoiceDesign: _invoiceDesign,
       printMethod: _printMethod,
@@ -1423,6 +1426,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           printMethod: _printMethod,
           invoicePrinterUrl: _invoicePrinterUrl,
           onFastPrintChanged: (v) => setState(() => _useFastPrint = v),
+          autoCut: _autoCut,
+          onAutoCutChanged: (v) => setState(() => _autoCut = v),
           onTransportChanged: (v) => setState(() => _printerTransport = v),
           onDesignChanged: (v) => setState(() => _invoiceDesign = v),
           onMethodChanged: (v) => setState(() => _printMethod = v),

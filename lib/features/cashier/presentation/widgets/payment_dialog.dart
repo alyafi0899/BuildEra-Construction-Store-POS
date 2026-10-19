@@ -1317,7 +1317,11 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
     FutureOr<void> Function(Transaction, StoreSettings) defaultAction,
   ) async {
     if (tx.paymentMethod != AppConstants.paymentPiutang) {
-      await defaultAction(tx, settings);
+      try {
+        await defaultAction(tx, settings);
+      } catch (e) {
+        if (mounted) showError(context, 'Gagal mencetak nota: $e');
+      }
       return;
     }
 
@@ -1329,29 +1333,43 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
           child: CircularProgressIndicator(color: AppTheme.accent)),
     );
 
+    late final Customer customer;
+    late final Debt debt;
+    late final List<DebtPayment> payments;
     try {
       final repo = ref.read(debtRepositoryProvider);
       final debts = await repo.getDebts(customerId: tx.customerId);
-      final debt = debts.firstWhereOrNull((d) => d.transactionId == tx.id);
-      if (debt == null) throw 'Data piutang tidak ditemukan';
+      final foundDebt =
+          debts.firstWhereOrNull((d) => d.transactionId == tx.id);
+      if (foundDebt == null) throw 'Data piutang tidak ditemukan';
+      debt = foundDebt;
 
-      final customer = await _findCustomer(ref, debt.customerId);
-      if (customer == null) throw 'Data pelanggan tidak ditemukan';
+      final foundCustomer = await _findCustomer(ref, foundDebt.customerId);
+      if (foundCustomer == null) throw 'Data pelanggan tidak ditemukan';
+      customer = foundCustomer;
 
-      final payments =
-          await repo.getPayments(customerId: customer.id, debtId: debt.id);
-
-      if (mounted) {
-        Navigator.pop(context); // Close loading
-        await piutangAction(customer, debt, payments, settings, tx);
-      }
+      payments =
+          await repo.getPayments(
+              customerId: foundCustomer.id, debtId: foundDebt.id);
     } catch (e) {
       if (mounted) {
         Navigator.pop(context); // Close loading
         showError(context, 'Gagal memproses nota piutang: $e');
-        // Fallback to regular invoice
-        await defaultAction(tx, settings);
+        try {
+          await defaultAction(tx, settings);
+        } catch (printError) {
+          if (mounted) showError(context, 'Gagal mencetak nota: $printError');
+        }
       }
+      return;
+    }
+
+    if (!mounted) return;
+    Navigator.pop(context); // Close loading
+    try {
+      await piutangAction(customer, debt, payments, settings, tx);
+    } catch (e) {
+      if (mounted) showError(context, 'Gagal mencetak nota piutang: $e');
     }
   }
 

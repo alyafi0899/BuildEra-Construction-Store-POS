@@ -307,12 +307,18 @@ class _DebtTileState extends ConsumerState<_DebtTile> {
               const SizedBox(width: 16),
               IconButton(
                 onPressed: () async {
-                  final settings = ref.read(settingsProvider);
-                  final payments = ref.read(debtPaymentsProvider((customerId: d.customerId, debtId: d.id))).asData?.value ?? [];
-                  final customers = ref.read(customersProvider).asData?.value ?? [];
-                  final customer = customers.firstWhere((c) => c.id == d.customerId);
-                  final transaction = await ref.read(transactionByIdProvider(d.transactionId).future);
-                  await DebtInvoiceHelper.printDebtInvoice(customer, d, payments, settings, transaction: transaction);
+                  try {
+                    final settings = ref.read(settingsProvider);
+                    final payments = ref.read(debtPaymentsProvider((customerId: d.customerId, debtId: d.id))).asData?.value ?? [];
+                    final customers = ref.read(customersProvider).asData?.value ?? [];
+                    final customer = customers.firstWhere((c) => c.id == d.customerId);
+                    final transaction = await ref.read(transactionByIdProvider(d.transactionId).future);
+                    await DebtInvoiceHelper.printDebtInvoice(customer, d, payments, settings, transaction: transaction);
+                  } catch (e) {
+                    if (context.mounted) {
+                      showError(context, 'Gagal mencetak nota piutang: $e');
+                    }
+                  }
                 },
                 icon: const Icon(Icons.print_rounded, size: 20, color: AppTheme.accent),
                 tooltip: 'Print Nota Piutang',

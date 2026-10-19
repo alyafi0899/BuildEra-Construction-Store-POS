@@ -10,7 +10,7 @@ import '../../../shared/models/purchase.dart';
 import '../../settings/models/store_settings.dart';
 import '../../../printing/printing.dart';
 import '../../../printing/services/windows_raw_spooler.dart';
-import '../../../printing/services/bluetooth_printer_service.dart';
+import '../../../printing/services/bluetooth_receipt_printing.dart';
 
 class PurchaseInvoiceHelper {
   static Future<Uint8List> generatePurchasePdf({
@@ -283,22 +283,15 @@ class PurchaseInvoiceHelper {
       transport: _mapTransport(s.printerTransport),
       paperWidthMm: s.receiptWidth,
       marginMm: s.receiptMargin,
+      defaults: {'autoCut': s.autoCut},
     );
 
     if (Platform.isAndroid &&
         profile.transport == PrinterTransport.escposBluetooth) {
-      final address = s.invoicePrinterUrl;
-      if (address == null || address.isEmpty) {
-        throw StateError(
-          'Pilih dan hubungkan printer Bluetooth di Pengaturan Printer '
-          'sebelum mencetak.',
-        );
-      }
-
-      await BluetoothPrinterService().printReceipt(
-        address: address,
-        receipt: receipt,
-        profile: profile,
+      await printBluetoothReceipt(
+        address: s.invoicePrinterUrl ?? '',
+        settings: s,
+        purchase: p,
       );
       return;
     }

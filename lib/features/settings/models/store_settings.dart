@@ -46,6 +46,7 @@ class StoreSettings {
   final double receiptWidth;
   final double receiptMargin;
   final bool useFastPrint; 
+  final bool autoCut;
   final String printerTransport;
   final String invoiceDesign; 
   final String printMethod;   
@@ -83,6 +84,7 @@ class StoreSettings {
     this.receiptWidth = 80.0,
     this.receiptMargin = 4.0,
     this.useFastPrint = false,
+    this.autoCut = true,
     this.printerTransport = 'pdf',
     this.invoiceDesign = 'classic',
     this.printMethod = 'pdf',
@@ -118,6 +120,7 @@ class StoreSettings {
       'receipt_width': receiptWidth,
       'receipt_margin': receiptMargin,
       'use_fast_print': useFastPrint,
+      'printer_auto_cut': autoCut,
       'printer_transport': printerTransport,
       'invoice_design': invoiceDesign,
       'print_method': printMethod,
@@ -156,6 +159,7 @@ class StoreSettings {
       receiptWidth: (map['receipt_width'] as num? ?? map['receiptWidth'] as num?)?.toDouble() ?? 80.0,
       receiptMargin: (map['receipt_margin'] as num? ?? map['receiptMargin'] as num?)?.toDouble() ?? 4.0,
       useFastPrint: (map['use_fast_print'] ?? map['useFastPrint']) as bool? ?? false,
+      autoCut: (map['printer_auto_cut'] ?? map['autoCut']) as bool? ?? true,
       printerTransport: map['printer_transport']?.toString() ?? map['printerTransport']?.toString() ?? 'pdf',
       invoiceDesign: map['invoice_design']?.toString() ?? map['invoiceDesign']?.toString() ?? 'classic',
       printMethod: map['print_method']?.toString() ?? map['printMethod']?.toString() ?? 'pdf',
@@ -195,6 +199,7 @@ class StoreSettings {
     double? receiptWidth,
     double? receiptMargin,
     bool? useFastPrint,
+    bool? autoCut,
     String? printerTransport,
     String? invoiceDesign,
     String? printMethod,
@@ -228,6 +233,7 @@ class StoreSettings {
       receiptWidth: receiptWidth ?? this.receiptWidth,
       receiptMargin: receiptMargin ?? this.receiptMargin,
       useFastPrint: useFastPrint ?? this.useFastPrint,
+      autoCut: autoCut ?? this.autoCut,
       printerTransport: printerTransport ?? this.printerTransport,
       invoiceDesign: invoiceDesign ?? this.invoiceDesign,
       printMethod: printMethod ?? this.printMethod,

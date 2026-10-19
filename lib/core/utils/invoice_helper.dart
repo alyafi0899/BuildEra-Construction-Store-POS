@@ -10,7 +10,7 @@ import '../../../shared/models/transaction.dart';
 import '../../../features/settings/models/store_settings.dart';
 import '../../printing/printing.dart';
 import '../../printing/services/windows_raw_spooler.dart';
-import '../../printing/services/bluetooth_printer_service.dart';
+import '../../printing/services/bluetooth_receipt_printing.dart';
 
 class InvoiceHelper {
   static String? get _downloadsPath {
@@ -49,30 +49,10 @@ class InvoiceHelper {
 
     if (Platform.isAndroid &&
         transport == PrinterTransport.escposBluetooth) {
-      final address = settings.invoicePrinterUrl;
-      if (address == null || address.isEmpty) {
-        throw StateError(
-          'Pilih dan hubungkan printer Bluetooth di Pengaturan Printer '
-          'sebelum mencetak.',
-        );
-      }
-
-      final receipt = ReceiptDocument(
-        title: settings.businessName.toUpperCase(),
-        lines: [],
-        metadata: {'transaction': tx, 'settings': settings},
-      );
-      final profile = PrinterProfile(
-        id: 'receipt-bluetooth',
-        name: 'Bluetooth Receipt',
-        transport: transport,
-        paperWidthMm: settings.receiptWidth,
-        marginMm: settings.receiptMargin,
-      );
-      await BluetoothPrinterService().printReceipt(
-        address: address,
-        receipt: receipt,
-        profile: profile,
+      await printBluetoothReceipt(
+        address: settings.invoicePrinterUrl ?? '',
+        settings: settings,
+        transaction: tx,
       );
       return;
     }
@@ -94,6 +74,7 @@ class InvoiceHelper {
         transport: transport,
         paperWidthMm: settings.receiptWidth,
         marginMm: settings.receiptMargin,
+        defaults: {'autoCut': settings.autoCut},
       );
 
       // We use EscPosDriver directly to get raw bytes
@@ -121,6 +102,7 @@ class InvoiceHelper {
         transport: transport,
         paperWidthMm: settings.receiptWidth,
         marginMm: settings.receiptMargin,
+        defaults: {'autoCut': settings.autoCut},
       );
 
       final result = await PrintOrchestrator().printReceipt(receipt, profile);

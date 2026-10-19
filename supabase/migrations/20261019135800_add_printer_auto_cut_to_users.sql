@@ -1,0 +1,2 @@
+ALTER TABLE public.users
+  ADD COLUMN IF NOT EXISTS printer_auto_cut BOOLEAN NOT NULL DEFAULT TRUE;
