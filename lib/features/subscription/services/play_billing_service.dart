@@ -169,12 +169,7 @@ class PlayBillingService {
               onError('Gagal memverifikasi langganan Google Play pada server.');
             }
           } catch (e) {
-            final errStr = e.toString();
-            if (errStr.contains('bound to another user')) {
-              onError('Pembelian ini terikat ke akun toko lain.');
-            } else {
-              onError('Gagal memverifikasi transaksi: ${e.toString().replaceAll('Exception:', '')}');
-            }
+            onError('Gagal memverifikasi transaksi: $e');
           } finally {
             _verifyingTokens.remove(token);
             _isVerifying = false;
@@ -248,7 +243,7 @@ class PlayBillingService {
       } catch (e) {
         final isPermanent = e is PlayVerifyException &&
             (e.statusCode == 400 || e.statusCode == 403 || e.statusCode == 409);
-        if (isPermanent || e.toString().contains('Pembelian ini terikat ke akun toko lain') || e.toString().contains('Pembelian tidak dapat diverifikasi')) {
+        if (isPermanent) {
           rethrow;
         }
 

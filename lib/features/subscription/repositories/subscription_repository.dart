@@ -56,32 +56,12 @@ class SubscriptionRepository {
       ).timeout(const Duration(seconds: 15));
 
       if (response.status != 200) {
-        final errorMsg = response.data?['error'] ?? 'Verifikasi langganan Google Play gagal';
-        final statusCode = response.status;
-
-        if (statusCode == 403 || statusCode == 409) {
-          throw PlayVerifyException(
-            statusCode: statusCode,
-            message: 'Pembelian ini terikat ke akun toko lain.',
-          );
-        }
-        if (statusCode == 400) {
-          throw PlayVerifyException(
-            statusCode: statusCode,
-            message: 'Pembelian tidak dapat diverifikasi. Hubungi developer.',
-          );
-        }
-        if (statusCode >= 500 || statusCode == 503) {
-          throw PlayVerifyException(
-            statusCode: statusCode,
-            message: 'Layanan verifikasi Google Play sedang tidak tersedia. Silakan coba lagi.',
-          );
-        }
-
-        throw PlayVerifyException(statusCode: statusCode, message: errorMsg);
+        throw _mapVerifyError(response.status, response.data);
       }
 
       return response.data as Map<String, dynamic>;
+    } on FunctionException catch (e) {
+      throw _mapVerifyError(e.status, e.details);
     } catch (e) {
       if (e is TimeoutException) {
         throw PlayVerifyException(
@@ -91,6 +71,36 @@ class SubscriptionRepository {
       }
       rethrow;
     }
+  }
+
+  PlayVerifyException _mapVerifyError(int status, [dynamic details]) {
+    if (status == 403 || status == 409) {
+      return PlayVerifyException(
+        statusCode: status,
+        message: 'Pembelian ini terikat ke akun toko lain.',
+      );
+    }
+    if (status == 400) {
+      return PlayVerifyException(
+        statusCode: status,
+        message: 'Pembelian tidak dapat diverifikasi. Hubungi developer.',
+      );
+    }
+    if (status >= 500) {
+      return PlayVerifyException(
+        statusCode: status,
+        message:
+            'Layanan verifikasi Google Play sedang tidak tersedia. Silakan coba lagi.',
+      );
+    }
+
+    final errorMessage = details is Map ? details['error'] : null;
+    return PlayVerifyException(
+      statusCode: status,
+      message: errorMessage is String
+          ? errorMessage
+          : 'Gagal memverifikasi langganan Google Play. Silakan coba lagi.',
+    );
   }
 
   /// Calls the Supabase Edge Function to create a Xendit Invoice
