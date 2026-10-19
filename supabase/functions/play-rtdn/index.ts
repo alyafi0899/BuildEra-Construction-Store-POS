@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createRemoteJWKSet, decodeProtectedHeader, jwtVerify } from "https://deno.land/x/jose@v4.14.4/index.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import {
+  acknowledgeSubscription,
   getGoogleAccessToken,
   getSubscriptionV2,
   GooglePlayApiError,
@@ -279,5 +280,5 @@ export async function handleRtdn(
 }
 
 if (import.meta.main) {
-  serve(handleRtdn);
+  serve((req) => handleRtdn(req));
 }

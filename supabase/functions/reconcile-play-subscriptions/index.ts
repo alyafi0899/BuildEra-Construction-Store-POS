@@ -97,7 +97,6 @@ export async function handleReconcile(req: Request): Promise<Response> {
     let skipped = 0;
     let acknowledged = 0;
     let consecutiveGoogleFailures = 0;
-    let lastGoogleFailure: { status?: number; reason?: string } | null = null;
 
     for (const item of targets) {
       try {
@@ -109,11 +108,9 @@ export async function handleReconcile(req: Request): Promise<Response> {
             accessToken,
           });
           consecutiveGoogleFailures = 0;
-          lastGoogleFailure = null;
         } catch (err) {
           if (err instanceof GooglePlayApiError) {
             const reason = err.reason ?? "unknown";
-            lastGoogleFailure = { status: err.status, reason };
 
             if (err.status === 410 && (reason === "purchaseTokenNoLongerValid" || reason === "subscriptionNoLongerAvailable")) {
               skipped++;
@@ -300,5 +297,5 @@ export async function handleReconcile(req: Request): Promise<Response> {
 }
 
 if (import.meta.main) {
-  serve(handleReconcile);
+  serve((req) => handleReconcile(req));
 }

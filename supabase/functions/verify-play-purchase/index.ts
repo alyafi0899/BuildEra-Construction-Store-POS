@@ -309,5 +309,5 @@ export async function handleVerify(
 }
 
 if (import.meta.main) {
-  serve(handleVerify);
+  serve((req) => handleVerify(req));
 }

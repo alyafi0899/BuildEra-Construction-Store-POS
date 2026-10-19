@@ -101,12 +101,6 @@ export async function resolveBoundUser(
   for (const candidate of directIdCandidates) {
     const userId = candidate.id;
     if (!jwtUserId || userId === jwtUserId) {
-      if (supabase && jwtUserId === null) {
-        const { data: authUser } = await supabase.from("auth.users").select("id").eq("id", userId).maybeSingle();
-        if (!authUser?.id) {
-          return { userId: null, via: null };
-        }
-      }
       return { userId, via: candidate.via };
     }
   }
@@ -128,13 +122,6 @@ export async function resolveBoundUser(
       if (matchedUserId) {
         if (jwtUserId && matchedUserId !== jwtUserId) {
           continue;
-        }
-
-        if (jwtUserId === null) {
-          const { data: authUser } = await supabase.from("auth.users").select("id").eq("id", matchedUserId).maybeSingle();
-          if (!authUser?.id) {
-            continue;
-          }
         }
 
         return { userId: matchedUserId, via: `${BindingVia.playPurchases}:${candidate.via}` };
