@@ -5,27 +5,41 @@ import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import '../repositories/subscription_repository.dart';
 import '../../../core/utils/trusted_time_helper.dart';
 
+typedef PlayPurchaseVerifier = Future<Map<String, dynamic>> Function({
+  required String purchaseToken,
+  required String productId,
+});
+
 class PlayBillingService {
   static const String monthlyProductId = 'buildera_monthly';
   static const String yearlyProductId = 'buildera_yearly';
   static const Set<String> productIds = {monthlyProductId, yearlyProductId};
 
   final InAppPurchase _iap = InAppPurchase.instance;
-  final SubscriptionRepository _repository;
   StreamSubscription<List<PurchaseDetails>>? _subscription;
   final Set<String> _verifyingTokens = {};
+  final Set<String> _activeVerificationTokens = {};
+  final Map<String, Timer> _verificationTimers = {};
+  final Map<String, int> _verificationAttempts = {};
+  final Map<String, _PendingVerification> _pendingVerifications = {};
+  String? _userId;
 
   bool _isAvailable = false;
   List<ProductDetails> _products = [];
   String? _lastError;
-  bool _isVerifying = false;
 
   bool get isAvailable => _isAvailable;
   List<ProductDetails> get products => List.unmodifiable(_products);
   String? get lastError => _lastError;
-  bool get isVerifying => _isVerifying;
+  bool get isVerifying => _activeVerificationTokens.isNotEmpty;
 
-  PlayBillingService(this._repository);
+  PlayBillingService(SubscriptionRepository repository)
+      : _verifyPurchase = repository.verifyPlayPurchase;
+
+  @visibleForTesting
+  PlayBillingService.forTesting(this._verifyPurchase);
+
+  final PlayPurchaseVerifier _verifyPurchase;
 
   /// Initializes Google Play Billing connection and listens to purchase events
   Future<void> initialize({
@@ -33,6 +47,11 @@ class PlayBillingService {
     required VoidCallback onSubscriptionUpdated,
     required void Function(String error) onError,
   }) async {
+    if (_userId != null && _userId != userId) {
+      cancelPendingVerifications();
+    }
+    _userId = userId;
+
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       _isAvailable = false;
       return;
@@ -136,12 +155,12 @@ class PlayBillingService {
   }
 
   /// Handles stream updates for purchases
-  Future<void> _onPurchaseListUpdated(
+  void _onPurchaseListUpdated(
     List<PurchaseDetails> purchaseDetailsList,
     String userId,
     VoidCallback onSubscriptionUpdated,
     void Function(String error) onError,
-  ) async {
+  ) {
     for (final purchase in purchaseDetailsList) {
       switch (purchase.status) {
         case PurchaseStatus.pending:
@@ -155,25 +174,15 @@ class PlayBillingService {
             continue; // Deduplicate in-flight token verifications
           }
 
-          _isVerifying = true;
           _verifyingTokens.add(token);
-
-          try {
-            final verified = await _verifyAndApplyPurchaseWithRetry(purchase, userId);
-            if (verified) {
-              onSubscriptionUpdated();
-              if (purchase.pendingCompletePurchase) {
-                await _completePurchaseSafely(purchase);
-              }
-            } else {
-              onError('Gagal memverifikasi langganan Google Play pada server.');
-            }
-          } catch (e) {
-            onError('Gagal memverifikasi transaksi: $e');
-          } finally {
-            _verifyingTokens.remove(token);
-            _isVerifying = false;
-          }
+          _verificationAttempts[token] = 0;
+          _pendingVerifications[token] = _PendingVerification(
+            purchase: purchase,
+            userId: userId,
+            onSubscriptionUpdated: onSubscriptionUpdated,
+            onError: onError,
+          );
+          unawaited(_verifyPurchaseOnce(token));
           break;
 
         case PurchaseStatus.error:
@@ -188,13 +197,13 @@ class PlayBillingService {
           }
 
           if (purchase.pendingCompletePurchase) {
-            await _completePurchaseSafely(purchase);
+            unawaited(_completePurchaseSafely(purchase));
           }
           break;
 
         case PurchaseStatus.canceled:
           if (purchase.pendingCompletePurchase) {
-            await _completePurchaseSafely(purchase);
+            unawaited(_completePurchaseSafely(purchase));
           }
           break;
       }
@@ -209,57 +218,121 @@ class PlayBillingService {
     }
   }
 
-  /// Verifies purchase details with backend Edge Function with exponential backoff retry
-  Future<bool> _verifyAndApplyPurchaseWithRetry(PurchaseDetails purchase, String userId) async {
-    final token = purchase.verificationData.serverVerificationData;
-    if (token.isEmpty) return false;
+  static const List<Duration> _retryDelays = [
+    Duration(seconds: 5),
+    Duration(seconds: 15),
+    Duration(seconds: 60),
+    Duration(minutes: 5),
+  ];
 
-    final backoffs = [
-      const Duration(seconds: 5),
-      const Duration(seconds: 15),
-      const Duration(seconds: 60),
-      const Duration(minutes: 5),
-    ];
+  Future<void> _verifyPurchaseOnce(String token) async {
+    final pending = _pendingVerifications[token];
+    if (pending == null) return;
 
-    int attempt = 0;
-    while (true) {
-      try {
-        final res = await _repository.verifyPlayPurchase(
-          purchaseToken: token,
-          productId: purchase.productID,
-        );
+    _verificationTimers.remove(token)?.cancel();
+    final attempt = (_verificationAttempts[token] ?? 0) + 1;
+    _verificationAttempts[token] = attempt;
+    _activeVerificationTokens.add(token);
 
-        if (res['ok'] == true) {
-          final serverTimeStr = res['server_time'] as String?;
-          if (serverTimeStr != null) {
-            final serverTime = DateTime.tryParse(serverTimeStr);
-            if (serverTime != null) {
-              await TrustedTimeHelper.saveTrustedTime(userId, serverTime);
-            }
+    try {
+      final result = await _verifyPurchase(
+        purchaseToken: token,
+        productId: pending.purchase.productID,
+      );
+      if (_pendingVerifications[token] != pending) return;
+
+      if (result['ok'] == true) {
+        final serverTimeStr = result['server_time'] as String?;
+        if (serverTimeStr != null) {
+          final serverTime = DateTime.tryParse(serverTimeStr);
+          if (serverTime != null) {
+            await TrustedTimeHelper.saveTrustedTime(pending.userId, serverTime);
           }
-          return true;
         }
-        return false;
-      } catch (e) {
-        final isPermanent = e is PlayVerifyException &&
-            (e.statusCode == 400 || e.statusCode == 403 || e.statusCode == 409);
-        if (isPermanent) {
-          rethrow;
-        }
+        if (_pendingVerifications[token] != pending) return;
 
-        attempt++;
-        if (attempt > backoffs.length) {
-          rethrow;
+        pending.onSubscriptionUpdated();
+        if (pending.purchase.pendingCompletePurchase) {
+          await _completePurchaseSafely(pending.purchase);
         }
-
-        debugPrint('Play Billing verify error (attempt $attempt/${backoffs.length}). Retrying in ${backoffs[attempt - 1].inSeconds}s...');
-        await Future.delayed(backoffs[attempt - 1]);
+        _clearPendingVerification(token);
+        return;
       }
+
+      _handleVerificationFailure(
+        token,
+        pending,
+        PlayVerifyException(
+          message: 'Gagal memverifikasi langganan Google Play pada server.',
+        ),
+        attempt,
+      );
+    } catch (error) {
+      if (_pendingVerifications[token] != pending) return;
+      _handleVerificationFailure(token, pending, error, attempt);
+    } finally {
+      _activeVerificationTokens.remove(token);
     }
+  }
+
+  void _handleVerificationFailure(
+    String token,
+    _PendingVerification pending,
+    Object error,
+    int attempt,
+  ) {
+    final isPermanent = error is PlayVerifyException &&
+        const {400, 403, 409}.contains(error.statusCode);
+    if (isPermanent || attempt >= _retryDelays.length + 1) {
+      pending.onError('Gagal memverifikasi transaksi: $error');
+      _clearPendingVerification(token);
+      return;
+    }
+
+    final delay = _retryDelays[attempt - 1];
+    debugPrint(
+      'Play Billing verify error (attempt $attempt/5); retry scheduled.',
+    );
+    _verificationTimers[token] = Timer(delay, () {
+      _verificationTimers.remove(token);
+      unawaited(_verifyPurchaseOnce(token));
+    });
+  }
+
+  void _clearPendingVerification(String token) {
+    _verificationTimers.remove(token)?.cancel();
+    _verificationAttempts.remove(token);
+    _pendingVerifications.remove(token);
+    _verifyingTokens.remove(token);
+  }
+
+  void cancelPendingVerifications() {
+    for (final timer in _verificationTimers.values) {
+      timer.cancel();
+    }
+    _verificationTimers.clear();
+    _verificationAttempts.clear();
+    _pendingVerifications.clear();
+    _verifyingTokens.clear();
   }
 
   void dispose() {
     _subscription?.cancel();
     _subscription = null;
+    cancelPendingVerifications();
   }
+}
+
+class _PendingVerification {
+  final PurchaseDetails purchase;
+  final String userId;
+  final VoidCallback onSubscriptionUpdated;
+  final void Function(String error) onError;
+
+  const _PendingVerification({
+    required this.purchase,
+    required this.userId,
+    required this.onSubscriptionUpdated,
+    required this.onError,
+  });
 }

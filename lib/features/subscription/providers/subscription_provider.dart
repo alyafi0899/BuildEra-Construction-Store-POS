@@ -38,11 +38,15 @@ class PlayBillingBootstrapNotifier extends Notifier<void> {
     ref.listen(authStateProvider, (previous, next) async {
       final user = next.value;
       if (kIsWeb || defaultTargetPlatform != TargetPlatform.android || user == null) {
+        _service.cancelPendingVerifications();
         _bootedUserId = null;
         return;
       }
 
       if (_bootedUserId == user.uid) return;
+      if (_bootedUserId != null) {
+        _service.cancelPendingVerifications();
+      }
       _bootedUserId = user.uid;
 
       try {
