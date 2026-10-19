@@ -54,6 +54,18 @@
 @import open_filex;
 #endif
 
+#if __has_include(<permission_handler_apple/PermissionHandlerPlugin.h>)
+#import <permission_handler_apple/PermissionHandlerPlugin.h>
+#else
+@import permission_handler_apple;
+#endif
+
+#if __has_include(<print_bluetooth_thermal/PrintBluetoothThermalPlugin.h>)
+#import <print_bluetooth_thermal/PrintBluetoothThermalPlugin.h>
+#else
+@import print_bluetooth_thermal;
+#endif
+
 #if __has_include(<printing/PrintingPlugin.h>)
 #import <printing/PrintingPlugin.h>
 #else
@@ -89,6 +101,8 @@
   [InAppPurchasePlugin registerWithRegistrar:[registry registrarForPlugin:@"InAppPurchasePlugin"]];
   [MobileScannerPlugin registerWithRegistrar:[registry registrarForPlugin:@"MobileScannerPlugin"]];
   [OpenFilePlugin registerWithRegistrar:[registry registrarForPlugin:@"OpenFilePlugin"]];
+  [PermissionHandlerPlugin registerWithRegistrar:[registry registrarForPlugin:@"PermissionHandlerPlugin"]];
+  [PrintBluetoothThermalPlugin registerWithRegistrar:[registry registrarForPlugin:@"PrintBluetoothThermalPlugin"]];
   [PrintingPlugin registerWithRegistrar:[registry registrarForPlugin:@"PrintingPlugin"]];
   [FPPSharePlusPlugin registerWithRegistrar:[registry registrarForPlugin:@"FPPSharePlusPlugin"]];
   [SharedPreferencesPlugin registerWithRegistrar:[registry registrarForPlugin:@"SharedPreferencesPlugin"]];

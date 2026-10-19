@@ -10,6 +10,7 @@ import '../../../shared/models/transaction.dart';
 import '../../../features/settings/models/store_settings.dart';
 import '../../printing/printing.dart';
 import '../../printing/services/windows_raw_spooler.dart';
+import '../../printing/services/bluetooth_printer_service.dart';
 
 class InvoiceHelper {
   static String? get _downloadsPath {
@@ -46,9 +47,41 @@ class InvoiceHelper {
       Transaction tx, StoreSettings settings) async {
     final transport = _mapTransport(settings.printerTransport);
 
+    if (Platform.isAndroid &&
+        transport == PrinterTransport.escposBluetooth) {
+      final address = settings.invoicePrinterUrl;
+      if (address == null || address.isEmpty) {
+        throw StateError(
+          'Pilih dan hubungkan printer Bluetooth di Pengaturan Printer '
+          'sebelum mencetak.',
+        );
+      }
+
+      final receipt = ReceiptDocument(
+        title: settings.businessName.toUpperCase(),
+        lines: [],
+        metadata: {'transaction': tx, 'settings': settings},
+      );
+      final profile = PrinterProfile(
+        id: 'receipt-bluetooth',
+        name: 'Bluetooth Receipt',
+        transport: transport,
+        paperWidthMm: settings.receiptWidth,
+        marginMm: settings.receiptMargin,
+      );
+      await BluetoothPrinterService().printReceipt(
+        address: address,
+        receipt: receipt,
+        profile: profile,
+      );
+      return;
+    }
+
     // --- CASE 1: DIRECT RAW (The New "Straight Data" System) ---
     // Use this for maximum speed and to avoid "Soft Font" vs "Image" issues on Windows.
-    if (settings.printMethod == 'raw' && Platform.isWindows && settings.invoicePrinterUrl != null) {
+    if (settings.printMethod == 'raw' &&
+        Platform.isWindows &&
+        settings.invoicePrinterUrl != null) {
       final receipt = ReceiptDocument(
         title: settings.businessName.toUpperCase(),
         lines: [],
@@ -66,13 +99,16 @@ class InvoiceHelper {
       // We use EscPosDriver directly to get raw bytes
       final result = await PrintOrchestrator().printReceipt(receipt, profile);
       if (result.success && result.bytes != null) {
-        await WindowsRawSpooler.printRaw(settings.invoicePrinterUrl!, result.bytes!);
+        await WindowsRawSpooler.printRaw(
+            settings.invoicePrinterUrl!, result.bytes!);
         return;
       }
     }
-    
+
     // --- CASE 2: NATIVE NETWORK (TCP) ---
-    if (settings.invoiceDesign == 'fast' && transport == PrinterTransport.escposTcpIp && settings.invoicePrinterUrl != null) {
+    if (settings.invoiceDesign == 'fast' &&
+        transport == PrinterTransport.escposTcpIp &&
+        settings.invoicePrinterUrl != null) {
       final receipt = ReceiptDocument(
         title: settings.businessName.toUpperCase(),
         lines: [],
@@ -97,11 +133,12 @@ class InvoiceHelper {
     // --- CASE 3: DIRECT PDF (The High Fidelity "Print as Image" System) ---
     if (settings.useFastPrint) {
       final pdfBytes = await generatePdf(tx, settings);
-      final printer = settings.invoicePrinterUrl != null 
-          ? Printer(url: settings.invoicePrinterUrl!) 
+      final printer = settings.invoicePrinterUrl != null
+          ? Printer(url: settings.invoicePrinterUrl!)
           : const Printer(url: 'default');
 
-      debugPrint('DIRECT-PDF-PRINT: Sending ${pdfBytes.length} bytes to ${printer.url} (Design: ${settings.invoiceDesign})');
+      debugPrint(
+          'DIRECT-PDF-PRINT: Sending ${pdfBytes.length} bytes to ${printer.url} (Design: ${settings.invoiceDesign})');
 
       await Printing.directPrintPdf(
         printer: printer,
@@ -126,7 +163,8 @@ class InvoiceHelper {
       final port = parts.length > 1 ? int.tryParse(parts[1]) ?? 9100 : 9100;
 
       debugPrint('NATIVE-TCP-PRINT: Connecting to $host:$port...');
-      final socket = await Socket.connect(host, port, timeout: const Duration(seconds: 5));
+      final socket =
+          await Socket.connect(host, port, timeout: const Duration(seconds: 5));
       socket.add(bytes);
       await socket.flush();
       await socket.close();
@@ -169,10 +207,14 @@ class InvoiceHelper {
 
   static PrinterTransport _mapTransport(String t) {
     switch (t) {
-      case 'usb':       return PrinterTransport.escposUsb;
-      case 'bluetooth': return PrinterTransport.escposBluetooth;
-      case 'tcp':       return PrinterTransport.escposTcpIp;
-      default:          return PrinterTransport.officePdf;
+      case 'usb':
+        return PrinterTransport.escposUsb;
+      case 'bluetooth':
+        return PrinterTransport.escposBluetooth;
+      case 'tcp':
+        return PrinterTransport.escposTcpIp;
+      default:
+        return PrinterTransport.officePdf;
     }
   }
 }

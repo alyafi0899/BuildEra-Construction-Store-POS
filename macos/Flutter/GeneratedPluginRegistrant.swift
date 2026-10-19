@@ -11,6 +11,7 @@ import file_picker
 import file_selector_macos
 import in_app_purchase_storekit
 import mobile_scanner
+import print_bluetooth_thermal
 import printing
 import screen_retriever_macos
 import share_plus
@@ -25,6 +26,7 @@ func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   FileSelectorPlugin.register(with: registry.registrar(forPlugin: "FileSelectorPlugin"))
   InAppPurchasePlugin.register(with: registry.registrar(forPlugin: "InAppPurchasePlugin"))
   MobileScannerPlugin.register(with: registry.registrar(forPlugin: "MobileScannerPlugin"))
+  PrintBluetoothThermalPlugin.register(with: registry.registrar(forPlugin: "PrintBluetoothThermalPlugin"))
   PrintingPlugin.register(with: registry.registrar(forPlugin: "PrintingPlugin"))
   ScreenRetrieverMacosPlugin.register(with: registry.registrar(forPlugin: "ScreenRetrieverMacosPlugin"))
   SharePlusMacosPlugin.register(with: registry.registrar(forPlugin: "SharePlusMacosPlugin"))
