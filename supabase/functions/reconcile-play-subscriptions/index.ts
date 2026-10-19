@@ -18,10 +18,24 @@ import {
 
 const VALID_PRODUCT_IDS = new Set(["buildera_monthly", "buildera_yearly"]);
 
-export async function handleReconcile(req: Request): Promise<Response> {
+export async function handleReconcile(
+  req: Request,
+  deps: {
+    supabase?: any;
+    google?: {
+      getAccessToken?: (saJson: string) => Promise<string>;
+      getSubscriptionV2?: (args: { packageName: string; token: string; accessToken: string }) => Promise<any>;
+      acknowledge?: (args: { packageName: string; subscriptionId: string; token: string; accessToken: string }) => Promise<boolean>;
+    };
+    now?: () => Date;
+    env?: Record<string, string | undefined>;
+    sleep?: (milliseconds: number) => Promise<void>;
+  } = {}
+): Promise<Response> {
   try {
     const authHeader = req.headers.get("x-reconcile-secret") ?? "";
-    const reconcileSecret = Deno.env.get("RECONCILE_SECRET") ?? "";
+    const env = deps.env ?? Deno.env.toObject();
+    const reconcileSecret = env.RECONCILE_SECRET ?? "";
 
     if (!reconcileSecret || !constantTimeEqual(authHeader, reconcileSecret)) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -30,19 +44,22 @@ export async function handleReconcile(req: Request): Promise<Response> {
       });
     }
 
-    const saJson = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_JSON") ?? "";
-    const packageName = Deno.env.get("ANDROID_PACKAGE_NAME") ?? "";
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    const saJson = env.GOOGLE_SERVICE_ACCOUNT_JSON ?? "";
+    const packageName = env.ANDROID_PACKAGE_NAME ?? "";
+    const supabaseUrl = env.SUPABASE_URL ?? "";
+    const supabaseServiceKey = env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-    const accessToken = await getGoogleAccessToken(saJson);
+    const supabaseAdmin = deps.supabase ?? createClient(supabaseUrl, supabaseServiceKey);
+    const google = deps.google ?? { getAccessToken: getGoogleAccessToken, getSubscriptionV2, acknowledge: acknowledgeSubscription };
+    const now = deps.now ?? (() => new Date());
+    const sleep = deps.sleep ?? ((milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
+    const accessToken = await google.getAccessToken!(saJson);
 
-    const now = new Date();
-    const past3Days = new Date(now.getTime() - 3 * 86400 * 1000).toISOString();
-    const future48h = new Date(now.getTime() + 48 * 3600 * 1000).toISOString();
-    const past7Days = new Date(now.getTime() - 7 * 86400 * 1000).toISOString();
-    const past1Hour = new Date(now.getTime() - 3600 * 1000).toISOString();
+    const currentTime = now();
+    const past3Days = new Date(currentTime.getTime() - 3 * 86400 * 1000).toISOString();
+    const future48h = new Date(currentTime.getTime() + 48 * 3600 * 1000).toISOString();
+    const past7Days = new Date(currentTime.getTime() - 7 * 86400 * 1000).toISOString();
+    const past1Hour = new Date(currentTime.getTime() - 3600 * 1000).toISOString();
 
     const { data: expTargets, error: expTargetsError } = await supabaseAdmin
       .from("play_purchases")
@@ -102,7 +119,7 @@ export async function handleReconcile(req: Request): Promise<Response> {
       try {
         let playSub: any;
         try {
-          playSub = await getSubscriptionV2({
+          playSub = await google.getSubscriptionV2!({
             packageName,
             token: item.purchase_token,
             accessToken,
@@ -117,7 +134,7 @@ export async function handleReconcile(req: Request): Promise<Response> {
               consecutiveGoogleFailures = 0;
               await supabaseAdmin
                 .from("play_purchases")
-                .update({ dead_reason: reason, dead_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+                .update({ dead_reason: reason, dead_at: currentTime.toISOString(), updated_at: currentTime.toISOString() })
                 .eq("purchase_token", item.purchase_token);
               console.warn("Reconcile token marked dead:", reason);
               continue;
@@ -161,7 +178,7 @@ export async function handleReconcile(req: Request): Promise<Response> {
 
         if (state === "SUBSCRIPTION_STATE_PENDING_PURCHASE_CANCELED" && playSub.linkedPurchaseToken) {
           try {
-            const linkedSub = await getSubscriptionV2({
+            const linkedSub = await google.getSubscriptionV2!({
               packageName,
               token: playSub.linkedPurchaseToken,
               accessToken,
@@ -223,7 +240,7 @@ export async function handleReconcile(req: Request): Promise<Response> {
         }
 
         const createdAt = new Date(item.created_at);
-        const isOlderThan24h = now.getTime() - createdAt.getTime() > 24 * 3600 * 1000;
+        const isOlderThan24h = currentTime.getTime() - createdAt.getTime() > 24 * 3600 * 1000;
 
         if (
           ackState === "ACKNOWLEDGEMENT_STATE_PENDING" &&
@@ -232,7 +249,7 @@ export async function handleReconcile(req: Request): Promise<Response> {
           ["active", "grace"].includes(mappedStatus)
         ) {
           try {
-            await acknowledgeSubscription({
+            await google.acknowledge!({
               packageName,
               subscriptionId: productId,
               token: item.purchase_token,
@@ -276,7 +293,7 @@ export async function handleReconcile(req: Request): Promise<Response> {
           processed++;
         }
 
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await sleep(50);
       } catch (itemErr) {
         failed++;
         console.error("Reconcile item failed:", itemErr);

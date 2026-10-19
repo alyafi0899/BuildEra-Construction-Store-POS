@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
+import 'package:in_app_purchase_android/billing_client_wrappers.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../repositories/subscription_repository.dart';
 import '../../../core/utils/trusted_time_helper.dart';
 
@@ -22,6 +24,8 @@ class PlayBillingService {
   final Map<String, Timer> _verificationTimers = {};
   final Map<String, int> _verificationAttempts = {};
   final Map<String, _PendingVerification> _pendingVerifications = {};
+  _RestoreWaiter? _restoreWaiter;
+  PurchaseDetails? _activePurchaseDetails;
   String? _userId;
 
   bool _isAvailable = false;
@@ -32,6 +36,21 @@ class PlayBillingService {
   List<ProductDetails> get products => List.unmodifiable(_products);
   String? get lastError => _lastError;
   bool get isVerifying => _activeVerificationTokens.isNotEmpty;
+  PurchaseDetails? get activePurchaseDetails => _activePurchaseDetails;
+
+  static const String androidApplicationId = 'com.solutivostudio.caltax';
+
+  static Uri manageSubscriptionUri(String productId) => Uri.https(
+        'play.google.com',
+        '/store/account/subscriptions',
+        {'sku': productId, 'package': androidApplicationId},
+      );
+
+  static Future<bool> launchManageSubscription(String productId) =>
+      launchUrl(
+        manageSubscriptionUri(productId),
+        mode: LaunchMode.externalApplication,
+      );
 
   PlayBillingService(SubscriptionRepository repository)
       : _verifyPurchase = repository.verifyPlayPurchase;
@@ -45,10 +64,15 @@ class PlayBillingService {
   Future<void> initialize({
     required String userId,
     required VoidCallback onSubscriptionUpdated,
+    required void Function(String message) onPending,
+    required void Function(String message) onVerifying,
+    required void Function(String message) onSuccess,
+    required VoidCallback onCancelled,
     required void Function(String error) onError,
   }) async {
     if (_userId != null && _userId != userId) {
       cancelPendingVerifications();
+      _activePurchaseDetails = null;
     }
     _userId = userId;
 
@@ -71,6 +95,10 @@ class PlayBillingService {
           purchaseList,
           userId,
           onSubscriptionUpdated,
+          onPending,
+          onVerifying,
+          onSuccess,
+          onCancelled,
           onError,
         ),
         onError: (error) {
@@ -111,18 +139,29 @@ class PlayBillingService {
     ProductDetails productDetails, {
     String? userId,
     PurchaseDetails? oldPurchaseDetails,
-    dynamic replacementMode,
+    ReplacementMode? replacementMode,
   }) async {
+    _lastError = null;
     if (!_isAvailable) return false;
 
     try {
       if (defaultTargetPlatform == TargetPlatform.android) {
+        final oldGooglePurchase = oldPurchaseDetails is GooglePlayPurchaseDetails
+            ? oldPurchaseDetails
+            : null;
+        if (oldPurchaseDetails != null && oldGooglePurchase == null) {
+          throw ArgumentError.value(
+            oldPurchaseDetails,
+            'oldPurchaseDetails',
+            'An Android Google Play purchase is required for a plan change.',
+          );
+        }
         final googleParam = GooglePlayPurchaseParam(
           productDetails: productDetails,
           applicationUserName: userId,
-          changeSubscriptionParam: oldPurchaseDetails != null
+          changeSubscriptionParam: oldGooglePurchase != null
               ? ChangeSubscriptionParam(
-                  oldPurchaseDetails: oldPurchaseDetails as GooglePlayPurchaseDetails,
+                  oldPurchaseDetails: oldGooglePurchase,
                   replacementMode: replacementMode,
                 )
               : null,
@@ -143,14 +182,24 @@ class PlayBillingService {
   }
 
   /// Restores previous active purchases
-  Future<void> restorePurchases() async {
+  Future<void> restorePurchases({
+    Duration timeout = const Duration(seconds: 20),
+  }) async {
     if (!_isAvailable) return;
+    final waiter = _RestoreWaiter();
+    _restoreWaiter = waiter;
     try {
       await _iap.restorePurchases();
+      await waiter.completer.future.timeout(timeout, onTimeout: () {});
     } catch (e) {
       _lastError = e.toString();
       debugPrint('Error restoring Play Store purchases: $e');
       rethrow;
+    } finally {
+      if (identical(_restoreWaiter, waiter)) {
+        _restoreWaiter = null;
+      }
+      waiter.dispose();
     }
   }
 
@@ -159,18 +208,30 @@ class PlayBillingService {
     List<PurchaseDetails> purchaseDetailsList,
     String userId,
     VoidCallback onSubscriptionUpdated,
+    void Function(String message) onPending,
+    void Function(String message) onVerifying,
+    void Function(String message) onSuccess,
+    VoidCallback onCancelled,
     void Function(String error) onError,
   ) {
     for (final purchase in purchaseDetailsList) {
       switch (purchase.status) {
         case PurchaseStatus.pending:
           debugPrint('Play Store Purchase pending: ${purchase.productID}');
+          onPending(
+            'Menunggu pembayaran, akses aktif otomatis setelah pembayaran selesai',
+          );
           break;
 
         case PurchaseStatus.purchased:
         case PurchaseStatus.restored:
+          onVerifying('Memverifikasi pembayaran Google Play...');
           final token = purchase.verificationData.serverVerificationData;
-          if (token.isEmpty || _verifyingTokens.contains(token)) {
+          if (token.isEmpty) {
+            onError('Token pembelian Google Play tidak ditemukan.');
+            continue;
+          }
+          if (_verifyingTokens.contains(token)) {
             continue; // Deduplicate in-flight token verifications
           }
 
@@ -180,6 +241,7 @@ class PlayBillingService {
             purchase: purchase,
             userId: userId,
             onSubscriptionUpdated: onSubscriptionUpdated,
+            onSuccess: onSuccess,
             onError: onError,
           );
           unawaited(_verifyPurchaseOnce(token));
@@ -189,8 +251,11 @@ class PlayBillingService {
           // Cancellation by user is NOT an error
           final err = purchase.error;
           final isCancelled = err?.code == 'purchase_canceled' ||
-              (err != null && err.message.contains('canceled'));
-          if (!isCancelled) {
+              err?.code == 'user_canceled' ||
+              (err != null && err.message.toLowerCase().contains('cancel'));
+          if (isCancelled) {
+            onCancelled();
+          } else {
             final errMessage = err?.message ?? 'Pembelian gagal.';
             _lastError = errMessage;
             onError('Google Play Billing: $errMessage');
@@ -202,6 +267,7 @@ class PlayBillingService {
           break;
 
         case PurchaseStatus.canceled:
+          onCancelled();
           if (purchase.pendingCompletePurchase) {
             unawaited(_completePurchaseSafely(purchase));
           }
@@ -252,14 +318,19 @@ class PlayBillingService {
         if (_pendingVerifications[token] != pending) return;
 
         pending.onSubscriptionUpdated();
+        _activePurchaseDetails = pending.purchase;
+        pending.onSuccess('Langganan berhasil diverifikasi.');
         if (pending.purchase.pendingCompletePurchase) {
           await _completePurchaseSafely(pending.purchase);
         }
         _clearPendingVerification(token);
+        if (pending.purchase.status == PurchaseStatus.restored) {
+          _restoreWaiter?.recordResult();
+        }
         return;
       }
 
-      _handleVerificationFailure(
+      final isFinalFailure = _handleVerificationFailure(
         token,
         pending,
         PlayVerifyException(
@@ -267,15 +338,24 @@ class PlayBillingService {
         ),
         attempt,
       );
+      if (isFinalFailure &&
+          pending.purchase.status == PurchaseStatus.restored) {
+        _restoreWaiter?.recordResult();
+      }
     } catch (error) {
       if (_pendingVerifications[token] != pending) return;
-      _handleVerificationFailure(token, pending, error, attempt);
+      final isFinalFailure =
+          _handleVerificationFailure(token, pending, error, attempt);
+      if (isFinalFailure &&
+          pending.purchase.status == PurchaseStatus.restored) {
+        _restoreWaiter?.recordResult();
+      }
     } finally {
       _activeVerificationTokens.remove(token);
     }
   }
 
-  void _handleVerificationFailure(
+  bool _handleVerificationFailure(
     String token,
     _PendingVerification pending,
     Object error,
@@ -286,7 +366,7 @@ class PlayBillingService {
     if (isPermanent || attempt >= _retryDelays.length + 1) {
       pending.onError('Gagal memverifikasi transaksi: $error');
       _clearPendingVerification(token);
-      return;
+      return true;
     }
 
     final delay = _retryDelays[attempt - 1];
@@ -297,6 +377,7 @@ class PlayBillingService {
       _verificationTimers.remove(token);
       unawaited(_verifyPurchaseOnce(token));
     });
+    return false;
   }
 
   void _clearPendingVerification(String token) {
@@ -314,6 +395,7 @@ class PlayBillingService {
     _verificationAttempts.clear();
     _pendingVerifications.clear();
     _verifyingTokens.clear();
+    _activePurchaseDetails = null;
   }
 
   void dispose() {
@@ -327,12 +409,30 @@ class _PendingVerification {
   final PurchaseDetails purchase;
   final String userId;
   final VoidCallback onSubscriptionUpdated;
+  final void Function(String message) onSuccess;
   final void Function(String error) onError;
 
   const _PendingVerification({
     required this.purchase,
     required this.userId,
     required this.onSubscriptionUpdated,
+    required this.onSuccess,
     required this.onError,
   });
+}
+
+class _RestoreWaiter {
+  final Completer<void> completer = Completer<void>();
+  Timer? _settleTimer;
+
+  void recordResult() {
+    _settleTimer?.cancel();
+    _settleTimer = Timer(const Duration(milliseconds: 400), () {
+      if (!completer.isCompleted) completer.complete();
+    });
+  }
+
+  void dispose() {
+    _settleTimer?.cancel();
+  }
 }

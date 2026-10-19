@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../models/subscription.dart';
@@ -30,6 +29,7 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
   @override
   Widget build(BuildContext context) {
     final subAsync = ref.watch(subscriptionStateProvider);
+    final billingUiState = ref.watch(billingUiStateProvider);
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -73,6 +73,8 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (billingUiState.status != BillingUiStatus.idle)
+                  _buildBillingStatus(billingUiState),
                 if (sub != null && sub.isNearExpiryAt(TrustedTimeHelper.nowUtc())) _buildExpiryWarning(sub),
                 _buildStatusCard(context, sub),
                 const SizedBox(height: 24),
@@ -96,6 +98,53 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildBillingStatus(BillingUiState state) {
+    final color = state.status == BillingUiStatus.error
+        ? AppTheme.danger
+        : state.status == BillingUiStatus.success
+            ? AppTheme.success
+            : AppTheme.info;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          if (state.status == BillingUiStatus.pending ||
+              state.status == BillingUiStatus.verifying)
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: color,
+              ),
+            )
+          else
+            Icon(
+              state.status == BillingUiStatus.error
+                  ? Icons.error_outline_rounded
+                  : Icons.check_circle_outline_rounded,
+              color: color,
+              size: 20,
+            ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              state.message ?? '',
+              style: TextStyle(color: color, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -354,9 +403,13 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
           if (_isAndroid) ...[
             ElevatedButton.icon(
               onPressed: () async {
-                final url = Uri.parse('https://play.google.com/store/account/subscriptions');
-                if (await canLaunchUrl(url)) {
-                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                final productId = sub.planType == PlanType.yearly
+                    ? PlayBillingService.yearlyProductId
+                    : PlayBillingService.monthlyProductId;
+                final launched =
+                    await PlayBillingService.launchManageSubscription(productId);
+                if (!launched && context.mounted) {
+                  showError(context, 'Tidak dapat membuka langganan Google Play.');
                 }
               },
               icon: const Icon(Icons.shop_two_rounded, size: 20),
@@ -711,13 +764,17 @@ class _PricingSectionState extends ConsumerState<PricingSection> {
                         onPressed: () async {
                           final messenger = ScaffoldMessenger.of(context);
                           try {
-                            await ref
+                            final isActive = await ref
                                 .read(subscriptionStateProvider.notifier)
                                 .restorePlayStorePurchases();
                             if (mounted) {
                               messenger.showSnackBar(
-                                const SnackBar(
-                                  content: Text('Proses pemulihan pembelian Google Play selesai.'),
+                                SnackBar(
+                                  content: Text(
+                                    isActive
+                                        ? 'Langganan dipulihkan'
+                                        : 'Tidak ada langganan aktif untuk dipulihkan',
+                                  ),
                                 ),
                               );
                             }

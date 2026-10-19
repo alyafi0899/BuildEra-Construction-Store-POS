@@ -246,5 +246,5 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.apply_play_subscription FROM public, authenticated, anon;
-GRANT EXECUTE ON FUNCTION public.apply_play_subscription TO service_role;
+REVOKE EXECUTE ON FUNCTION public.apply_play_subscription(text, uuid, text, text, text, timestamptz, boolean, text, text, boolean, boolean, jsonb, numeric) FROM public, authenticated, anon;
+GRANT EXECUTE ON FUNCTION public.apply_play_subscription(text, uuid, text, text, text, timestamptz, boolean, text, text, boolean, boolean, jsonb, numeric) TO service_role;

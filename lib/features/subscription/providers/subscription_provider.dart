@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:in_app_purchase_android/billing_client_wrappers.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/subscription.dart';
 import '../models/entitlement.dart';
@@ -55,10 +56,18 @@ class PlayBillingBootstrapNotifier extends Notifier<void> {
           onSubscriptionUpdated: () {
             ref.read(subscriptionStateProvider.notifier).refresh();
           },
+          onPending: (message) =>
+              ref.read(billingUiStateProvider.notifier).setPending(message),
+          onVerifying: (message) =>
+              ref.read(billingUiStateProvider.notifier).setVerifying(message),
+          onSuccess: (message) =>
+              ref.read(billingUiStateProvider.notifier).setSuccess(message),
+          onCancelled: () =>
+              ref.read(billingUiStateProvider.notifier).reset(),
           onError: (error) {
             final normalized = error.contains('bound to another user')
                 ? 'Pembelian ini terikat ke akun toko lain.'
-                : 'Pembelian Google Play gagal: $error';
+                : error;
             ref.read(billingUiStateProvider.notifier).setError(normalized);
           },
         );
@@ -135,22 +144,25 @@ class SubscriptionNotifier extends Notifier<AsyncValue<Subscription?>> {
         .subscribe();
   }
 
-  Future<void> refresh() async {
+  Future<Subscription?> refresh({bool rethrowOnError = false}) async {
     final user = ref.read(authStateProvider).value;
     if (user == null) {
       state = const AsyncValue.data(null);
-      return;
+      return null;
     }
 
     // Keep previous state while revalidating in background
     try {
       final subscription = await _repository.getSubscription(user.uid);
       state = AsyncValue.data(subscription ?? Subscription.free(user.uid));
+      return subscription;
     } catch (e, st) {
       // Do not overwrite previous valid data with error
       if (state.value == null) {
         state = AsyncValue.error(e, st);
       }
+      if (rethrowOnError) rethrow;
+      return null;
     }
   }
 
@@ -186,23 +198,88 @@ class SubscriptionNotifier extends Notifier<AsyncValue<Subscription?>> {
     }
   }
 
-  Future<void> buyPlayStoreSubscription(ProductDetails product) async {
+  Future<bool> buyPlayStoreSubscription(ProductDetails product) async {
     final user = ref.read(authStateProvider).value;
-    if (user == null) return;
-    ref.read(billingUiStateProvider.notifier).setPending('Memproses pembelian Google Play...');
+    if (user == null) {
+      ref
+          .read(billingUiStateProvider.notifier)
+          .setError('Silakan masuk untuk membeli langganan.');
+      return false;
+    }
+
     final service = ref.read(playBillingServiceProvider);
-    await service.buySubscription(product, userId: user.uid);
+    final oldPurchaseDetails = service.activePurchaseDetails;
+    final currentSubscription = state.value;
+    final selectedPlan = product.id == PlayBillingService.yearlyProductId
+        ? PlanType.yearly
+        : PlanType.monthly;
+    final samePlanAlreadyActive = currentSubscription != null &&
+        !currentSubscription.isBypassed &&
+        currentSubscription.planType == selectedPlan &&
+        currentSubscription.isPremiumAt(TrustedTimeHelper.nowUtc());
+    if (oldPurchaseDetails?.productID == product.id || samePlanAlreadyActive) {
+      ref.read(billingUiStateProvider.notifier).setError(
+            'Paket ${selectedPlan == PlanType.yearly ? 'tahunan' : 'bulanan'} sudah aktif. Anda tidak dapat membeli paket yang sama lagi.',
+          );
+      return false;
+    }
+
+    ReplacementMode? replacementMode;
+    if (oldPurchaseDetails?.productID == PlayBillingService.monthlyProductId &&
+        product.id == PlayBillingService.yearlyProductId) {
+      replacementMode = ReplacementMode.withTimeProration;
+    } else if (oldPurchaseDetails?.productID ==
+            PlayBillingService.yearlyProductId &&
+        product.id == PlayBillingService.monthlyProductId) {
+      replacementMode = ReplacementMode.deferred;
+    }
+
+    final billingState = ref.read(billingUiStateProvider.notifier);
+    billingState.setPending('Memproses pembelian Google Play...');
+    try {
+      final started = await service.buySubscription(
+        product,
+        userId: user.uid,
+        oldPurchaseDetails: oldPurchaseDetails,
+        replacementMode: replacementMode,
+      );
+      if (!started) {
+        billingState.setError(
+          service.lastError ?? 'Google Play tidak dapat memulai pembelian.',
+        );
+      }
+      return started;
+    } catch (error) {
+      billingState.setError('Gagal memulai pembelian Google Play: $error');
+      return false;
+    }
   }
 
-  Future<void> restorePlayStorePurchases() async {
+  Future<bool> restorePlayStorePurchases() async {
     final user = ref.read(authStateProvider).value;
-    if (user == null) return;
+    if (user == null) return false;
     ref.read(billingUiStateProvider.notifier).setVerifying('Memeriksa riwayat langganan...');
     final service = ref.read(playBillingServiceProvider);
-    await service.restorePurchases();
-    await refresh();
-    await ref.read(entitlementProvider.notifier).refresh();
-    ref.read(billingUiStateProvider.notifier).setSuccess('Proses pemulihan selesai');
+    try {
+      await service.restorePurchases();
+      final subscription = await refresh(rethrowOnError: true);
+      await ref.read(entitlementProvider.notifier).refresh();
+      final isActive =
+          subscription?.isPremiumAt(TrustedTimeHelper.nowUtc()) ?? false;
+      if (isActive) {
+        ref
+            .read(billingUiStateProvider.notifier)
+            .setSuccess('Langganan dipulihkan');
+      } else {
+        ref.read(billingUiStateProvider.notifier).reset();
+      }
+      return isActive;
+    } catch (error) {
+      ref
+          .read(billingUiStateProvider.notifier)
+          .setError('Gagal memulihkan pembelian: $error');
+      rethrow;
+    }
   }
 
   Future<void> cancelPending() async {

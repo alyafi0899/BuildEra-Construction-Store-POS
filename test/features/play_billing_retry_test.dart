@@ -54,6 +54,10 @@ void main() {
         service.initialize(
           userId: 'user',
           onSubscriptionUpdated: () => updates++,
+          onPending: (_) {},
+          onVerifying: (_) {},
+          onSuccess: (_) {},
+          onCancelled: () {},
           onError: errors.add,
         ),
       );
@@ -96,6 +100,10 @@ void main() {
         service.initialize(
           userId: 'user',
           onSubscriptionUpdated: () {},
+          onPending: (_) {},
+          onVerifying: (_) {},
+          onSuccess: (_) {},
+          onCancelled: () {},
           onError: errors.add,
         ),
       );
@@ -135,6 +143,10 @@ void main() {
         service.initialize(
           userId: 'user',
           onSubscriptionUpdated: () => updates++,
+          onPending: (_) {},
+          onVerifying: (_) {},
+          onSuccess: (_) {},
+          onCancelled: () {},
           onError: fail,
         ),
       );

@@ -15,7 +15,9 @@ import '../../models/store_settings.dart';
 import '../../providers/settings_provider.dart';
 import '../widgets/printing_settings_widget.dart';
 import '../../../subscription/presentation/pages/subscription_page.dart';
+import '../../../subscription/models/subscription.dart';
 import '../../../subscription/providers/subscription_provider.dart';
+import '../../../subscription/services/play_billing_service.dart';
 import '../../../../shared/widgets/security_gate.dart';
 import '../../../products/providers/product_provider.dart';
 import '../../../payment/providers/transaction_provider.dart';
@@ -96,7 +98,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _saveSettings() async {
-    if (_formKey.currentState != null && !_formKey.currentState!.validate()) return;
+    if (_formKey.currentState != null &&
+        !_formKey.currentState!.validate()) {
+      return;
+    }
 
     final current = ref.read(settingsProvider);
     final updated = current.copyWith(
@@ -262,74 +267,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     });
   }
 
-  Future<void> _openExternalLink(String url, {required String label}) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) {
-      if (mounted) showError(context, 'Link $label tidak valid.');
-      return;
-    }
-
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      if (mounted) showError(context, 'Tidak dapat membuka $label saat ini.');
-    }
-  }
-
   Future<void> _showSupportAndPrivacyDialog() async {
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Dukungan & Privasi'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Hubungi tim support, lihat kebijakan privasi, atau mulai permintaan penghapusan data akun.',
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilledButton.icon(
-                  onPressed: () {
-                    Navigator.pop(dialogContext);
-                    _openExternalLink(
-                      'mailto:${AppContacts.supportEmail}?subject=${Uri.encodeComponent('Permintaan Bantuan BuildEra')}',
-                      label: 'email support',
-                    );
-                  },
-                  icon: const Icon(Icons.mail_outline_rounded),
-                  label: const Text('Email Support'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(dialogContext);
-                    _openExternalLink(AppContacts.privacyPolicyUrl, label: 'kebijakan privasi');
-                  },
-                  icon: const Icon(Icons.privacy_tip_outlined),
-                  label: const Text('Privacy Policy'),
-                ),
-                FilledButton.tonalIcon(
-                  onPressed: () {
-                    Navigator.pop(dialogContext);
-                    _openExternalLink(AppContacts.accountDeletionUrl, label: 'halaman penghapusan akun');
-                  },
-                  icon: const Icon(Icons.delete_forever_rounded),
-                  label: const Text('Hapus Akun'),
-                ),
-              ],
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Tutup'),
-          ),
-        ],
-      ),
+      builder: (_) => const SupportAndPrivacyDialog(),
     );
   }
 
@@ -1879,6 +1820,134 @@ class _CategoryCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class SupportAndPrivacyDialog extends ConsumerWidget {
+  const SupportAndPrivacyDialog({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final subscription = ref.watch(subscriptionStateProvider).value;
+    final isAndroid =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    final showPlayWarning = isAndroid &&
+        subscription != null &&
+        !subscription.isBypassed &&
+        const {
+          SubscriptionStatus.active,
+          SubscriptionStatus.grace,
+          SubscriptionStatus.canceled,
+          SubscriptionStatus.onHold,
+          SubscriptionStatus.paused,
+        }.contains(subscription.status);
+    final productId = subscription?.planType == PlanType.yearly
+        ? PlayBillingService.yearlyProductId
+        : PlayBillingService.monthlyProductId;
+
+    Future<void> openExternal(String url, String label) async {
+      final uri = Uri.tryParse(url);
+      if (uri == null) {
+        showError(context, 'Link $label tidak valid.');
+        return;
+      }
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+          context.mounted) {
+        showError(context, 'Tidak dapat membuka $label saat ini.');
+      }
+    }
+
+    return AlertDialog(
+      title: const Text('Dukungan & Privasi'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Hubungi tim support, lihat kebijakan privasi, atau mulai permintaan penghapusan data akun.',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+            if (showPlayWarning) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.warning.withValues(alpha: 0.12),
+                  border: Border.all(
+                    color: AppTheme.warning.withValues(alpha: 0.45),
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Langganan Google Play tidak berhenti otomatis saat akun dihapus. Batalkan di Play Store agar tidak ditagih.',
+                      style: TextStyle(color: AppTheme.textPrimary),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final launched =
+                            await PlayBillingService.launchManageSubscription(
+                          productId,
+                        );
+                        if (!launched && context.mounted) {
+                          showError(
+                            context,
+                            'Tidak dapat membuka langganan Google Play.',
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.shop_two_rounded),
+                      label: const Text('Kelola langganan'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.icon(
+                  onPressed: () => openExternal(
+                    'mailto:${AppContacts.supportEmail}?subject=${Uri.encodeComponent('Permintaan Bantuan BuildEra')}',
+                    'email support',
+                  ),
+                  icon: const Icon(Icons.mail_outline_rounded),
+                  label: const Text('Email Support'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => openExternal(
+                    AppContacts.privacyPolicyUrl,
+                    'kebijakan privasi',
+                  ),
+                  icon: const Icon(Icons.privacy_tip_outlined),
+                  label: const Text('Privacy Policy'),
+                ),
+                FilledButton.tonalIcon(
+                  onPressed: () => openExternal(
+                    AppContacts.accountDeletionUrl,
+                    'halaman penghapusan akun',
+                  ),
+                  icon: const Icon(Icons.delete_forever_rounded),
+                  label: const Text('Hapus Akun'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Tutup'),
+        ),
+      ],
     );
   }
 }
