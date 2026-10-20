@@ -88,6 +88,16 @@ class BluetoothPrinterService {
     await _ensureBluetoothPermission();
     await _ensureBluetoothEnabled();
 
+    final printers = await _transport.pairedBluetooths;
+    if (!printers.any((printer) => printer.macAdress == address)) {
+      _connectedAddress = null;
+      throw StateError(
+        'Printer tidak ditemukan di daftar perangkat Bluetooth yang sudah '
+        'dipasangkan. Pasangkan printer dari Pengaturan Bluetooth Android '
+        'lalu muat ulang daftar.',
+      );
+    }
+
     bool connected;
     try {
       await _transport.disconnect;
@@ -191,9 +201,11 @@ class BluetoothPrinterService {
   }
 
   static const _connectionError =
-      'Gagal terhubung ke printer. Pastikan printer menyala, sudah '
-      'dipasangkan di pengaturan Bluetooth ponsel, dan tidak sedang '
-      'terhubung ke perangkat lain.';
+      'Tidak dapat terhubung ke printer. Pastikan printer menyala, berada di '
+      'dekat ponsel, dan tidak sedang terhubung ke aplikasi lain (misalnya '
+      'Thermer). Tutup aplikasi lain yang memakai printer, lalu coba lagi. '
+      'Bila masih gagal, hapus pasangan printer di Pengaturan Bluetooth lalu '
+      'pasangkan ulang.';
 
   static const _writeError =
       'Printer terhubung, tetapi data struk tidak terkirim. '

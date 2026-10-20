@@ -410,6 +410,44 @@ void main() {
       );
       expect(transport.connectCount, 0);
     });
+
+    test('distinguishes a printer missing from the paired list', () async {
+      final transport = _FakeBluetoothPrinterTransport(pairedPrinters: []);
+      final service = BluetoothPrinterService(transport: transport);
+
+      await expectLater(
+        service.connectPrinter('printer-1'),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('Printer tidak ditemukan di daftar perangkat Bluetooth'),
+          ),
+        ),
+      );
+      expect(transport.connectCount, 0);
+    });
+
+    test('provides troubleshooting guidance when connection fails', () async {
+      final transport = _FakeBluetoothPrinterTransport(connectResult: false);
+      final service = BluetoothPrinterService(transport: transport);
+
+      await expectLater(
+        service.connectPrinter('printer-1'),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'Tidak dapat terhubung ke printer. Pastikan printer menyala, '
+                'berada di dekat ponsel, dan tidak sedang terhubung ke '
+                'aplikasi lain (misalnya Thermer). Tutup aplikasi lain yang '
+                'memakai printer, lalu coba lagi. Bila masih gagal, hapus '
+                'pasangan printer di Pengaturan Bluetooth lalu pasangkan '
+                'ulang.',
+          ),
+        ),
+      );
+    });
   });
 }
 
@@ -426,18 +464,24 @@ class _FakeBluetoothPrinterTransport implements BluetoothPrinterTransport {
     Map<Permission, PermissionStatus>? permissionStatuses,
     this.bluetoothIsEnabled = true,
     this.permissionBluetoothGranted = true,
+    List<BluetoothInfo>? pairedPrinters,
+    this.connectResult = true,
   })  : _writeResults = List.of(writeResults ?? [true]),
         _permissionStatuses = permissionStatuses ??
             {
               Permission.bluetoothConnect: PermissionStatus.granted,
               Permission.bluetoothScan: PermissionStatus.granted,
-            };
+            },
+        _pairedPrinters = pairedPrinters ??
+            [BluetoothInfo(name: 'Printer', macAdress: 'printer-1')];
 
   final List<Object> _writeResults;
   final Map<Permission, PermissionStatus> _permissionStatuses;
+  final List<BluetoothInfo> _pairedPrinters;
   final List<Permission> requestedPermissions = [];
   final bool bluetoothIsEnabled;
   final bool permissionBluetoothGranted;
+  final bool connectResult;
   bool _connected = false;
   int connectCount = 0;
   int disconnectCount = 0;
@@ -461,13 +505,13 @@ class _FakeBluetoothPrinterTransport implements BluetoothPrinterTransport {
   }
 
   @override
-  Future<List<BluetoothInfo>> get pairedBluetooths async => [];
+  Future<List<BluetoothInfo>> get pairedBluetooths async => _pairedPrinters;
 
   @override
   Future<bool> connect({required String macPrinterAddress}) async {
     connectCount++;
-    _connected = true;
-    return true;
+    _connected = connectResult;
+    return connectResult;
   }
 
   @override

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:printing/printing.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
+import 'package:android_intent_plus/android_intent.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/common_widgets.dart';
 import '../../../../printing/services/bluetooth_printer_service.dart';
@@ -336,9 +337,8 @@ class PrintingSettingsWidget extends StatelessWidget {
                         defaultTargetPlatform == TargetPlatform.android) ...[
                       const SizedBox(height: 8),
                       const Text(
-                        'Jika printer tidak muncul di daftar, printer mungkin '
-                        'hanya mendukung BLE dan belum didukung. Pasangkan '
-                        'printer dari Pengaturan Bluetooth Android terlebih dahulu.',
+                        'Satu printer hanya bisa dipakai satu aplikasi pada '
+                        'satu waktu.',
                         style: TextStyle(
                           fontSize: 12,
                           color: AppTheme.textSecondary,
@@ -357,48 +357,7 @@ class PrintingSettingsWidget extends StatelessWidget {
 
   Future<void> _selectBluetoothPrinter(BuildContext context) async {
     try {
-      final printers = await BluetoothPrinterService().getPairedPrinters();
-      if (!context.mounted) return;
-
-      if (printers.isEmpty) {
-        showError(
-          context,
-          'Belum ada perangkat Bluetooth yang dipasangkan. Pasangkan printer '
-          'dari Pengaturan Bluetooth Android, lalu coba lagi.',
-        );
-        return;
-      }
-
-      final printer = await showDialog<BluetoothInfo>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Pilih Printer Bluetooth'),
-          content: SizedBox(
-            width: 420,
-            child: ListView(
-              shrinkWrap: true,
-              children: printers
-                  .map(
-                    (device) => ListTile(
-                      leading: const Icon(Icons.print_rounded),
-                      title: Text(
-                        device.name.isEmpty ? 'Printer Bluetooth' : device.name,
-                      ),
-                      subtitle: Text(device.macAdress),
-                      onTap: () => Navigator.of(context).pop(device),
-                    ),
-                  )
-                  .toList(),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Batal'),
-            ),
-          ],
-        ),
-      );
+      final printer = await showBluetoothPrinterPickerDialog(context);
       if (printer == null || !context.mounted) return;
 
       await BluetoothPrinterService().connectPrinter(printer.macAdress);
@@ -416,5 +375,180 @@ class PrintingSettingsWidget extends StatelessWidget {
         showError(context, 'Gagal menghubungkan printer: $e');
       }
     }
+  }
+}
+
+Future<BluetoothInfo?> showBluetoothPrinterPickerDialog(
+  BuildContext context, {
+  BluetoothPrinterService? service,
+  Future<void> Function(AndroidIntent intent)? launchIntent,
+}) {
+  return showDialog<BluetoothInfo>(
+    context: context,
+    builder: (context) => BluetoothPrinterPickerDialog(
+      service: service ?? BluetoothPrinterService(),
+      launchIntent: launchIntent ?? (intent) => intent.launch(),
+    ),
+  );
+}
+
+class BluetoothPrinterPickerDialog extends StatefulWidget {
+  const BluetoothPrinterPickerDialog({
+    required this.service,
+    required this.launchIntent,
+    super.key,
+  });
+
+  final BluetoothPrinterService service;
+  final Future<void> Function(AndroidIntent intent) launchIntent;
+
+  @override
+  State<BluetoothPrinterPickerDialog> createState() =>
+      _BluetoothPrinterPickerDialogState();
+}
+
+class _BluetoothPrinterPickerDialogState
+    extends State<BluetoothPrinterPickerDialog> with WidgetsBindingObserver {
+  List<BluetoothInfo> _printers = [];
+  String? _loadError;
+  String? _settingsError;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _reloadPrinters();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _reloadPrinters();
+    }
+  }
+
+  Future<void> _reloadPrinters() async {
+    if (_isLoading || !mounted) return;
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
+    try {
+      final printers = await widget.service.getPairedPrinters();
+      if (mounted) setState(() => _printers = printers);
+    } catch (error) {
+      if (mounted) setState(() => _loadError = error.toString());
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _openBluetoothSettings() async {
+    setState(() => _settingsError = null);
+    try {
+      await widget.launchIntent(
+        const AndroidIntent(action: 'android.settings.BLUETOOTH_SETTINGS'),
+      );
+    } catch (error) {
+      if (mounted) {
+        setState(() =>
+            _settingsError = 'Gagal membuka Pengaturan Bluetooth: $error');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isAndroid = defaultTargetPlatform == TargetPlatform.android;
+    return AlertDialog(
+      title: const Text('Pilih Printer Bluetooth'),
+      content: SizedBox(
+        width: 420,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 420),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '1. Nyalakan printer.\n'
+                '2. Buka Pengaturan Bluetooth Android lalu pasangkan printer '
+                '(PIN biasanya 0000 atau 1234).\n'
+                '3. Kembali ke BuildEra lalu ketuk Muat Ulang.',
+              ),
+              if (_loadError != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Gagal memuat daftar printer: $_loadError',
+                  style: const TextStyle(color: AppTheme.danger),
+                ),
+              ],
+              if (_settingsError != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _settingsError!,
+                  style: const TextStyle(color: AppTheme.danger),
+                ),
+              ],
+              if (_isLoading) ...[
+                const SizedBox(height: 16),
+                const Center(child: CircularProgressIndicator()),
+              ] else if (_printers.isNotEmpty) ...[
+                const Divider(height: 24),
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: _printers
+                        .map(
+                          (device) => ListTile(
+                            leading: const Icon(Icons.print_rounded),
+                            title: Text(
+                              device.name.isEmpty
+                                  ? 'Printer Bluetooth'
+                                  : device.name,
+                            ),
+                            subtitle: Text(device.macAdress),
+                            onTap: () => Navigator.of(context)
+                                .pop<BluetoothInfo>(device),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (isAndroid)
+                    OutlinedButton(
+                      onPressed: _openBluetoothSettings,
+                      child: const Text('Buka Pengaturan Bluetooth'),
+                    ),
+                  OutlinedButton(
+                    onPressed: _isLoading ? null : _reloadPrinters,
+                    child: const Text('Muat Ulang'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Batal'),
+        ),
+      ],
+    );
   }
 }
