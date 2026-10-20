@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:buildera/printing/printing.dart';
 import 'package:buildera/features/settings/models/store_settings.dart';
 import 'package:buildera/shared/models/transaction.dart';
@@ -277,6 +280,137 @@ void main() {
     expect(transport.connectCount, 2);
     expect(transport.writeCount, 2);
   });
+
+  group('Bluetooth permissions on Android', () {
+    setUp(() {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    });
+
+    tearDown(() {
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    test('requests connect and scan permissions before connecting', () async {
+      final transport = _FakeBluetoothPrinterTransport(
+        permissionStatuses: {
+          Permission.bluetoothConnect: PermissionStatus.granted,
+          Permission.bluetoothScan: PermissionStatus.granted,
+        },
+      );
+      final service = BluetoothPrinterService(transport: transport);
+
+      await service.connectPrinter('printer-1');
+
+      expect(
+        transport.requestedPermissions,
+        [Permission.bluetoothConnect, Permission.bluetoothScan],
+      );
+      expect(transport.connectCount, 1);
+    });
+
+    test('reports denied nearby-device permission, not Bluetooth-off',
+        () async {
+      final transport = _FakeBluetoothPrinterTransport(
+        bluetoothIsEnabled: false,
+        permissionStatuses: {
+          Permission.bluetoothConnect: PermissionStatus.granted,
+          Permission.bluetoothScan: PermissionStatus.denied,
+        },
+      );
+      final service = BluetoothPrinterService(transport: transport);
+
+      await expectLater(
+        service.connectPrinter('printer-1'),
+        throwsA(
+          isA<StateError>()
+              .having(
+                (error) => error.message,
+                'message',
+                'Izin Perangkat Sekitar diperlukan untuk memilih dan '
+                    'menghubungkan printer Bluetooth.',
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                isNot(contains('Bluetooth ponsel sedang mati')),
+              ),
+        ),
+      );
+      expect(transport.connectCount, 0);
+    });
+
+    test('explains how to restore permanently denied nearby-device access',
+        () async {
+      final transport = _FakeBluetoothPrinterTransport(
+        permissionStatuses: {
+          Permission.bluetoothConnect: PermissionStatus.permanentlyDenied,
+          Permission.bluetoothScan: PermissionStatus.granted,
+        },
+      );
+      final service = BluetoothPrinterService(transport: transport);
+
+      await expectLater(
+        service.connectPrinter('printer-1'),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'Izin Perangkat Sekitar ditolak permanen. Buka Pengaturan '
+                'aplikasi > Izin > Perangkat sekitar, lalu izinkan untuk '
+                'BuildEra.',
+          ),
+        ),
+      );
+      expect(transport.connectCount, 0);
+    });
+
+    test('reports Bluetooth off only after both permissions are confirmed',
+        () async {
+      final transport = _FakeBluetoothPrinterTransport(
+        bluetoothIsEnabled: false,
+        permissionStatuses: {
+          Permission.bluetoothConnect: PermissionStatus.granted,
+          Permission.bluetoothScan: PermissionStatus.granted,
+        },
+      );
+      final service = BluetoothPrinterService(transport: transport);
+
+      await expectLater(
+        service.connectPrinter('printer-1'),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'Bluetooth ponsel sedang mati. Aktifkan Bluetooth lalu coba lagi.',
+          ),
+        ),
+      );
+      expect(transport.connectCount, 0);
+    });
+
+    test('checks the printer plugin permission safeguard', () async {
+      final transport = _FakeBluetoothPrinterTransport(
+        permissionBluetoothGranted: false,
+        permissionStatuses: {
+          Permission.bluetoothConnect: PermissionStatus.granted,
+          Permission.bluetoothScan: PermissionStatus.granted,
+        },
+      );
+      final service = BluetoothPrinterService(transport: transport);
+
+      await expectLater(
+        service.connectPrinter('printer-1'),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('Izin Perangkat Sekitar diperlukan'),
+          ),
+        ),
+      );
+      expect(transport.connectCount, 0);
+    });
+  });
 }
 
 PrinterProfile _bluetoothProfile() => const PrinterProfile(
@@ -287,10 +421,23 @@ PrinterProfile _bluetoothProfile() => const PrinterProfile(
     );
 
 class _FakeBluetoothPrinterTransport implements BluetoothPrinterTransport {
-  _FakeBluetoothPrinterTransport({List<Object>? writeResults})
-      : _writeResults = List.of(writeResults ?? [true]);
+  _FakeBluetoothPrinterTransport({
+    List<Object>? writeResults,
+    Map<Permission, PermissionStatus>? permissionStatuses,
+    this.bluetoothIsEnabled = true,
+    this.permissionBluetoothGranted = true,
+  })  : _writeResults = List.of(writeResults ?? [true]),
+        _permissionStatuses = permissionStatuses ??
+            {
+              Permission.bluetoothConnect: PermissionStatus.granted,
+              Permission.bluetoothScan: PermissionStatus.granted,
+            };
 
   final List<Object> _writeResults;
+  final Map<Permission, PermissionStatus> _permissionStatuses;
+  final List<Permission> requestedPermissions = [];
+  final bool bluetoothIsEnabled;
+  final bool permissionBluetoothGranted;
   bool _connected = false;
   int connectCount = 0;
   int disconnectCount = 0;
@@ -300,7 +447,11 @@ class _FakeBluetoothPrinterTransport implements BluetoothPrinterTransport {
   Future<bool> get connectionStatus async => _connected;
 
   @override
-  Future<bool> get bluetoothEnabled async => true;
+  Future<bool> get bluetoothEnabled async => bluetoothIsEnabled;
+
+  @override
+  Future<bool> get isPermissionBluetoothGranted async =>
+      permissionBluetoothGranted;
 
   @override
   Future<bool> get disconnect async {
@@ -310,10 +461,25 @@ class _FakeBluetoothPrinterTransport implements BluetoothPrinterTransport {
   }
 
   @override
+  Future<List<BluetoothInfo>> get pairedBluetooths async => [];
+
+  @override
   Future<bool> connect({required String macPrinterAddress}) async {
     connectCount++;
     _connected = true;
     return true;
+  }
+
+  @override
+  Future<Map<Permission, PermissionStatus>> requestPermissions(
+    List<Permission> permissions,
+  ) async {
+    requestedPermissions.addAll(permissions);
+    return {
+      for (final permission in permissions)
+        if (_permissionStatuses.containsKey(permission))
+          permission: _permissionStatuses[permission]!,
+    };
   }
 
   @override

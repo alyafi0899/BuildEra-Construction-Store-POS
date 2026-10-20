@@ -9,8 +9,13 @@ import '../models/printer_profile.dart';
 abstract interface class BluetoothPrinterTransport {
   Future<bool> get connectionStatus;
   Future<bool> get bluetoothEnabled;
+  Future<bool> get isPermissionBluetoothGranted;
   Future<bool> get disconnect;
+  Future<List<BluetoothInfo>> get pairedBluetooths;
   Future<bool> connect({required String macPrinterAddress});
+  Future<Map<Permission, PermissionStatus>> requestPermissions(
+    List<Permission> permissions,
+  );
   Future<bool> writeBytes(List<int> bytes);
 }
 
@@ -22,11 +27,25 @@ class _PluginBluetoothPrinterTransport implements BluetoothPrinterTransport {
   Future<bool> get bluetoothEnabled => PrintBluetoothThermal.bluetoothEnabled;
 
   @override
+  Future<bool> get isPermissionBluetoothGranted =>
+      PrintBluetoothThermal.isPermissionBluetoothGranted;
+
+  @override
   Future<bool> get disconnect async => PrintBluetoothThermal.disconnect;
+
+  @override
+  Future<List<BluetoothInfo>> get pairedBluetooths =>
+      PrintBluetoothThermal.pairedBluetooths;
 
   @override
   Future<bool> connect({required String macPrinterAddress}) =>
       PrintBluetoothThermal.connect(macPrinterAddress: macPrinterAddress);
+
+  @override
+  Future<Map<Permission, PermissionStatus>> requestPermissions(
+    List<Permission> permissions,
+  ) =>
+      permissions.request();
 
   @override
   Future<bool> writeBytes(List<int> bytes) =>
@@ -62,7 +81,7 @@ class BluetoothPrinterService {
   Future<List<BluetoothInfo>> getPairedPrinters() async {
     await _ensureBluetoothPermission();
     await _ensureBluetoothEnabled();
-    return PrintBluetoothThermal.pairedBluetooths;
+    return _transport.pairedBluetooths;
   }
 
   Future<void> connectPrinter(String address) async {
@@ -139,14 +158,34 @@ class BluetoothPrinterService {
 
     if (defaultTargetPlatform != TargetPlatform.android) return;
 
-    final status = await Permission.bluetoothConnect.request();
-    if (!status.isGranted) {
+    final statuses = await _transport.requestPermissions([
+      Permission.bluetoothConnect,
+      Permission.bluetoothScan,
+    ]);
+    final permissionStatuses = [
+      for (final permission in [
+        Permission.bluetoothConnect,
+        Permission.bluetoothScan,
+      ])
+        statuses[permission] ?? PermissionStatus.denied,
+    ];
+    if (permissionStatuses.any((status) => !status.isGranted)) {
+      final permanentlyDenied =
+          permissionStatuses.any((status) => status.isPermanentlyDenied);
       throw StateError(
-        status.isPermanentlyDenied
-            ? 'Izin Bluetooth ditolak permanen. Aktifkan izin Perangkat '
-                'Terdekat untuk BuildEra di Pengaturan aplikasi.'
-            : 'Izin Perangkat Terdekat diperlukan untuk memilih dan '
+        permanentlyDenied
+            ? 'Izin Perangkat Sekitar ditolak permanen. Buka Pengaturan '
+                'aplikasi > Izin > Perangkat sekitar, lalu izinkan untuk '
+                'BuildEra.'
+            : 'Izin Perangkat Sekitar diperlukan untuk memilih dan '
                 'menghubungkan printer Bluetooth.',
+      );
+    }
+
+    if (!await _transport.isPermissionBluetoothGranted) {
+      throw StateError(
+        'Izin Perangkat Sekitar diperlukan untuk memilih dan '
+        'menghubungkan printer Bluetooth.',
       );
     }
   }
