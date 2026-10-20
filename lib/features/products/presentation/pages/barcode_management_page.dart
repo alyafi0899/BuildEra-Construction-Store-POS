@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +7,7 @@ import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/models/product.dart';
 import '../../../../shared/widgets/common_widgets.dart';
@@ -15,6 +17,9 @@ import '../../models/print_profile.dart';
 import '../../providers/print_profile_provider.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../../printing/printing.dart';
+import '../../../../printing/services/bluetooth_label_print_service.dart';
+import '../../../../features/settings/presentation/widgets/printing_settings_widget.dart'
+    show showBluetoothPrinterPickerDialog;
 
 class BarcodeManagementPage extends ConsumerStatefulWidget {
   const BarcodeManagementPage({super.key});
@@ -33,9 +38,12 @@ class _BarcodeManagementPageState
   String? _selectedProfileId;
   bool _isRollMode = true;
   String? _labelPrinterUrl;
+  String _labelPrinterLanguage = 'zpl';
   bool _showSettingsOnCompact = false;
 
   final Map<String, int> _selectedQuantities = {};
+  final _labelPrintService = BluetoothLabelPrintService();
+  static const _labelPrinterLanguagePreferenceKey = 'label_printer_language';
 
   // Settings with persistent controllers to avoid cursor jumping
   late final TextEditingController _ctrlPaperW,
@@ -73,6 +81,7 @@ class _BarcodeManagementPageState
     super.initState();
     final settings = ref.read(settingsProvider);
     _labelPrinterUrl = settings.labelPrinterUrl;
+    _loadLabelPrinterLanguage();
 
     _ctrlPaperW = TextEditingController(text: _paperWidthMm.toString());
     _ctrlPaperH = TextEditingController(text: _paperHeightMm.toString());
@@ -88,6 +97,32 @@ class _BarcodeManagementPageState
     _ctrlFntBar = TextEditingController(text: _fontSizeBarcode.toString());
     _ctrlFntPrice = TextEditingController(text: _fontSizePrice.toString());
     _ctrlFntStore = TextEditingController(text: _fontSizeStore.toString());
+  }
+
+  Future<void> _loadLabelPrinterLanguage() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final language = prefs.getString(_labelPrinterLanguagePreferenceKey);
+      if (mounted && const {'zpl', 'tspl', 'pdf'}.contains(language)) {
+        setState(() => _labelPrinterLanguage = language!);
+      }
+    } catch (error) {
+      if (mounted) {
+        showError(context, 'Gagal memuat bahasa printer label: $error');
+      }
+    }
+  }
+
+  Future<void> _setLabelPrinterLanguage(String language) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_labelPrinterLanguagePreferenceKey, language);
+      if (mounted) setState(() => _labelPrinterLanguage = language);
+    } catch (error) {
+      if (mounted) {
+        showError(context, 'Gagal menyimpan bahasa printer label: $error');
+      }
+    }
   }
 
   @override
@@ -250,38 +285,51 @@ class _BarcodeManagementPageState
     final items = await _buildLabelItems(allProducts);
     if (items.isEmpty) return;
 
-    final label = LabelDocument(
-      title: 'LABEL',
-      lines: const [],
-      metadata: {
-        'items': items,
-        'isRollMode': _isRollMode,
-        'labelWidthMm': _labelWidthMm,
-        'labelHeightMm': _labelHeightMm,
-        'horizontalGapMm': _labelMarginMm,
-        'verticalGapMm': _labelMarginMm,
-        'labelPaddingMm': _labelPaddingMm,
-        'columns': _columnCount,
-        'paperWidthMm': _paperWidthMm,
-        'paperHeightMm': _paperHeightMm,
-        'paperMarginMm': _paperMarginMm,
-        'barcodeWidthMm': _barcodeWidthMm,
-        'barcodeHeightMm': _barcodeHeightMm,
-        'storeNameFontSize': _fontSizeStore,
-        'productNameFontSize': _fontSizeName,
-        'barcodeNumberFontSize': _fontSizeBarcode,
-        'priceFontSize': _fontSizePrice,
-      },
-    );
+    await _printLabelDocument(_buildLabelDocument(items));
+  }
 
-    final result = await PrintOrchestrator().printLabel(
-      label,
-      const PrinterProfile(
-        id: 'office-label',
-        name: 'Office Label',
-        transport: PrinterTransport.officePdf,
-      ),
-      settings: LabelTemplateSettings(
+  Future<void> _printTestLabel() async {
+    final settings = ref.read(settingsProvider);
+    await _printLabelDocument(
+      _buildLabelDocument([
+        {
+          'businessName': settings.businessName,
+          'productName': 'Uji Cetak Label',
+          'barcode': '123456789012',
+          'price': 'Rp. 10.000',
+        },
+      ]),
+      name: 'BuildEra_Label_Uji',
+    );
+  }
+
+  LabelDocument _buildLabelDocument(List<Map<String, dynamic>> items) =>
+      LabelDocument(
+        title: 'LABEL',
+        lines: const [],
+        metadata: {
+          'items': items,
+          'isRollMode': _isRollMode,
+          'labelWidthMm': _labelWidthMm,
+          'labelHeightMm': _labelHeightMm,
+          'horizontalGapMm': _labelMarginMm,
+          'verticalGapMm': _labelMarginMm,
+          'labelPaddingMm': _labelPaddingMm,
+          'columns': _columnCount,
+          'paperWidthMm': _paperWidthMm,
+          'paperHeightMm': _paperHeightMm,
+          'paperMarginMm': _paperMarginMm,
+          'barcodeWidthMm': _barcodeWidthMm,
+          'barcodeHeightMm': _barcodeHeightMm,
+          'storeNameFontSize': _fontSizeStore,
+          'productNameFontSize': _fontSizeName,
+          'barcodeNumberFontSize': _fontSizeBarcode,
+          'priceFontSize': _fontSizePrice,
+        },
+      );
+
+  LabelTemplateSettings _currentLabelTemplateSettings() =>
+      LabelTemplateSettings(
         labelWidthMm: _labelWidthMm,
         labelHeightMm: _labelHeightMm,
         horizontalGapMm: _labelMarginMm,
@@ -297,13 +345,52 @@ class _BarcodeManagementPageState
         productNameFontSize: _fontSizeName,
         barcodeNumberFontSize: _fontSizeBarcode,
         priceFontSize: _fontSizePrice,
-      ),
-    );
+      );
 
-    if (result.bytes != null && result.bytes!.isNotEmpty) {
+  Future<void> _printLabelDocument(
+    LabelDocument label, {
+    String name = 'BuildEra_Labels',
+  }) async {
+    if (defaultTargetPlatform == TargetPlatform.android &&
+        _labelPrinterLanguage != 'pdf') {
+      try {
+        await _labelPrintService.printLabels(
+          label: label,
+          settings: _currentLabelTemplateSettings(),
+          language: _labelPrinterLanguage,
+          isAndroid: true,
+          printerAddress: _labelPrinterUrl,
+          printPdf: () async {},
+        );
+        if (mounted) showSuccess(context, 'Label berhasil dikirim ke printer');
+      } catch (error) {
+        if (mounted) {
+          showError(
+            context,
+            'Gagal mencetak label: $error. Pilihan produk tetap tersimpan.',
+          );
+        }
+      }
+      return;
+    }
+
+    try {
+      final result = await PrintOrchestrator().printLabel(
+        label,
+        const PrinterProfile(
+          id: 'office-label',
+          name: 'Office Label',
+          transport: PrinterTransport.officePdf,
+        ),
+        settings: _currentLabelTemplateSettings(),
+      );
+      if (!result.success || result.bytes == null || result.bytes!.isEmpty) {
+        throw StateError(result.message);
+      }
+
       final mmToPt = 2.83465;
-      final rollWidth =
-          (_labelWidthMm * _columnCount) + (_labelMarginMm * (_columnCount - 1));
+      final rollWidth = (_labelWidthMm * _columnCount) +
+          (_labelMarginMm * (_columnCount - 1));
 
       final format = PdfPageFormat(
         rollWidth * mmToPt,
@@ -319,14 +406,53 @@ class _BarcodeManagementPageState
         printer: printer,
         onLayout: (f) async => Uint8List.fromList(result.bytes!),
         format: _isRollMode ? format : PdfPageFormat.a4,
-        name: 'BuildEra_Labels_${DateTime.now().millisecondsSinceEpoch}',
+        name: '${name}_${DateTime.now().millisecondsSinceEpoch}',
       );
+    } catch (error) {
+      if (mounted) {
+        showError(
+          context,
+          'Gagal mencetak label: $error. Pilihan produk tetap tersimpan.',
+        );
+      }
+    }
+  }
+
+  Future<void> _selectLabelPrinter() async {
+    try {
+      String? selectedPrinterUrl;
+      if (defaultTargetPlatform == TargetPlatform.android &&
+          _labelPrinterLanguage != 'pdf') {
+        final printer = await showBluetoothPrinterPickerDialog(context);
+        if (printer == null || !mounted) return;
+        selectedPrinterUrl = printer.macAdress;
+      } else {
+        final printer = await Printing.pickPrinter(context: context);
+        if (printer == null || !mounted) return;
+        selectedPrinterUrl = printer.url;
+      }
+
+      final current = ref.read(settingsProvider);
+      await ref.read(settingsProvider.notifier).updateSettings(
+            current.copyWith(labelPrinterUrl: selectedPrinterUrl),
+          );
+      if (mounted) setState(() => _labelPrinterUrl = selectedPrinterUrl);
+    } catch (error) {
+      if (mounted) {
+        showError(context, 'Gagal memilih printer label: $error');
+      }
     }
   }
 
   Future<void> _openExternalPdf(List<Product> allProducts) async {
     final items = await _buildLabelItems(allProducts);
     if (items.isEmpty) return;
+
+    if (defaultTargetPlatform == TargetPlatform.android &&
+        _labelPrinterLanguage != 'pdf') {
+      await _printLabelDocument(_buildLabelDocument(items));
+      return;
+    }
 
     final label = LabelDocument(
       title: 'LABEL',
@@ -545,29 +671,43 @@ class _BarcodeManagementPageState
                       ]),
                       const Divider(height: 40),
                       _section('Printer Label', [
+                        DropdownButtonFormField<String>(
+                          initialValue: _labelPrinterLanguage,
+                          decoration: const InputDecoration(
+                            labelText: 'Bahasa printer label',
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'zpl',
+                              child: Text('ZPL'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'tspl',
+                              child: Text('TSPL'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'pdf',
+                              child: Text('PDF'),
+                            ),
+                          ],
+                          onChanged: (language) {
+                            if (language != null) {
+                              _setLabelPrinterLanguage(language);
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 12),
                         ListTile(
                           dense: true,
                           contentPadding: EdgeInsets.zero,
                           title: const Text('Target Printer',
                               style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppTheme.textSecondary)),
-                          subtitle: Text(_labelPrinterUrl ??
-                              'Belum dipilih (Gunakan Default)'),
+                                    fontSize: 12,
+                                    color: AppTheme.textSecondary)),
+                            subtitle: Text(_labelPrinterUrl ??
+                                'Belum dipilih'),
                           trailing: TextButton(
-                            onPressed: () async {
-                              final printer = await Printing.pickPrinter(
-                                  context: context);
-                              if (printer != null) {
-                                setState(() =>
-                                    _labelPrinterUrl = printer.url);
-                                final current = ref.read(settingsProvider);
-                                ref
-                                    .read(settingsProvider.notifier)
-                                    .updateSettings(current.copyWith(
-                                        labelPrinterUrl: printer.url));
-                              }
-                            },
+                            onPressed: _selectLabelPrinter,
                             child: const Text('UBAH'),
                           ),
                         ),
@@ -583,6 +723,16 @@ class _BarcodeManagementPageState
                     border: Border(top: BorderSide(color: AppTheme.border))),
                 child: Column(
                   children: [
+                    SizedBox(
+                      width: double.infinity,
+                      height: 45,
+                      child: OutlinedButton.icon(
+                        onPressed: _printTestLabel,
+                        icon: const Icon(Icons.qr_code_rounded),
+                        label: const Text('CETAK UJI LABEL'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
                       height: 50,
@@ -602,8 +752,18 @@ class _BarcodeManagementPageState
                       child: OutlinedButton.icon(
                         onPressed: () => productsAsync
                             .whenData((p) => _openExternalPdf(p)),
-                        icon: const Icon(Icons.picture_as_pdf_rounded),
-                        label: const Text('BUKA PDF'),
+                        icon: Icon(
+                          defaultTargetPlatform == TargetPlatform.android &&
+                                  _labelPrinterLanguage != 'pdf'
+                              ? Icons.print_rounded
+                              : Icons.picture_as_pdf_rounded,
+                        ),
+                        label: Text(
+                          defaultTargetPlatform == TargetPlatform.android &&
+                                  _labelPrinterLanguage != 'pdf'
+                              ? 'CETAK LABEL BLUETOOTH'
+                              : 'BUKA PDF',
+                        ),
                       ),
                     ),
                   ],

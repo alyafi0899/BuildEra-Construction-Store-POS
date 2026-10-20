@@ -60,8 +60,39 @@ void main() {
     );
 
     expect(result.success, isTrue);
-    expect(result.payload, contains('^XA'));
+    expect(result.payload, contains('SIZE 40.0 mm,30.0 mm'));
     expect(result.payload, contains('SKU-001'));
+    expect(result.bytes, isNotEmpty);
+  });
+
+  test('ZPL label driver emits barcode commands and raw bytes', () async {
+    final result = await PrintOrchestrator().printLabel(
+      LabelDocument(
+        title: 'LABEL',
+        lines: const [],
+        metadata: const {
+          'items': [
+            {
+              'businessName': 'BuildEra',
+              'productName': 'Pipa',
+              'barcode': '123456789012',
+              'price': 'Rp. 10.000',
+            },
+          ],
+        },
+      ),
+      const PrinterProfile(
+        id: 'zpl',
+        name: 'ZPL',
+        transport: PrinterTransport.zpl,
+        address: 'printer-1',
+      ),
+    );
+
+    expect(result.success, isTrue);
+    expect(result.payload, contains('^BC'));
+    expect(result.payload, contains('123456789012'));
+    expect(result.bytes, isNotEmpty);
   });
 
   test('office label print flow generates PDF bytes', () async {

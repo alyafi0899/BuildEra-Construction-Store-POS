@@ -123,17 +123,28 @@ class BluetoothPrinterService {
       throw StateError(result.message);
     }
 
+    await _writeWithReconnect(address, result.bytes!);
+  }
+
+  Future<void> printRaw(String address, List<int> bytes) async {
+    if (bytes.isEmpty) {
+      throw StateError('Data cetak printer kosong.');
+    }
+    await _writeWithReconnect(address, bytes);
+  }
+
+  Future<void> _writeWithReconnect(String address, List<int> bytes) async {
     if (_connectedAddress != address || !await _transport.connectionStatus) {
       await connectPrinter(address);
     }
 
-    if (await _tryWrite(result.bytes!)) return;
+    if (await _tryWrite(bytes)) return;
 
     _connectedAddress = null;
     var retrySucceeded = false;
     try {
       await connectPrinter(address);
-      retrySucceeded = await _tryWrite(result.bytes!);
+      retrySucceeded = await _tryWrite(bytes);
     } catch (_) {
       _connectedAddress = null;
     }
