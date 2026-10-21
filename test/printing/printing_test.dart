@@ -2,11 +2,15 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:buildera/printing/printing.dart';
+import 'package:buildera/core/constants/app_constants.dart';
 import 'package:buildera/features/settings/models/store_settings.dart';
+import 'package:buildera/features/debts/models/customer.dart';
+import 'package:buildera/features/debts/models/debt.dart';
 import 'package:buildera/shared/models/transaction.dart';
 import 'package:buildera/features/cashier/models/cart_item.dart';
 import 'package:buildera/printing/services/bluetooth_printer_service.dart';
@@ -141,6 +145,167 @@ void main() {
     expect(builder.build().every((byte) => byte < 0x80), isTrue);
   });
 
+  test('ESC/POS raster emits correctly sized GS v 0 data', () {
+    final image = img.Image(width: 4, height: 2);
+    for (var y = 0; y < image.height; y++) {
+      for (var x = 0; x < image.width; x++) {
+        image.setPixelRgb(x, y, 0, 0, 0);
+      }
+    }
+    final builder = EscPosBuilder(58)
+      ..imageRaster(
+        Uint8List.fromList(img.encodePng(image)),
+        maxWidthDots: 40,
+      );
+
+    final bytes = builder.build();
+    final headerIndex = _indexOfBytes(bytes, [0x1D, 0x76, 0x30, 0x00]);
+
+    expect(headerIndex, isNonNegative);
+    expect(bytes.sublist(headerIndex + 4, headerIndex + 8), [1, 0, 2, 0]);
+    expect(bytes.sublist(headerIndex + 8, headerIndex + 10), isNotEmpty);
+  });
+
+  test('ESC/POS raster is omitted for missing or invalid image data', () {
+    final emptyBuilder = EscPosBuilder(58);
+    final invalidBuilder = EscPosBuilder(58)
+      ..imageRaster(
+        Uint8List.fromList([1, 2, 3]),
+        maxWidthDots: 384,
+      );
+
+    expect(_indexOfBytes(emptyBuilder.build(), [0x1D, 0x76, 0x30]), -1);
+    expect(_indexOfBytes(invalidBuilder.build(), [0x1D, 0x76, 0x30]), -1);
+  });
+
+  test('QR raster uses thresholding and keeps the requested white margin', () {
+    final image = img.Image(width: 32, height: 32);
+    for (var y = 0; y < image.height; y++) {
+      for (var x = 0; x < image.width; x++) {
+        image.setPixelRgb(x, y, 0, 0, 0);
+      }
+    }
+    final builder = EscPosBuilder(58)
+      ..imageRaster(
+        Uint8List.fromList(img.encodePng(image)),
+        maxWidthDots: 40,
+        maxHeightDots: 32,
+        marginDots: 8,
+      );
+    final bytes = builder.build();
+    final headerIndex = _indexOfBytes(bytes, [0x1D, 0x76, 0x30, 0x00]);
+
+    expect(headerIndex, isNonNegative);
+    final bytesPerRow = bytes[headerIndex + 4];
+    final rasterHeight = bytes[headerIndex + 6];
+    expect(bytesPerRow * 8, lessThanOrEqualTo(40));
+    expect(rasterHeight, 32);
+
+    final raster = bytes.sublist(
+      headerIndex + 8,
+      headerIndex + 8 + bytesPerRow * rasterHeight,
+    );
+    expect(raster.take(bytesPerRow * 8), everyElement(0));
+    expect(raster.skip(bytesPerRow * 24), everyElement(0));
+    for (var row = 8; row < 24; row++) {
+      final rowBytes =
+          raster.sublist(row * bytesPerRow, (row + 1) * bytesPerRow);
+      expect(rowBytes.first, 0);
+      expect(rowBytes[1], 0xFF);
+      expect(rowBytes[2], 0xFF);
+      expect(rowBytes.last & 0x0F, 0);
+      final bits = [
+        for (final byte in rowBytes)
+          for (var bit = 7; bit >= 0; bit--) (byte >> bit) & 1,
+      ];
+      expect(bits.every((bit) => bit == 0 || bit == 1), isTrue);
+    }
+  });
+
+  test('receipt appends logo and QR raster data to its single ESC/POS job', () {
+    final image = img.Image(width: 4, height: 4);
+    final pngBytes = Uint8List.fromList(img.encodePng(image));
+    final receipt = ReceiptDocument(
+      title: 'BuildEra',
+      lines: const [],
+      metadata: {
+        'settings': const StoreSettings(businessName: 'BuildEra'),
+        'transaction': _receiptWithProduct('Pipa').metadata['transaction'],
+        'logoBytes': pngBytes,
+        'qrisBytes': pngBytes,
+      },
+    );
+
+    final result = EscPosDriver().printReceipt(receipt, _bluetoothProfile());
+
+    expect(result.success, isTrue, reason: result.message);
+    expect(
+        _indexOfBytes(result.bytes!, [0x1D, 0x76, 0x30, 0x00]), isNonNegative);
+  });
+
+  test('Debit receipts include configured bank account details', () {
+    final result = EscPosDriver().printReceipt(
+      _receiptWithProduct(
+        'Pipa',
+        paymentMethod: AppConstants.paymentDebit,
+        settings: const StoreSettings(
+          businessName: 'BuildEra',
+          bankAccounts: [
+            BankAccount(
+              bankName: 'Bank Contoh',
+              accountNumber: '123456',
+              accountHolder: 'Toko BuildEra',
+            ),
+          ],
+        ),
+      ),
+      _bluetoothProfile(),
+    );
+
+    expect(result.success, isTrue, reason: result.message);
+    expect(
+      _containsBytes(result.bytes!, _asciiLine('Bank Contoh: 123456')),
+      isTrue,
+    );
+  });
+
+  test('debt receipt information uses the debt creation date', () {
+    final createdAt = DateTime(2024, 2, 3, 14, 5);
+    final receipt = ReceiptDocument(
+      title: 'NOTA PIUTANG',
+      lines: const [],
+      metadata: {
+        'settings': const StoreSettings(businessName: 'BuildEra'),
+        'customer': Customer(
+          id: 'customer-1',
+          name: 'Pelanggan',
+          phone: '',
+          createdAt: createdAt,
+          updatedAt: createdAt,
+        ),
+        'debt': Debt(
+          id: 'debt-1',
+          transactionId: 'tx-1',
+          customerId: 'customer-1',
+          customerName: 'Pelanggan',
+          invoiceNumber: 'INV-PIUTANG',
+          totalAmount: 1000,
+          paidAmount: 0,
+          remainingBalance: 1000,
+          dueDate: DateTime(2024, 3, 3),
+          createdAt: createdAt,
+          updatedAt: createdAt,
+          status: DebtStatus.unpaid,
+        ),
+      },
+    );
+
+    final result = EscPosDriver().printReceipt(receipt, _bluetoothProfile());
+
+    expect(result.success, isTrue, reason: result.message);
+    expect(_containsBytes(result.bytes!, _asciiLine('03/02/2024')), isTrue);
+  });
+
   test('wrapped product names stay within printer width after sanitizing', () {
     final name58 = '…' * 32;
     final receipt58 = _receiptWithProduct(name58);
@@ -193,7 +358,8 @@ void main() {
     final bytes = EscPosBuilder(58).build(cut: false);
 
     expect(bytes, isNot(containsAll([0x1D, 0x56, 0x01])));
-    expect(bytes.skip(bytes.length - 5).toList(), [0x0A, 0x0A, 0x0A, 0x0A, 0x0A]);
+    expect(
+        bytes.skip(bytes.length - 5).toList(), [0x0A, 0x0A, 0x0A, 0x0A, 0x0A]);
   });
 
   test('auto-cut on keeps three feed lines and the cut command', () {
@@ -206,8 +372,7 @@ void main() {
     );
   });
 
-  test('printer profile autoCut false disables the ESC/POS cut command',
-      () {
+  test('printer profile autoCut false disables the ESC/POS cut command', () {
     final result = EscPosDriver().printReceipt(
       _receiptWithProduct('Pipa'),
       const PrinterProfile(
@@ -284,9 +449,9 @@ void main() {
     expect(transport.lastWrite, expected);
   });
 
-  test('Bluetooth print reconnects and retries a failed write once',
-      () async {
-    final transport = _FakeBluetoothPrinterTransport(writeResults: [false, true]);
+  test('Bluetooth print reconnects and retries a failed write once', () async {
+    final transport =
+        _FakeBluetoothPrinterTransport(writeResults: [false, true]);
     final service = BluetoothPrinterService(
       transport: transport,
       permissionCheck: () async {},
@@ -604,13 +769,17 @@ class _FakeBluetoothPrinterTransport implements BluetoothPrinterTransport {
   }
 }
 
-ReceiptDocument _receiptWithProduct(String productName) {
+ReceiptDocument _receiptWithProduct(
+  String productName, {
+  String paymentMethod = 'Tunai',
+  StoreSettings settings = const StoreSettings(businessName: 'BuildEra'),
+}) {
   final now = DateTime(2026, 1, 1);
   return ReceiptDocument(
     title: 'Test',
     lines: const [],
     metadata: {
-      'settings': const StoreSettings(businessName: 'BuildEra'),
+      'settings': settings,
       'transaction': Transaction(
         id: 'tx-1',
         invoiceNumber: 'INV-1',
@@ -622,7 +791,7 @@ ReceiptDocument _receiptWithProduct(String productName) {
         taxRate: 0,
         taxAmount: 0,
         total: 1000,
-        paymentMethod: 'Tunai',
+        paymentMethod: paymentMethod,
         amountPaid: 1000,
         changeAmount: 0,
         createdAt: now,
@@ -650,3 +819,22 @@ ReceiptDocument _receiptWithProduct(String productName) {
 }
 
 List<int> _asciiLine(String text) => [...text.codeUnits, 0x0A];
+
+int _indexOfBytes(List<int> bytes, List<int> sequence) {
+  for (var index = 0; index <= bytes.length - sequence.length; index++) {
+    var matches = true;
+    for (var offset = 0; offset < sequence.length; offset++) {
+      if (bytes[index + offset] != sequence[offset]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+bool _containsBytes(List<int> bytes, List<int> sequence) =>
+    _indexOfBytes(bytes, sequence) >= 0;

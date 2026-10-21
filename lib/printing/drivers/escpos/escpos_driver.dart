@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
+
+import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/utils/formatters.dart';
@@ -25,11 +27,13 @@ class EscPosDriver {
       final purchase = receipt.metadata['purchase'] as Purchase?;
       final customer = receipt.metadata['customer'] as Customer?;
       final payments = receipt.metadata['payments'] as List<DebtPayment>?;
+      final logoBytes = receipt.metadata['logoBytes'] as Uint8List?;
+      final qrisBytes = receipt.metadata['qrisBytes'] as Uint8List?;
 
       if (settings == null) throw 'Store settings missing from metadata';
 
       // 1. HEADER
-      sectionBuilder.buildHeader(settings);
+      sectionBuilder.buildHeader(settings, logoBytes: logoBytes);
 
       // 2. INFORMATION SECTION
       if (debt != null && customer != null) {
@@ -71,8 +75,10 @@ class EscPosDriver {
 
       // 6. CONDITIONAL PAYMENT INFO
       final isTransfer = tx?.paymentMethod == AppConstants.paymentTransfer;
-      if (debt != null || isTransfer) {
-        sectionBuilder.buildPaymentInfo(settings);
+      final isDebit = tx?.paymentMethod == AppConstants.paymentDebit;
+      final isQris = tx?.paymentMethod == AppConstants.paymentQris;
+      if (debt != null || isTransfer || isDebit || isQris) {
+        sectionBuilder.buildPaymentInfo(settings, qrisBytes: qrisBytes);
       }
 
       // 7. FINAL FOOTER
@@ -111,8 +117,12 @@ class EscPosDriver {
 class EscPosBuilder {
   final List<int> _bytes = [];
   final int charsPerLine;
+  final int maxWidthDots;
+  int _alignment = 0;
 
-  EscPosBuilder(double widthMm) : charsPerLine = widthMm <= 60 ? 32 : 48 {
+  EscPosBuilder(double widthMm)
+      : charsPerLine = widthMm <= 60 ? 32 : 48,
+        maxWidthDots = widthMm <= 60 ? 384 : 576 {
     _init();
   }
 
@@ -138,7 +148,112 @@ class EscPosBuilder {
 
   void setAlign(int align) {
     // 0: Left, 1: Center, 2: Right
+    _alignment = align;
     _bytes.addAll([0x1B, 0x61, align]);
+  }
+
+  void imageRaster(
+    Uint8List imageBytes, {
+    required int maxWidthDots,
+    int? maxHeightDots,
+    bool dither = false,
+    int marginDots = 0,
+  }) {
+    try {
+      final decoded = img.decodeImage(imageBytes);
+      if (decoded == null || maxWidthDots < 8 || marginDots < 0) return;
+
+      final printerWidth =
+          this.maxWidthDots < maxWidthDots ? this.maxWidthDots : maxWidthDots;
+      final rowWidthDots = (printerWidth ~/ 8) * 8;
+      final contentWidthLimit = rowWidthDots - marginDots * 2;
+      final contentHeightLimit =
+          (maxHeightDots ?? decoded.height + marginDots * 2) - marginDots * 2;
+      if (contentWidthLimit < 1 || contentHeightLimit < 1) return;
+
+      final scale = [
+        1.0,
+        contentWidthLimit / decoded.width,
+        contentHeightLimit / decoded.height,
+      ].reduce((a, b) => a < b ? a : b);
+      final contentWidth =
+          (decoded.width * scale).floor().clamp(1, contentWidthLimit);
+      final contentHeight =
+          (decoded.height * scale).floor().clamp(1, contentHeightLimit);
+      final resized = img.copyResize(
+        decoded,
+        width: contentWidth,
+        height: contentHeight,
+        interpolation: img.Interpolation.average,
+      );
+
+      final grayscale = List<double>.filled(contentWidth * contentHeight, 255);
+      for (var y = 0; y < contentHeight; y++) {
+        for (var x = 0; x < contentWidth; x++) {
+          final pixel = resized.getPixel(x, y);
+          final alpha = pixel.a.toDouble() / 255;
+          final red = pixel.r.toDouble() * alpha + 255 * (1 - alpha);
+          final green = pixel.g.toDouble() * alpha + 255 * (1 - alpha);
+          final blue = pixel.b.toDouble() * alpha + 255 * (1 - alpha);
+          grayscale[y * contentWidth + x] =
+              red * 0.299 + green * 0.587 + blue * 0.114;
+        }
+      }
+
+      final rasterHeight = contentHeight + marginDots * 2;
+      final bytesPerRow = (contentWidth + marginDots * 2 + 7) ~/ 8;
+      final rasterWidthDots = bytesPerRow * 8;
+      if (rasterWidthDots > rowWidthDots ||
+          (maxHeightDots != null && rasterHeight > maxHeightDots)) {
+        return;
+      }
+      final rasterData = List<int>.filled(bytesPerRow * rasterHeight, 0);
+      final left = (rasterWidthDots - contentWidth) ~/ 2;
+
+      for (var y = 0; y < contentHeight; y++) {
+        for (var x = 0; x < contentWidth; x++) {
+          final index = y * contentWidth + x;
+          final oldValue = grayscale[index];
+          final black = oldValue < 128;
+          if (black) {
+            final rasterX = left + x;
+            final rasterY = marginDots + y;
+            rasterData[rasterY * bytesPerRow + rasterX ~/ 8] |=
+                0x80 >> (rasterX % 8);
+          }
+          if (dither) {
+            final error = oldValue - (black ? 0 : 255);
+            if (x + 1 < contentWidth) {
+              grayscale[index + 1] += error * 7 / 16;
+            }
+            if (y + 1 < contentHeight) {
+              if (x > 0) grayscale[index + contentWidth - 1] += error * 3 / 16;
+              grayscale[index + contentWidth] += error * 5 / 16;
+              if (x + 1 < contentWidth) {
+                grayscale[index + contentWidth + 1] += error / 16;
+              }
+            }
+          }
+        }
+      }
+
+      final previousAlignment = _alignment;
+      setAlign(1);
+      _bytes.addAll([
+        0x1D,
+        0x76,
+        0x30,
+        0x00,
+        bytesPerRow & 0xFF,
+        (bytesPerRow >> 8) & 0xFF,
+        rasterHeight & 0xFF,
+        (rasterHeight >> 8) & 0xFF,
+        ...rasterData,
+      ]);
+      setAlign(previousAlignment);
+    } catch (_) {
+      return;
+    }
   }
 
   void text(String text, {bool newline = true}) {
@@ -187,8 +302,16 @@ class ReceiptSectionBuilder {
 
   ReceiptSectionBuilder(this.b);
 
-  void buildHeader(StoreSettings s) {
+  void buildHeader(StoreSettings s, {Uint8List? logoBytes}) {
     b.setAlign(1);
+    if (logoBytes != null) {
+      b.imageRaster(
+        logoBytes,
+        maxWidthDots: b.maxWidthDots,
+        maxHeightDots: 120,
+        dither: true,
+      );
+    }
     b.setFontSize(doubleWidth: true, doubleHeight: true);
     // b.setBold(true); // Removed bold
     b.text(s.businessName.toUpperCase());
@@ -238,9 +361,8 @@ class ReceiptSectionBuilder {
     b.resetStyle();
     b.setAlign(0);
 
-    final now = DateTime.now();
-    final dateStr = Formatters.date(now);
-    final timeStr = DateFormat('HH:mm').format(now);
+    final dateStr = Formatters.date(d.createdAt);
+    final timeStr = DateFormat('HH:mm').format(d.createdAt);
 
     b.row('Plg : ${c.name}', dateStr);
     if (c.phone.isNotEmpty) b.text('Telp: ${c.phone}');
@@ -405,20 +527,31 @@ class ReceiptSectionBuilder {
     b.line('-');
   }
 
-  void buildPaymentInfo(StoreSettings s) {
-    if (s.bankAccounts.isEmpty) return;
+  void buildPaymentInfo(StoreSettings s, {Uint8List? qrisBytes}) {
+    if (s.bankAccounts.isEmpty && qrisBytes == null) return;
 
     b.resetStyle();
-    b.setAlign(1);
-    // b.setBold(true); // Removed bold
-    b.text('INFORMASI PEMBAYARAN TRANSFER');
-    // b.setBold(false);
+    if (s.bankAccounts.isNotEmpty) {
+      b.setAlign(1);
+      // b.setBold(true); // Removed bold
+      b.text('INFORMASI PEMBAYARAN TRANSFER');
+      // b.setBold(false);
 
-    for (final acc in s.bankAccounts) {
-      b.text('${acc.bankName}: ${acc.accountNumber}');
-      b.text('a/n ${acc.accountHolder}');
+      for (final acc in s.bankAccounts) {
+        b.text('${acc.bankName}: ${acc.accountNumber}');
+        b.text('a/n ${acc.accountHolder}');
+      }
+      b.emptyLine();
     }
-    b.emptyLine();
+    if (qrisBytes != null) {
+      b.imageRaster(
+        qrisBytes,
+        maxWidthDots: b.maxWidthDots,
+        maxHeightDots: 288,
+        marginDots: 8,
+      );
+      b.emptyLine();
+    }
   }
 
   void buildFinalFooter({required bool isDebt}) {
