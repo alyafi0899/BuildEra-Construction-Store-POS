@@ -11,6 +11,7 @@ import 'package:buildera/core/constants/app_constants.dart';
 import 'package:buildera/features/settings/models/store_settings.dart';
 import 'package:buildera/features/debts/models/customer.dart';
 import 'package:buildera/features/debts/models/debt.dart';
+import 'package:buildera/features/debts/models/debt_payment.dart';
 import 'package:buildera/shared/models/transaction.dart';
 import 'package:buildera/features/cashier/models/cart_item.dart';
 import 'package:buildera/printing/services/bluetooth_printer_service.dart';
@@ -304,6 +305,167 @@ void main() {
 
     expect(result.success, isTrue, reason: result.message);
     expect(_containsBytes(result.bytes!, _asciiLine('03/02/2024')), isTrue);
+  });
+
+  test('cash receipt has the established text snapshot and optional customer',
+      () {
+    final withoutCustomer = EscPosDriver().printReceipt(
+      _receiptWithProduct('Pipa'),
+      _bluetoothProfile(),
+    );
+    final snapshot = _receiptTextLines(withoutCustomer.bytes!);
+
+    expect(
+      snapshot.take(snapshot.length - 1).toList(),
+      [
+        'BUILDERA',
+        '--------------------------------',
+        'Kasir : Kasir Uji     01/01/2026',
+        'No    : INV-1              00:00',
+        '--------------------------------',
+        'Pipa',
+        '1 pcs x Rp 1.000        Rp 1.000',
+        '--------------------------------',
+        'Subtotal                Rp 1.000',
+        'TOTAL  Rp 1.000',
+        '--------------------------------',
+        'Bayar (Tunai)           Rp 1.000',
+        'Kembalian                   Rp 0',
+        'Terima Kasih atas Kunjungan Anda',
+      ],
+    );
+    expect(snapshot, contains('Pipa'));
+    expect(snapshot.any((line) => line.startsWith('Waktu Cetak: ')), isTrue);
+    expect(snapshot.any((line) => line.startsWith('Plg   :')), isFalse);
+    expect(_indexOfBytes(withoutCustomer.bytes!, [0x1D, 0x76, 0x30]), -1);
+
+    final withCustomer = EscPosDriver().printReceipt(
+      _receiptWithProduct(
+        'Pipa',
+        customerName: 'Nama Pelanggan',
+      ),
+      _bluetoothProfile(),
+    );
+    expect(_receiptTextLines(withCustomer.bytes!), contains('Plg   : Nama Pelanggan'));
+  });
+
+  test('Debit and Transfer Bank receipts include store bank accounts', () {
+    const settings = StoreSettings(
+      businessName: 'BuildEra',
+      bankAccounts: [
+        BankAccount(
+          bankName: 'Bank Contoh',
+          accountNumber: '123456',
+          accountHolder: 'Toko BuildEra',
+        ),
+      ],
+    );
+    for (final method in [
+      AppConstants.paymentDebit,
+      AppConstants.paymentTransfer,
+    ]) {
+      final result = EscPosDriver().printReceipt(
+        _receiptWithProduct('Pipa', paymentMethod: method, settings: settings),
+        _bluetoothProfile(),
+      );
+      final lines = _receiptTextLines(result.bytes!);
+
+      expect(result.success, isTrue, reason: result.message);
+      expect(lines, contains('INFORMASI PEMBAYARAN TRANSFER'));
+      expect(lines, contains('Bank Contoh: 123456'));
+      expect(lines, contains('a/n Toko BuildEra'));
+    }
+  });
+
+  test('QRIS receipt prints prompt and raster only when image bytes exist', () {
+    final image = img.Image(width: 16, height: 16);
+    final qrisBytes = Uint8List.fromList(img.encodePng(image));
+    final withQris = EscPosDriver().printReceipt(
+      _receiptWithProduct(
+        'Pipa',
+        paymentMethod: AppConstants.paymentQris,
+        extraMetadata: {'qrisBytes': qrisBytes},
+      ),
+      _bluetoothProfile(),
+    );
+    final withoutQris = EscPosDriver().printReceipt(
+      _receiptWithProduct(
+        'Pipa',
+        paymentMethod: AppConstants.paymentQris,
+      ),
+      _bluetoothProfile(),
+    );
+
+    expect(_receiptTextLines(withQris.bytes!), contains('Scan QRIS untuk membayar'));
+    expect(_indexOfBytes(withQris.bytes!, [0x1D, 0x76, 0x30]), isNonNegative);
+    expect(_receiptTextLines(withoutQris.bytes!), isNot(contains('Scan QRIS untuk membayar')));
+    expect(_indexOfBytes(withoutQris.bytes!, [0x1D, 0x76, 0x30]), -1);
+  });
+
+  test('debt receipt includes bill title, totals, history, bank and QR', () {
+    final createdAt = DateTime(2024, 2, 3, 14, 5);
+    final image = img.Image(width: 16, height: 16);
+    final receipt = _debtReceipt(
+      createdAt: createdAt,
+      qrisBytes: Uint8List.fromList(img.encodePng(image)),
+      paymentHistory: [
+        DebtPayment(
+          id: 'payment-1',
+          debtId: 'debt-1',
+          customerId: 'customer-1',
+          amount: 250,
+          createdAt: DateTime(2024, 2, 4),
+        ),
+      ],
+    );
+    final result = EscPosDriver().printReceipt(receipt, _bluetoothProfile());
+    final lines = _receiptTextLines(result.bytes!);
+
+    expect(result.success, isTrue, reason: result.message);
+    expect(lines, contains('STRUK TAGIHAN'));
+    expect(_containsBytes(result.bytes!, _asciiLine('03/02/2024')), isTrue);
+    expect(lines, contains('Kasir: Kasir Uji'));
+    expect(lines, contains('Bank Contoh: 123456'));
+    expect(lines, contains('Scan QRIS untuk membayar'));
+    expect(_indexOfBytes(result.bytes!, [0x1D, 0x76, 0x30]), isNonNegative);
+    expect(lines.any((line) => line.startsWith('Total Sudah Bayar')), isTrue);
+    expect(lines.any((line) => line.startsWith('SISA PIUTANG')), isTrue);
+    expect(lines, contains('RIWAYAT CICILAN / PEMBAYARAN'));
+    expect(lines, contains('Dokumen ini adalah bukti sah piutang'));
+    expect(lines.any((line) => line.startsWith('Waktu Cetak: ')), isTrue);
+  });
+
+  test('logo raster is the first raster command in the receipt', () {
+    final image = img.Image(width: 8, height: 4);
+    final logoBytes = Uint8List.fromList(img.encodePng(image));
+    final result = EscPosDriver().printReceipt(
+      _receiptWithProduct('Pipa', extraMetadata: {'logoBytes': logoBytes}),
+      _bluetoothProfile(),
+    );
+    final bytes = result.bytes!;
+    final logoIndex = _indexOfBytes(bytes, [0x1D, 0x76, 0x30, 0x00]);
+    final businessNameIndex = _indexOfBytes(bytes, 'BUILDERA'.codeUnits);
+
+    expect(result.success, isTrue, reason: result.message);
+    expect(logoIndex, greaterThanOrEqualTo(0));
+    expect(businessNameIndex, greaterThan(logoIndex));
+    expect(bytes.every((byte) => byte >= 0 && byte < 256), isTrue);
+  });
+
+  test('customer name is wrapped and receipt lines fit printer columns', () {
+    final result = EscPosDriver().printReceipt(
+      _receiptWithProduct(
+        'Pipa',
+        customerName: 'Pelanggan Bangunan Berskala Sangat Panjang Sekali',
+      ),
+      _bluetoothProfile(),
+    );
+
+    expect(result.success, isTrue, reason: result.message);
+    expect(
+      _receiptTextLines(result.bytes!).every((line) => line.length <= 32),
+      isTrue,
+    );
   });
 
   test('wrapped product names stay within printer width after sanitizing', () {
@@ -773,6 +935,8 @@ ReceiptDocument _receiptWithProduct(
   String productName, {
   String paymentMethod = 'Tunai',
   StoreSettings settings = const StoreSettings(businessName: 'BuildEra'),
+  String? customerName,
+  Map<String, dynamic> extraMetadata = const {},
 }) {
   final now = DateTime(2026, 1, 1);
   return ReceiptDocument(
@@ -780,9 +944,12 @@ ReceiptDocument _receiptWithProduct(
     lines: const [],
     metadata: {
       'settings': settings,
+      ...extraMetadata,
       'transaction': Transaction(
         id: 'tx-1',
         invoiceNumber: 'INV-1',
+        customerName: customerName,
+        cashierName: 'Kasir Uji',
         subtotal: 1000,
         itemDiscountTotal: 0,
         transDiscountValue: 0,
@@ -819,6 +986,89 @@ ReceiptDocument _receiptWithProduct(
 }
 
 List<int> _asciiLine(String text) => [...text.codeUnits, 0x0A];
+
+List<String> _receiptTextLines(List<int> bytes) {
+  final output = <int>[];
+  var index = 0;
+  while (index < bytes.length) {
+    if (bytes[index] == 0x1B) {
+      index += index + 1 < bytes.length && bytes[index + 1] == 0x40 ? 2 : 3;
+      continue;
+    }
+    if (bytes[index] == 0x1D) {
+      if (index + 3 < bytes.length &&
+          bytes[index + 1] == 0x76 &&
+          bytes[index + 2] == 0x30) {
+        final widthBytes = bytes[index + 4] + (bytes[index + 5] << 8);
+        final height = bytes[index + 6] + (bytes[index + 7] << 8);
+        index += 8 + widthBytes * height;
+      } else {
+        index += 3;
+      }
+      continue;
+    }
+    if (bytes[index] == 0x0A) {
+      output.add(0x0A);
+    } else if (bytes[index] >= 0x20 && bytes[index] < 0x7F) {
+      output.add(bytes[index]);
+    }
+    index++;
+  }
+  return String.fromCharCodes(output)
+      .split('\n')
+      .where((line) => line.isNotEmpty)
+      .toList();
+}
+
+ReceiptDocument _debtReceipt({
+  required DateTime createdAt,
+  Uint8List? qrisBytes,
+  List<DebtPayment> paymentHistory = const [],
+}) {
+  final transaction = _receiptWithProduct(
+    'Pipa',
+    paymentMethod: AppConstants.paymentPiutang,
+  ).metadata['transaction'] as Transaction;
+  final customer = Customer(
+    id: 'customer-1',
+    name: 'Pelanggan Uji',
+    phone: '081234567',
+    createdAt: createdAt,
+    updatedAt: createdAt,
+  );
+  final debt = Debt(
+    id: 'debt-1',
+    transactionId: transaction.id,
+    customerId: customer.id,
+    customerName: customer.name,
+    invoiceNumber: 'INV-PIUTANG',
+    totalAmount: 1000,
+    paidAmount: 250,
+    remainingBalance: 750,
+    dueDate: DateTime(2024, 3, 3),
+    createdAt: createdAt,
+    updatedAt: createdAt,
+    status: DebtStatus.partiallyPaid,
+  );
+  final metadata = <String, dynamic>{
+    'settings': const StoreSettings(
+      businessName: 'BuildEra',
+      bankAccounts: [
+        BankAccount(
+          bankName: 'Bank Contoh',
+          accountNumber: '123456',
+          accountHolder: 'Toko BuildEra',
+        ),
+      ],
+    ),
+    'transaction': transaction,
+    'customer': customer,
+    'debt': debt,
+    'payments': paymentHistory,
+  };
+  if (qrisBytes != null) metadata['qrisBytes'] = qrisBytes;
+  return ReceiptDocument(title: 'STRUK TAGIHAN', lines: const [], metadata: metadata);
+}
 
 int _indexOfBytes(List<int> bytes, List<int> sequence) {
   for (var index = 0; index <= bytes.length - sequence.length; index++) {

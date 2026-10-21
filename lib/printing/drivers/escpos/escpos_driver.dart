@@ -36,8 +36,12 @@ class EscPosDriver {
       sectionBuilder.buildHeader(settings, logoBytes: logoBytes);
 
       // 2. INFORMATION SECTION
+      if (debt != null) sectionBuilder.buildDebtTitle();
       if (debt != null && customer != null) {
         sectionBuilder.buildDebtInfo(customer, debt);
+        if (tx?.cashierName?.isNotEmpty ?? false) {
+          sectionBuilder.buildDebtCashier(tx!.cashierName!);
+        }
       } else if (purchase != null) {
         sectionBuilder.buildPurchaseInfo(purchase);
       } else if (tx != null) {
@@ -74,11 +78,17 @@ class EscPosDriver {
       }
 
       // 6. CONDITIONAL PAYMENT INFO
-      final isTransfer = tx?.paymentMethod == AppConstants.paymentTransfer;
-      final isDebit = tx?.paymentMethod == AppConstants.paymentDebit;
+      final isTransferOrDebit =
+          tx?.paymentMethod == AppConstants.paymentTransfer ||
+              tx?.paymentMethod == AppConstants.paymentDebit;
       final isQris = tx?.paymentMethod == AppConstants.paymentQris;
-      if (debt != null || isTransfer || isDebit || isQris) {
-        sectionBuilder.buildPaymentInfo(settings, qrisBytes: qrisBytes);
+      if (debt != null || isTransferOrDebit) {
+        sectionBuilder.buildPaymentInfo(settings);
+      }
+
+      // 6.1 QRIS IMAGE
+      if (debt != null || isQris) {
+        sectionBuilder.buildQris(qrisBytes);
       }
 
       // 7. FINAL FOOTER
@@ -335,9 +345,33 @@ class ReceiptSectionBuilder {
 
     b.row('Kasir : ${tx.cashierName ?? 'Admin'}', dateStr);
     b.row('No    : ${tx.invoiceNumber}', timeStr);
+    final customerName = tx.customerName?.trim() ?? '';
+    if (customerName.isNotEmpty) {
+      final customerLines = _wrapText(
+        customerName,
+        b.charsPerLine - 'Plg   : '.length,
+      );
+      b.text('Plg   : ${customerLines.first}');
+      for (final line in customerLines.skip(1)) {
+        b.text(line);
+      }
+    }
 
     b.emptyLine();
     b.line('-');
+  }
+
+  void buildDebtTitle() {
+    b.resetStyle();
+    b.setAlign(1);
+    b.setBold(true);
+    b.text('STRUK TAGIHAN');
+    b.setBold(false);
+  }
+
+  void buildDebtCashier(String cashierName) {
+    b.setAlign(0);
+    b.text('Kasir: $cashierName');
   }
 
   void buildPurchaseInfo(Purchase p) {
@@ -527,8 +561,8 @@ class ReceiptSectionBuilder {
     b.line('-');
   }
 
-  void buildPaymentInfo(StoreSettings s, {Uint8List? qrisBytes}) {
-    if (s.bankAccounts.isEmpty && qrisBytes == null) return;
+  void buildPaymentInfo(StoreSettings s) {
+    if (s.bankAccounts.isEmpty) return;
 
     b.resetStyle();
     if (s.bankAccounts.isNotEmpty) {
@@ -543,15 +577,20 @@ class ReceiptSectionBuilder {
       }
       b.emptyLine();
     }
-    if (qrisBytes != null) {
-      b.imageRaster(
-        qrisBytes,
-        maxWidthDots: b.maxWidthDots,
-        maxHeightDots: 288,
-        marginDots: 8,
-      );
-      b.emptyLine();
-    }
+  }
+
+  void buildQris(Uint8List? qrisBytes) {
+    if (qrisBytes == null) return;
+    b.resetStyle();
+    b.setAlign(1);
+    b.text('Scan QRIS untuk membayar');
+    b.imageRaster(
+      qrisBytes,
+      maxWidthDots: b.maxWidthDots,
+      maxHeightDots: 288,
+      marginDots: 8,
+    );
+    b.emptyLine();
   }
 
   void buildFinalFooter({required bool isDebt}) {
