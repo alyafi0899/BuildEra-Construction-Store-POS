@@ -127,7 +127,9 @@ class SyncNotifier extends Notifier<SyncState> {
     _syncTimer?.cancel();
     _syncTimer =
         Timer.periodic(const Duration(seconds: 15), (_) => processQueue());
-    Future.microtask(() => processQueue());
+    Future.microtask(
+      () => processQueue(retryDeferredSchemaTasks: true),
+    );
   }
 
   void _stopSync() {
@@ -358,7 +360,7 @@ class SyncNotifier extends Notifier<SyncState> {
     }
   }
 
-  Future<void> processQueue() async {
+  Future<void> processQueue({bool retryDeferredSchemaTasks = false}) async {
     if (_isCurrentlyProcessing || !ref.read(isOnlineProvider)) return;
     final queue = await _ensureQueueBox();
     if (queue == null || queue.isEmpty) return;
@@ -372,7 +374,28 @@ class SyncNotifier extends Notifier<SyncState> {
       bool hasChanges = false;
 
       while (queue.isNotEmpty && ref.read(isOnlineProvider)) {
-        final keys = queue.keys.take(50).toList();
+        final keys = <dynamic>[];
+        final now = DateTime.now();
+        for (final key in queue.keys) {
+          final raw = queue.get(key);
+          if (raw != null) {
+            try {
+              final task =
+                  SyncTask.fromMap(Map<String, dynamic>.from(raw as Map));
+              final nextRetryAt = task.nextRetryAt;
+              if (!retryDeferredSchemaTasks &&
+                  nextRetryAt != null &&
+                  nextRetryAt.isAfter(now)) {
+                continue;
+              }
+            } catch (_) {
+              // Keep malformed entries eligible for the existing error path.
+            }
+          }
+          keys.add(key);
+          if (keys.length == 50) break;
+        }
+        if (keys.isEmpty) break;
         final processedKeys = <dynamic>[];
         var batchFailed = false;
 
@@ -406,19 +429,26 @@ class SyncNotifier extends Notifier<SyncState> {
                   });
                 } catch (upsertErr) {
                   final errStr = upsertErr.toString();
-                  final isSchemaOrConstraintError = errStr.contains('PGRST204') ||
-                      errStr.contains('schema cache') ||
-                      errStr.contains('productName') ||
-                      errStr.contains('23502') ||
-                      errStr.contains('not-null constraint');
+                  if (isCloudSchemaNotReadyError(upsertErr)) rethrow;
+                  final isSchemaOrConstraintError =
+                      errStr.contains('PGRST204') ||
+                          errStr.contains('schema cache') ||
+                          errStr.contains('productName') ||
+                          errStr.contains('23502') ||
+                          errStr.contains('not-null constraint');
 
                   if (table == 'barcode_history' && isSchemaOrConstraintError) {
                     debugPrint(
                         'Retrying barcode_history upsert due to schema/constraint error: $errStr');
 
-                    final pName = finalData['product_name'] ?? finalData['productName'] ?? '';
-                    final pId = finalData['product_id'] ?? finalData['productId'] ?? '';
-                    final uAt = finalData['used_at'] ?? finalData['usedAt'] ?? DateTime.now().toIso8601String();
+                    final pName = finalData['product_name'] ??
+                        finalData['productName'] ??
+                        '';
+                    final pId =
+                        finalData['product_id'] ?? finalData['productId'] ?? '';
+                    final uAt = finalData['used_at'] ??
+                        finalData['usedAt'] ??
+                        DateTime.now().toIso8601String();
 
                     try {
                       // Attempt 1: Dual schema payload (provides both snake_case and camelCase fields)
@@ -435,7 +465,8 @@ class SyncNotifier extends Notifier<SyncState> {
                         'usedAt': uAt,
                       });
                     } catch (dualErr) {
-                      debugPrint('Dual payload failed ($dualErr), attempting minimal barcode_history upsert');
+                      debugPrint(
+                          'Dual payload failed ($dualErr), attempting minimal barcode_history upsert');
                       try {
                         // Attempt 2: Minimal payload
                         await client.from(table).upsert({
@@ -465,34 +496,54 @@ class SyncNotifier extends Notifier<SyncState> {
             }
             processedKeys.add(key);
           } catch (e) {
-            debugPrint('Sync Task Process Error for key $key: $e');
             final failedTask = task;
             final errStr = e.toString();
-            final isSchemaCacheError = errStr.contains('PGRST204') ||
-                errStr.contains('schema cache') ||
-                errStr.contains('productName') ||
-                errStr.contains('23502') ||
-                errStr.contains('not-null constraint');
+            final failureResult = failedTask == null
+                ? null
+                : syncTaskFailureResult(
+                    failedTask,
+                    e,
+                    now: DateTime.now(),
+                  );
+            final failureDisposition = failureResult?.disposition ??
+                SyncTaskFailureDisposition.discard;
+
+            if (failureDisposition !=
+                SyncTaskFailureDisposition.deferForSchema) {
+              debugPrint('Sync Task Process Error for key $key: $e');
+            }
 
             if (failedTask != null) {
-              final newRetryCount = failedTask.retryCount + 1;
-
-              if ((failedTask.collection == 'barcode_history' && isSchemaCacheError) ||
-                  newRetryCount >= 5) {
-                debugPrint('Clearing unresolvable or max-retried sync task $key ($errStr)');
-                processedKeys.add(key);
-              } else {
+              if (failureDisposition ==
+                  SyncTaskFailureDisposition.deferForSchema) {
+                if (!failedTask.schemaRetryLogged) {
+                  debugPrint(
+                    'Cloud schema is not ready for sync task '
+                    '${failedTask.id} (${failedTask.collection}); '
+                    'retrying in 15 minutes. Error: $errStr',
+                  );
+                }
                 batchFailed = true;
                 try {
                   await queue.put(
                     key,
-                    failedTask
-                        .copyWith(
-                          retryCount: newRetryCount,
-                          lastError: errStr,
-                        )
-                        .toMap(),
+                    failureResult!.task!.toMap(),
                   );
+                } catch (queueError) {
+                  debugPrint('Could not persist sync retry state: $queueError');
+                }
+                state = state.copyWith(
+                  lastError: 'Sync ${failedTask.collection} ditunda: $e',
+                );
+              } else if (failureDisposition ==
+                  SyncTaskFailureDisposition.discard) {
+                debugPrint(
+                    'Clearing unresolvable or max-retried sync task $key ($errStr)');
+                processedKeys.add(key);
+              } else {
+                batchFailed = true;
+                try {
+                  await queue.put(key, failureResult!.task!.toMap());
                 } catch (queueError) {
                   debugPrint('Could not persist sync retry state: $queueError');
                 }
@@ -562,13 +613,15 @@ class SyncNotifier extends Notifier<SyncState> {
         try {
           await client.from('product_units').upsert(cleanedUnits);
         } catch (e) {
+          if (isCloudSchemaNotReadyError(e)) rethrow;
           debugPrint('Product units remote sync notice: $e');
         }
       }
 
       final financials = data['financials'];
       if (financials != null && financials is Map) {
-        data['financials'] = LocalDatabase.sanitize(Map<String, dynamic>.from(financials));
+        data['financials'] =
+            LocalDatabase.sanitize(Map<String, dynamic>.from(financials));
       }
     } else if (task.collection == 'transactions') {
       final items = data.remove('items');
@@ -582,6 +635,7 @@ class SyncNotifier extends Notifier<SyncState> {
         try {
           await client.from('transaction_items').upsert(cleanedItems);
         } catch (e) {
+          if (isCloudSchemaNotReadyError(e)) rethrow;
           debugPrint('Transaction items remote sync notice: $e');
         }
       }
@@ -597,6 +651,7 @@ class SyncNotifier extends Notifier<SyncState> {
         try {
           await client.from('purchase_items').upsert(cleanedItems);
         } catch (e) {
+          if (isCloudSchemaNotReadyError(e)) rethrow;
           debugPrint('Purchase items remote sync notice: $e');
         }
       }
