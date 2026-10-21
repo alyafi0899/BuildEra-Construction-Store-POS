@@ -48,8 +48,10 @@ class _PluginBluetoothPrinterTransport implements BluetoothPrinterTransport {
       permissions.request();
 
   @override
-  Future<bool> writeBytes(List<int> bytes) =>
-      PrintBluetoothThermal.writeBytes(bytes);
+  Future<bool> writeBytes(List<int> bytes) {
+    // The plugin accepts List<Int>; it silently rejects Uint8List.
+    return PrintBluetoothThermal.writeBytes(<int>[...bytes]);
+  }
 }
 
 class BluetoothPrinterService {
@@ -156,7 +158,18 @@ class BluetoothPrinterService {
 
   Future<bool> _tryWrite(List<int> bytes) async {
     try {
-      return await _transport.writeBytes(bytes);
+      final pluginBytes = <int>[...bytes];
+      if (kDebugMode) {
+        debugPrint(
+          'Bluetooth write: ${pluginBytes.runtimeType}, '
+          '${pluginBytes.length} bytes',
+        );
+      }
+      final result = await _transport.writeBytes(pluginBytes);
+      if (kDebugMode && !result) {
+        debugPrint('Bluetooth write returned false.');
+      }
+      return result;
     } catch (_) {
       return false;
     }

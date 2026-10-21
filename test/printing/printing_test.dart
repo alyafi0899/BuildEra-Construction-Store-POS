@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -246,6 +248,40 @@ void main() {
     expect(transport.connectCount, 1);
     expect(transport.disconnectCount, 1);
     expect(transport.writeCount, 2);
+  });
+
+  test('Bluetooth receipt sends one ordinary List<int> write job', () async {
+    final transport = _FakeBluetoothPrinterTransport();
+    final service = BluetoothPrinterService(
+      transport: transport,
+      permissionCheck: () async {},
+    );
+
+    await service.printReceipt(
+      address: 'printer-1',
+      receipt: _receiptWithProduct('Pipa'),
+      profile: _bluetoothProfile(),
+    );
+
+    expect(transport.writeCount, 1);
+    expect(transport.lastWrite, isNot(isA<Uint8List>()));
+    expect(transport.lastWrite, isNotEmpty);
+  });
+
+  test('Bluetooth raw print sends UTF-8 bytes in one ordinary List<int> job',
+      () async {
+    final transport = _FakeBluetoothPrinterTransport();
+    final service = BluetoothPrinterService(
+      transport: transport,
+      permissionCheck: () async {},
+    );
+    final expected = Uint8List.fromList(utf8.encode('LABEL'));
+
+    await service.printRaw('printer-1', expected);
+
+    expect(transport.writeCount, 1);
+    expect(transport.lastWrite, isNot(isA<Uint8List>()));
+    expect(transport.lastWrite, expected);
   });
 
   test('Bluetooth print reconnects and retries a failed write once',
@@ -517,6 +553,7 @@ class _FakeBluetoothPrinterTransport implements BluetoothPrinterTransport {
   int connectCount = 0;
   int disconnectCount = 0;
   int writeCount = 0;
+  List<int>? lastWrite;
 
   @override
   Future<bool> get connectionStatus async => _connected;
@@ -560,6 +597,7 @@ class _FakeBluetoothPrinterTransport implements BluetoothPrinterTransport {
   @override
   Future<bool> writeBytes(List<int> bytes) async {
     writeCount++;
+    lastWrite = List<int>.of(bytes);
     final result = _writeResults.isEmpty ? true : _writeResults.removeAt(0);
     if (result is Exception) throw result;
     return result as bool;
