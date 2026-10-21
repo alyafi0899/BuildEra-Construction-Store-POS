@@ -127,7 +127,7 @@ export async function handleVerify(
           { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-    } else if (!boundUser.userId || boundUser.userId !== userId) {
+    } else if (boundUser.userId && boundUser.userId !== userId) {
       return new Response(
         JSON.stringify({ error: "Purchase not bound to current user" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -136,7 +136,12 @@ export async function handleVerify(
 
     const state = playSub.subscriptionState;
     const mappedStatus = mapSubscriptionState(state);
-    const expiryTime = matchingLineItem.expiryTime;
+    let expiryTime = matchingLineItem?.expiryTime;
+    if (!expiryTime && ["active", "grace", "canceled"].includes(mappedStatus)) {
+      const now = deps.now ? deps.now() : new Date();
+      const addDays = productId.includes("yearly") ? 365 : 30;
+      expiryTime = new Date(now.getTime() + addDays * 86400 * 1000).toISOString();
+    }
     const autoRenewing = matchingLineItem.autoRenewingPlan != null;
     const ackState = playSub.acknowledgementState ?? "ACKNOWLEDGEMENT_STATE_UNSPECIFIED";
     const testPurchase = playSub.testPurchase != null;

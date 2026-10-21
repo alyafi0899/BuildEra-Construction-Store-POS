@@ -241,6 +241,7 @@ class PlayBillingService {
             purchase: purchase,
             userId: userId,
             onSubscriptionUpdated: onSubscriptionUpdated,
+            onVerifying: onVerifying,
             onSuccess: onSuccess,
             onError: onError,
           );
@@ -285,10 +286,9 @@ class PlayBillingService {
   }
 
   static const List<Duration> _retryDelays = [
-    Duration(seconds: 5),
-    Duration(seconds: 15),
-    Duration(seconds: 60),
-    Duration(minutes: 5),
+    Duration(seconds: 3),
+    Duration(seconds: 10),
+    Duration(seconds: 30),
   ];
 
   Future<void> _verifyPurchaseOnce(String token) async {
@@ -371,7 +371,10 @@ class PlayBillingService {
 
     final delay = _retryDelays[attempt - 1];
     debugPrint(
-      'Play Billing verify error (attempt $attempt/5); retry scheduled.',
+      'Play Billing verify error (attempt $attempt/${_retryDelays.length + 1}); retry scheduled in ${delay.inSeconds}s.',
+    );
+    pending.onVerifying(
+      'Memverifikasi pembayaran Google Play... (Mencoba ulang ${attempt + 1}/${_retryDelays.length + 1})',
     );
     _verificationTimers[token] = Timer(delay, () {
       _verificationTimers.remove(token);
@@ -409,6 +412,7 @@ class _PendingVerification {
   final PurchaseDetails purchase;
   final String userId;
   final VoidCallback onSubscriptionUpdated;
+  final void Function(String message) onVerifying;
   final void Function(String message) onSuccess;
   final void Function(String error) onError;
 
@@ -416,6 +420,7 @@ class _PendingVerification {
     required this.purchase,
     required this.userId,
     required this.onSubscriptionUpdated,
+    required this.onVerifying,
     required this.onSuccess,
     required this.onError,
   });

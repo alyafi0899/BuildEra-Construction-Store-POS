@@ -53,8 +53,9 @@ class PlayBillingBootstrapNotifier extends Notifier<void> {
       try {
         await _service.initialize(
           userId: user.uid,
-          onSubscriptionUpdated: () {
-            ref.read(subscriptionStateProvider.notifier).refresh();
+          onSubscriptionUpdated: () async {
+            await ref.read(subscriptionStateProvider.notifier).refresh();
+            await ref.read(entitlementProvider.notifier).refresh();
           },
           onPending: (message) =>
               ref.read(billingUiStateProvider.notifier).setPending(message),
@@ -65,9 +66,12 @@ class PlayBillingBootstrapNotifier extends Notifier<void> {
           onCancelled: () =>
               ref.read(billingUiStateProvider.notifier).reset(),
           onError: (error) {
-            final normalized = error.contains('bound to another user')
-                ? 'Pembelian ini terikat ke akun toko lain.'
-                : error;
+            String normalized = error;
+            if (error.contains('bound to another user') || error.contains('terikat ke akun')) {
+              normalized = 'Pembelian ini terikat ke akun toko lain. Periksa akun Google Play Anda.';
+            } else if (error.contains('tidak ditemukan') || error.contains('token')) {
+              normalized = 'Bukti pembelian Google Play tidak dapat ditemukan. Silakan coba lagi.';
+            }
             ref.read(billingUiStateProvider.notifier).setError(normalized);
           },
         );

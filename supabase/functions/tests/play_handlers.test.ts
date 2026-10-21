@@ -239,6 +239,21 @@ Deno.test("verify rejects an external account identifier bound to another user",
   assertEquals(response.status, 403);
 });
 
+Deno.test("verify allows initial purchase without externalAccountIdentifiers and binds to JWT user", async () => {
+  const supabase = new MockSupabase();
+  const unidentSub = baseSubscription();
+  delete unidentSub.externalAccountIdentifiers;
+
+  const response = await handleVerify(verifyRequest(), {
+    supabase,
+    google: googleFor(unidentSub),
+    env: baseEnv,
+  });
+  assertEquals(response.status, 200);
+  assertEquals(supabase.rpcCalls[0].name, "apply_play_subscription");
+  assertEquals(supabase.rpcCalls[0].args.p_user_id, "user-1");
+});
+
 Deno.test("verify rejects a previously bound token and a Play response without line items", async () => {
   const boundDb = new MockSupabase();
   boundDb.lookupByToken["token-1"] = { user_id: "user-2" };
