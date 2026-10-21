@@ -41,6 +41,13 @@ Future<void> printBluetoothReceipt({
   final metadata = <String, dynamic>{'settings': settings};
   final logoBytes = await _readImageBytes(settings.logoUrl);
   final qrisBytes = await _readImageBytes(settings.qrisImagePath);
+  if (kDebugMode) {
+    debugPrint(
+      'Bluetooth receipt images: '
+      'logo bytes=${logoBytes?.length ?? 0}, '
+      'QRIS bytes=${qrisBytes?.length ?? 0}',
+    );
+  }
   if (logoBytes != null) metadata['logoBytes'] = logoBytes;
   if (qrisBytes != null) metadata['qrisBytes'] = qrisBytes;
   if (transaction != null) metadata['transaction'] = transaction;

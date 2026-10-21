@@ -150,11 +150,9 @@ class SettingsNotifier extends Notifier<StoreSettings> {
             }
           }
 
-          if (cachedSettings?.logoUrl != null) {
-            data['logo_url'] = cachedSettings!.logoUrl;
-          }
-          if (cachedSettings?.qrisImagePath != null) {
-            data['qris_image_path'] = cachedSettings!.qrisImagePath;
+          if (cachedSettings != null) {
+            data['logo_url'] = cachedSettings.logoUrl;
+            data['qris_image_path'] = cachedSettings.qrisImagePath;
           }
 
           final settings = StoreSettings.fromMap(data, isLoading: false);
@@ -168,11 +166,9 @@ class SettingsNotifier extends Notifier<StoreSettings> {
           if (cachedSettings != null) {
             _addAvailableValues(settingsMap, cachedSettings.toMap());
           }
-          if (cachedSettings?.logoUrl != null) {
-            settingsMap['logo_url'] = cachedSettings!.logoUrl;
-          }
-          if (cachedSettings?.qrisImagePath != null) {
-            settingsMap['qris_image_path'] = cachedSettings!.qrisImagePath;
+          if (cachedSettings != null) {
+            settingsMap['logo_url'] = cachedSettings.logoUrl;
+            settingsMap['qris_image_path'] = cachedSettings.qrisImagePath;
           }
 
           final settings = StoreSettings.fromMap(settingsMap, isLoading: false);
@@ -205,11 +201,9 @@ class SettingsNotifier extends Notifier<StoreSettings> {
           if (cachedSettings != null) {
             _addAvailableValues(fallbackData, cachedSettings.toMap());
           }
-          if (cachedSettings?.logoUrl != null) {
-            fallbackData['logo_url'] = cachedSettings!.logoUrl;
-          }
-          if (cachedSettings?.qrisImagePath != null) {
-            fallbackData['qris_image_path'] = cachedSettings!.qrisImagePath;
+          if (cachedSettings != null) {
+            fallbackData['logo_url'] = cachedSettings.logoUrl;
+            fallbackData['qris_image_path'] = cachedSettings.qrisImagePath;
           }
           final fallback = StoreSettings.fromMap(
             fallbackData,

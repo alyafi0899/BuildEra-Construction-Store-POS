@@ -8,12 +8,31 @@ import 'package:buildera/features/products/models/shipping_service.dart';
 import 'package:buildera/features/products/models/print_profile.dart';
 import 'package:buildera/features/products/models/product_financials.dart';
 import 'package:buildera/features/settings/models/app_settings.dart';
+import 'package:buildera/features/settings/models/store_settings.dart';
 import 'package:buildera/features/cashier/models/cart_item.dart';
 
 void main() {
   final now = DateTime.now();
 
   group('Domain Models & Entities Tests', () {
+    test('StoreSettings can explicitly clear saved image paths', () {
+      const settings = StoreSettings(
+        logoUrl: '/local/logo.jpg',
+        qrisImagePath: '/local/qris.png',
+      );
+
+      final cleared = settings.copyWith(
+        clearLogoUrl: true,
+        clearQrisImagePath: true,
+      );
+      final retained = settings.copyWith(businessName: 'BuildEra');
+
+      expect(cleared.logoUrl, isNull);
+      expect(cleared.qrisImagePath, isNull);
+      expect(retained.logoUrl, settings.logoUrl);
+      expect(retained.qrisImagePath, settings.qrisImagePath);
+    });
+
     test('Transaction and TransactionItem serialization toMap and fromMap', () {
       final item = TransactionItem(
         id: 'tx-item-1',
@@ -114,13 +133,15 @@ void main() {
       final purchaseMap = purchase.toMap();
       expect(purchaseMap['payment_status'], equals('paid'));
 
-      final restoredPurchase = Purchase.fromMap(purchaseMap, items: [restoredItem]);
+      final restoredPurchase =
+          Purchase.fromMap(purchaseMap, items: [restoredItem]);
       expect(restoredPurchase.supplierName, equals('PT Material Utama'));
       expect(restoredPurchase.paymentStatus, equals(PaymentStatus.paid));
       expect(restoredPurchase.total, equals(850000));
     });
 
-    test('RestockRecord serialization, copyWith, and payment status tracking', () {
+    test('RestockRecord serialization, copyWith, and payment status tracking',
+        () {
       final restock = RestockRecord(
         id: 'restock-1',
         productId: 'prod-1',
@@ -174,12 +195,14 @@ void main() {
       expect(restored.amount, equals(500000));
       expect(restored.isForSupplier, isTrue);
 
-      final shippingPayment = payment.copyWith(isForSupplier: false, notes: 'Bayar Ongkir');
+      final shippingPayment =
+          payment.copyWith(isForSupplier: false, notes: 'Bayar Ongkir');
       expect(shippingPayment.isForSupplier, isFalse);
       expect(shippingPayment.notes, equals('Bayar Ongkir'));
     });
 
-    test('Supplier and ShippingService serialization, copyWith, and equality', () {
+    test('Supplier and ShippingService serialization, copyWith, and equality',
+        () {
       final supplier1 = Supplier(
         id: 'sup-10',
         name: 'Toko Besi Abadi',

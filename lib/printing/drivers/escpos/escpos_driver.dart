@@ -1,6 +1,5 @@
 import 'dart:convert';
-import 'dart:typed_data';
-
+import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_constants.dart';
@@ -81,7 +80,14 @@ class EscPosDriver {
       final isTransferOrDebit =
           tx?.paymentMethod == AppConstants.paymentTransfer ||
               tx?.paymentMethod == AppConstants.paymentDebit;
-      final isQris = tx?.paymentMethod == AppConstants.paymentQris;
+      final isQris = tx?.paymentMethod.trim().toLowerCase() ==
+          AppConstants.paymentQris.toLowerCase();
+      if (kDebugMode && (isQris || debt != null)) {
+        debugPrint(
+          'ESC/POS QRIS section: payment method matched=$isQris, '
+          'image available=${qrisBytes != null}',
+        );
+      }
       if (debt != null || isTransferOrDebit) {
         sectionBuilder.buildPaymentInfo(settings);
       }
@@ -162,16 +168,17 @@ class EscPosBuilder {
     _bytes.addAll([0x1B, 0x61, align]);
   }
 
-  void imageRaster(
+  bool imageRaster(
     Uint8List imageBytes, {
     required int maxWidthDots,
     int? maxHeightDots,
     bool dither = false,
     int marginDots = 0,
+    bool allowUpscale = false,
   }) {
     try {
       final decoded = img.decodeImage(imageBytes);
-      if (decoded == null || maxWidthDots < 8 || marginDots < 0) return;
+      if (decoded == null || maxWidthDots < 8 || marginDots < 0) return false;
 
       final printerWidth =
           this.maxWidthDots < maxWidthDots ? this.maxWidthDots : maxWidthDots;
@@ -179,13 +186,14 @@ class EscPosBuilder {
       final contentWidthLimit = rowWidthDots - marginDots * 2;
       final contentHeightLimit =
           (maxHeightDots ?? decoded.height + marginDots * 2) - marginDots * 2;
-      if (contentWidthLimit < 1 || contentHeightLimit < 1) return;
+      if (contentWidthLimit < 1 || contentHeightLimit < 1) return false;
 
-      final scale = [
-        1.0,
+      final scaleLimits = [
         contentWidthLimit / decoded.width,
         contentHeightLimit / decoded.height,
-      ].reduce((a, b) => a < b ? a : b);
+      ];
+      if (!allowUpscale) scaleLimits.add(1.0);
+      final scale = scaleLimits.reduce((a, b) => a < b ? a : b);
       final contentWidth =
           (decoded.width * scale).floor().clamp(1, contentWidthLimit);
       final contentHeight =
@@ -194,7 +202,9 @@ class EscPosBuilder {
         decoded,
         width: contentWidth,
         height: contentHeight,
-        interpolation: img.Interpolation.average,
+        interpolation: allowUpscale && !dither
+            ? img.Interpolation.nearest
+            : img.Interpolation.average,
       );
 
       final grayscale = List<double>.filled(contentWidth * contentHeight, 255);
@@ -215,7 +225,7 @@ class EscPosBuilder {
       final rasterWidthDots = bytesPerRow * 8;
       if (rasterWidthDots > rowWidthDots ||
           (maxHeightDots != null && rasterHeight > maxHeightDots)) {
-        return;
+        return false;
       }
       final rasterData = List<int>.filled(bytesPerRow * rasterHeight, 0);
       final left = (rasterWidthDots - contentWidth) ~/ 2;
@@ -261,8 +271,9 @@ class EscPosBuilder {
         ...rasterData,
       ]);
       setAlign(previousAlignment);
+      return true;
     } catch (_) {
-      return;
+      return false;
     }
   }
 
@@ -584,12 +595,16 @@ class ReceiptSectionBuilder {
     b.resetStyle();
     b.setAlign(1);
     b.text('Scan QRIS untuk membayar');
-    b.imageRaster(
+    final rasterAdded = b.imageRaster(
       qrisBytes,
       maxWidthDots: b.maxWidthDots,
       maxHeightDots: 288,
       marginDots: 8,
+      allowUpscale: true,
     );
+    if (kDebugMode) {
+      debugPrint('ESC/POS QRIS raster added: $rasterAdded');
+    }
     b.emptyLine();
   }
 

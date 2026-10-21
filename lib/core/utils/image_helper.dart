@@ -11,12 +11,15 @@ import '../../core/theme/app_theme.dart';
 
 class ImageHelper {
   /// Picks an image via system Photo Picker, crops it (if supported), and returns the bytes
-  static Future<Uint8List?> pickAndCropImage(BuildContext context) async {
+  static Future<Uint8List?> pickAndCropImage(
+    BuildContext context, {
+    int imageQuality = 85,
+  }) async {
     try {
       final picker = ImagePicker();
       final XFile? pickedFile = await picker.pickImage(
         source: ImageSource.gallery,
-        imageQuality: 85,
+        imageQuality: imageQuality,
         maxWidth: 1600,
       );
 
@@ -78,6 +81,25 @@ class ImageHelper {
     );
 
     return Uint8List.fromList(img.encodeJpg(resized, quality: quality));
+  }
+
+  /// Encodes a QR image as lossless PNG so its edges survive thermal rasterizing.
+  static Uint8List processQrImage(Uint8List bytes, {int maxDimension = 1400}) {
+    final image = img.decodeImage(bytes);
+    if (image == null) {
+      throw const FormatException('Gambar QRIS tidak dapat dibaca.');
+    }
+
+    final maxSide = image.width > image.height ? image.width : image.height;
+    final processed = maxSide > maxDimension
+        ? img.copyResize(
+            image,
+            width: image.width >= image.height ? maxDimension : null,
+            height: image.height > image.width ? maxDimension : null,
+            interpolation: img.Interpolation.nearest,
+          )
+        : image;
+    return Uint8List.fromList(img.encodePng(processed));
   }
 
   /// Saves image to local Storage directory under user-specific folder

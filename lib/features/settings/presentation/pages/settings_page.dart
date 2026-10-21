@@ -38,7 +38,8 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
-  int? _selectedCategory; // null = Menu List View; 0..5 = Full-Page Category Detail
+  int?
+      _selectedCategory; // null = Menu List View; 0..5 = Full-Page Category Detail
   final _formKey = GlobalKey<FormState>();
 
   // Controllers
@@ -98,8 +99,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _saveSettings() async {
-    if (_formKey.currentState != null &&
-        !_formKey.currentState!.validate()) {
+    if (_formKey.currentState != null && !_formKey.currentState!.validate()) {
       return;
     }
 
@@ -180,7 +180,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     if (!hasPin) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Atur PIN Keamanan terlebih dahulu sebelum mereset data toko!'),
+          content: Text(
+              'Atur PIN Keamanan terlebih dahulu sebelum mereset data toko!'),
           backgroundColor: AppTheme.danger,
         ),
       );
@@ -195,7 +196,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           backgroundColor: AppTheme.surface,
           title: const Row(
             children: [
-              Icon(Icons.warning_amber_rounded, color: AppTheme.danger, size: 28),
+              Icon(Icons.warning_amber_rounded,
+                  color: AppTheme.danger, size: 28),
               SizedBox(width: 10),
               Text('HAPUS SEMUA DATA?'),
             ],
@@ -297,9 +299,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 leading: Text(lang.flag, style: const TextStyle(fontSize: 24)),
                 title: Text(lang.displayName,
                     style: TextStyle(
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.normal)),
                 trailing: isSelected
-                    ? const Icon(Icons.check_circle_rounded, color: AppTheme.accent)
+                    ? const Icon(Icons.check_circle_rounded,
+                        color: AppTheme.accent)
                     : null,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -333,7 +337,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           backgroundColor: AppTheme.surface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Row(
             children: [
               Icon(Icons.aspect_ratio_rounded, color: AppTheme.accent),
@@ -370,7 +375,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 onChanged: (v) {
                   final newScale = double.parse(v.toStringAsFixed(2));
                   setDialogState(() => currentScale = newScale);
-                  ref.read(appSettingsProvider.notifier).setDisplayScale(newScale);
+                  ref
+                      .read(appSettingsProvider.notifier)
+                      .setDisplayScale(newScale);
                 },
               ),
               const SizedBox(height: 16),
@@ -380,10 +387,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   OutlinedButton(
                     onPressed: () {
                       final isDesktop = !kIsWeb &&
-                          (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+                          (Platform.isWindows ||
+                              Platform.isMacOS ||
+                              Platform.isLinux);
                       final defaultScale = isDesktop ? 1.0 : 0.8;
                       setDialogState(() => currentScale = defaultScale);
-                      ref.read(appSettingsProvider.notifier).setDisplayScale(defaultScale);
+                      ref
+                          .read(appSettingsProvider.notifier)
+                          .setDisplayScale(defaultScale);
                     },
                     child: const Text('RESET DEFAULT'),
                   ),
@@ -443,22 +454,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           steps: const [
             TourStep(
               title: 'Manajemen Fitur POS',
-              description: 'Aktifkan atau nonaktifkan modul kasir, produk, piutang, tagihan, dan analitik sesuai kebutuhan toko.',
+              description:
+                  'Aktifkan atau nonaktifkan modul kasir, produk, piutang, tagihan, dan analitik sesuai kebutuhan toko.',
               icon: Icons.tune_rounded,
             ),
             TourStep(
               title: 'Keamanan & PIN Admin',
-              description: 'Atur PIN admin untuk melindungi modul analitik, laporan, modal barang, dan pengaturan fitur.',
+              description:
+                  'Atur PIN admin untuk melindungi modul analitik, laporan, modal barang, dan pengaturan fitur.',
               icon: Icons.security_rounded,
             ),
             TourStep(
               title: 'Printer & Desain Struk',
-              description: 'Sambungkan printer Bluetooth/WiFi dan pilih kustomisasi tampilan nota struk.',
+              description:
+                  'Sambungkan printer Bluetooth/WiFi dan pilih kustomisasi tampilan nota struk.',
               icon: Icons.print_rounded,
             ),
             TourStep(
               title: 'Sinkronisasi & Unduh Cloud',
-              description: 'Gunakan opsi ini untuk menyelaraskan seluruh data toko Anda dari Supabase Cloud.',
+              description:
+                  'Gunakan opsi ini untuk menyelaraskan seluruh data toko Anda dari Supabase Cloud.',
               icon: Icons.cloud_download_rounded,
             ),
           ],
@@ -505,7 +520,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 },
               ),
               const SizedBox(height: 20),
-
               _categoryGroupHeader('PROFIL & BISNIS'),
               _CategoryCard(
                 icon: Icons.store_rounded,
@@ -525,7 +539,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 onTap: () => setState(() => _selectedCategory = 2),
               ),
               const SizedBox(height: 20),
-
               _categoryGroupHeader('CETAK & STRUK'),
               _CategoryCard(
                 icon: Icons.print_rounded,
@@ -536,7 +549,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 onTap: () => setState(() => _selectedCategory = 3),
               ),
               const SizedBox(height: 20),
-
               _categoryGroupHeader('KEAMANAN'),
               _CategoryCard(
                 icon: Icons.security_rounded,
@@ -547,7 +559,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 onTap: () => setState(() => _selectedCategory = 4),
               ),
               const SizedBox(height: 20),
-
               _categoryGroupHeader('AKUN & SISTEM'),
               _CategoryCard(
                 icon: Icons.stars_rounded,
@@ -555,7 +566,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 title: 'Paket Langganan Premium',
                 subtitle:
                     'Status paket langganan aktif dan akses ke fitur-fitur POS premium',
-                trailingBadge: ref.watch(isPremiumProvider) ? 'PREMIUM' : 'GRATIS',
+                trailingBadge:
+                    ref.watch(isPremiumProvider) ? 'PREMIUM' : 'GRATIS',
                 onTap: () => setState(() => _selectedCategory = 5),
               ),
               const SizedBox(height: 10),
@@ -564,7 +576,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 iconColor: Colors.cyan,
                 title: ref.watch(appStringsProvider).languageSettings,
                 subtitle: ref.watch(appStringsProvider).selectLanguage,
-                trailingBadge: '${ref.watch(appSettingsProvider).appLanguage.flag} ${ref.watch(appSettingsProvider).appLanguage.displayName}',
+                trailingBadge:
+                    '${ref.watch(appSettingsProvider).appLanguage.flag} ${ref.watch(appSettingsProvider).appLanguage.displayName}',
                 onTap: () => _showLanguageSelectionDialog(context, ref),
               ),
               const SizedBox(height: 10),
@@ -572,12 +585,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 icon: Icons.aspect_ratio_rounded,
                 iconColor: Colors.deepOrangeAccent,
                 title: ref.watch(appStringsProvider).displayScale,
-                subtitle: 'Atur skala perbesaran antarmuka (Default: 100% Desktop, 80% Mobile)',
-                trailingBadge: '${(ref.watch(appSettingsProvider).displayScale * 100).toInt()}%',
+                subtitle:
+                    'Atur skala perbesaran antarmuka (Default: 100% Desktop, 80% Mobile)',
+                trailingBadge:
+                    '${(ref.watch(appSettingsProvider).displayScale * 100).toInt()}%',
                 onTap: () => _showDisplayScaleDialog(context, ref),
               ),
               const SizedBox(height: 20),
-
               _categoryGroupHeader('PEMELIHARAAN & DATA'),
               _CategoryCard(
                 icon: Icons.cloud_download_rounded,
@@ -593,7 +607,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     ),
                   );
                   try {
-                    await ref.read(initialSyncProvider.notifier).triggerManualSync();
+                    await ref
+                        .read(initialSyncProvider.notifier)
+                        .triggerManualSync();
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
@@ -625,7 +641,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 onTap: _handleBackupExcel,
               ),
               const SizedBox(height: 20),
-
               _categoryGroupHeader('DUKUNGAN & PRIVASI'),
               _CategoryCard(
                 icon: Icons.support_agent_rounded,
@@ -636,7 +651,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 onTap: _showSupportAndPrivacyDialog,
               ),
               const SizedBox(height: 20),
-
               _categoryGroupHeader('AREA BAHAYA'),
               _CategoryCard(
                 icon: Icons.delete_forever_rounded,
@@ -648,7 +662,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 onTap: _handleResetAllData,
               ),
               const SizedBox(height: 10),
-
               _CategoryCard(
                 icon: Icons.logout_rounded,
                 iconColor: AppTheme.danger,
@@ -701,13 +714,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             children: [
               IconButton(
                 onPressed: () => setState(() => _selectedCategory = null),
-                icon: const Icon(Icons.arrow_back_rounded, color: AppTheme.accent),
+                icon: const Icon(Icons.arrow_back_rounded,
+                    color: AppTheme.accent),
                 tooltip: 'Kembali ke Daftar Pengaturan',
               ),
               const SizedBox(width: 8),
               Text(
                 titles[categoryIndex],
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const Spacer(),
               if (categoryIndex != 5) ...[
@@ -733,7 +748,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (categoryIndex == 0) _buildFeatureManagementSection(),
+                        if (categoryIndex == 0)
+                          _buildFeatureManagementSection(),
                         if (categoryIndex == 1) _buildStoreSection(),
                         if (categoryIndex == 2) _buildPaymentSection(),
                         if (categoryIndex == 3) _buildPrintingSection(),
@@ -764,52 +780,60 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         const SizedBox(height: 24),
         _featureToggleCard(
           title: 'Kasir Penjualan',
-          subtitle: 'Modul transaksi kasir, scanner barcode, keranjang, & pembayaran',
+          subtitle:
+              'Modul transaksi kasir, scanner barcode, keranjang, & pembayaran',
           icon: Icons.point_of_sale_rounded,
           value: settings.enableCashier,
           onChanged: (v) {
             requirePin(context, ref, () async {
-              await ref.read(settingsProvider.notifier).updateSettings(
-                  settings.copyWith(enableCashier: v));
+              await ref
+                  .read(settingsProvider.notifier)
+                  .updateSettings(settings.copyWith(enableCashier: v));
             });
           },
         ),
         const SizedBox(height: 12),
         _featureToggleCard(
           title: 'Manajemen Produk & Stok',
-          subtitle: 'Katalog barang, kategori, harga jual/modal, & penyesuaian stok',
+          subtitle:
+              'Katalog barang, kategori, harga jual/modal, & penyesuaian stok',
           icon: Icons.inventory_2_rounded,
           value: settings.enableProducts,
           onChanged: (v) {
             requirePin(context, ref, () async {
-              await ref.read(settingsProvider.notifier).updateSettings(
-                  settings.copyWith(enableProducts: v));
+              await ref
+                  .read(settingsProvider.notifier)
+                  .updateSettings(settings.copyWith(enableProducts: v));
             });
           },
         ),
         const SizedBox(height: 12),
         _featureToggleCard(
           title: 'Pembelian & Restok Supplier',
-          subtitle: 'Pencatatan barang masuk dari supplier, ongkir, & riwayat restok',
+          subtitle:
+              'Pencatatan barang masuk dari supplier, ongkir, & riwayat restok',
           icon: Icons.local_shipping_rounded,
           value: settings.enablePurchase,
           onChanged: (v) {
             requirePin(context, ref, () async {
-              await ref.read(settingsProvider.notifier).updateSettings(
-                  settings.copyWith(enablePurchase: v));
+              await ref
+                  .read(settingsProvider.notifier)
+                  .updateSettings(settings.copyWith(enablePurchase: v));
             });
           },
         ),
         const SizedBox(height: 12),
         _featureToggleCard(
           title: 'Riwayat Transaksi Penjualan',
-          subtitle: 'Daftar semua nota transaksi selesai, cetak ulang, & refund',
+          subtitle:
+              'Daftar semua nota transaksi selesai, cetak ulang, & refund',
           icon: Icons.receipt_long_rounded,
           value: settings.enableTransactions,
           onChanged: (v) {
             requirePin(context, ref, () async {
-              await ref.read(settingsProvider.notifier).updateSettings(
-                  settings.copyWith(enableTransactions: v));
+              await ref
+                  .read(settingsProvider.notifier)
+                  .updateSettings(settings.copyWith(enableTransactions: v));
             });
           },
         ),
@@ -821,47 +845,54 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           value: settings.enableDebts,
           onChanged: (v) {
             requirePin(context, ref, () async {
-              await ref.read(settingsProvider.notifier).updateSettings(
-                  settings.copyWith(enableDebts: v));
+              await ref
+                  .read(settingsProvider.notifier)
+                  .updateSettings(settings.copyWith(enableDebts: v));
             });
           },
         ),
         const SizedBox(height: 12),
         _featureToggleCard(
           title: 'Tagihan & Operasional Toko',
-          subtitle: 'Pencatatan pengeluaran operasional toko, listrik, gaji, & sewa',
+          subtitle:
+              'Pencatatan pengeluaran operasional toko, listrik, gaji, & sewa',
           icon: Icons.receipt_rounded,
           value: settings.enableBills,
           onChanged: (v) {
             requirePin(context, ref, () async {
-              await ref.read(settingsProvider.notifier).updateSettings(
-                  settings.copyWith(enableBills: v));
+              await ref
+                  .read(settingsProvider.notifier)
+                  .updateSettings(settings.copyWith(enableBills: v));
             });
           },
         ),
         const SizedBox(height: 12),
         _featureToggleCard(
           title: 'Cetak Label & Barcode',
-          subtitle: 'Desain & pencetakan label barcode produk ke printer thermal/label',
+          subtitle:
+              'Desain & pencetakan label barcode produk ke printer thermal/label',
           icon: Icons.qr_code_2_rounded,
           value: settings.enableBarcode,
           onChanged: (v) {
             requirePin(context, ref, () async {
-              await ref.read(settingsProvider.notifier).updateSettings(
-                  settings.copyWith(enableBarcode: v));
+              await ref
+                  .read(settingsProvider.notifier)
+                  .updateSettings(settings.copyWith(enableBarcode: v));
             });
           },
         ),
         const SizedBox(height: 12),
         _featureToggleCard(
           title: 'Laporan & Analitik',
-          subtitle: 'Grafik omset, laba rugi, barang terlaris, & laporan keuangan',
+          subtitle:
+              'Grafik omset, laba rugi, barang terlaris, & laporan keuangan',
           icon: Icons.bar_chart_rounded,
           value: settings.enableAnalytics,
           onChanged: (v) {
             requirePin(context, ref, () async {
-              await ref.read(settingsProvider.notifier).updateSettings(
-                  settings.copyWith(enableAnalytics: v));
+              await ref
+                  .read(settingsProvider.notifier)
+                  .updateSettings(settings.copyWith(enableAnalytics: v));
             });
           },
         ),
@@ -881,7 +912,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         color: AppTheme.surfaceAlt,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-            color: value ? AppTheme.accent.withValues(alpha: 0.5) : AppTheme.border),
+            color: value
+                ? AppTheme.accent.withValues(alpha: 0.5)
+                : AppTheme.border),
       ),
       child: SwitchListTile(
         value: value,
@@ -889,15 +922,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         activeThumbColor: AppTheme.accent,
         title: Row(
           children: [
-            Icon(icon, size: 20, color: value ? AppTheme.accent : AppTheme.textMuted),
+            Icon(icon,
+                size: 20, color: value ? AppTheme.accent : AppTheme.textMuted),
             const SizedBox(width: 10),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            Text(title,
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
           ],
         ),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4, left: 30),
           child: Text(subtitle,
-              style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+              style:
+                  const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
         ),
       ),
     );
@@ -1054,12 +1091,37 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           },
         ),
         const SizedBox(height: 12),
-        TextButton(
-          onPressed: _pickLogo,
-          child: const Text('GANTI LOGO', style: TextStyle(fontSize: 12)),
+        Wrap(
+          spacing: 8,
+          children: [
+            TextButton(
+              onPressed: _pickLogo,
+              child: const Text('GANTI LOGO', style: TextStyle(fontSize: 12)),
+            ),
+            if (settings.logoUrl?.isNotEmpty ?? false)
+              TextButton.icon(
+                onPressed: _removeLogo,
+                icon: const Icon(Icons.delete_outline_rounded,
+                    color: AppTheme.danger, size: 18),
+                label: const Text(
+                  'HAPUS LOGO',
+                  style: TextStyle(fontSize: 12, color: AppTheme.danger),
+                ),
+              ),
+          ],
         ),
       ],
     );
+  }
+
+  Future<void> _removeLogo() async {
+    final current = ref.read(settingsProvider);
+    final localPath = await ImageHelper.resolveLocalPath(current.logoUrl);
+    await ref
+        .read(settingsProvider.notifier)
+        .updateSettings(current.copyWith(clearLogoUrl: true));
+    await ImageHelper.deleteLocal(localPath);
+    if (mounted) showSuccess(context, 'Logo terhapus');
   }
 
   Future<void> _pickLogo() async {
@@ -1168,8 +1230,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       ),
                     ),
                     IconButton(
-                      icon:
-                          const Icon(Icons.delete_outline_rounded, color: AppTheme.danger),
+                      icon: const Icon(Icons.delete_outline_rounded,
+                          color: AppTheme.danger),
                       onPressed: () {
                         setState(() {
                           _bankAccounts.removeAt(index);
@@ -1184,7 +1246,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         const SizedBox(height: 32),
         const Divider(height: 1),
         const SizedBox(height: 32),
-
         const _SectionTitle(title: 'QRIS Pembayaran'),
         const SizedBox(height: 8),
         const Text(
@@ -1213,10 +1274,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       ? Image.file(
                           File(resolved),
                           fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) => const Icon(
-                              Icons.broken_image_rounded,
-                              size: 40,
-                              color: AppTheme.textMuted),
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(Icons.broken_image_rounded,
+                                  size: 40, color: AppTheme.textMuted),
                         )
                       : const Icon(Icons.qr_code_2_rounded,
                           size: 48, color: AppTheme.textMuted),
@@ -1235,10 +1295,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       OutlinedButton.icon(
                         onPressed: () async {
                           final current = ref.read(settingsProvider);
+                          final localPath = await ImageHelper.resolveLocalPath(
+                            current.qrisImagePath,
+                          );
                           await ref
                               .read(settingsProvider.notifier)
                               .updateSettings(
-                                  current.copyWith(qrisImagePath: null));
+                                  current.copyWith(clearQrisImagePath: true));
+                          await ImageHelper.deleteLocal(localPath);
                           if (context.mounted) {
                             showSuccess(context, 'Gambar QRIS terhapus');
                           }
@@ -1260,16 +1324,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _pickQrisImage() async {
-    final bytes = await ImageHelper.pickAndCropImage(context);
+    final bytes =
+        await ImageHelper.pickAndCropImage(context, imageQuality: 100);
     if (bytes == null) return;
 
-    final processed =
-        await ImageHelper.processImage(bytes, maxDimension: 1400, quality: 92);
+    late final Uint8List processed;
+    try {
+      processed = ImageHelper.processQrImage(bytes, maxDimension: 1400);
+    } on FormatException catch (error) {
+      if (mounted) showError(context, error.message);
+      return;
+    }
     final uid = ref.read(authStateProvider).value?.uid;
     if (uid == null) return;
 
     final localPath = await ImageHelper.saveLocally(
-        uid, 'qris_image_$uid.jpg', processed,
+        uid, 'qris_image_$uid.png', processed,
         subFolder: 'brand_assets');
     if (localPath == null) {
       if (mounted) showError(context, 'Gagal menyimpan foto QRIS lokal.');
@@ -1281,6 +1351,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       await ref
           .read(settingsProvider.notifier)
           .updateSettings(current.copyWith(qrisImagePath: localPath));
+      if (current.qrisImagePath != localPath) {
+        final previousPath =
+            await ImageHelper.resolveLocalPath(current.qrisImagePath);
+        await ImageHelper.deleteLocal(previousPath);
+      }
       if (mounted) showSuccess(context, 'Foto QRIS berhasil disimpan.');
     } catch (e) {
       if (mounted) {
@@ -1372,7 +1447,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           onTransportChanged: (v) => setState(() => _printerTransport = v),
           onDesignChanged: (v) => setState(() => _invoiceDesign = v),
           onMethodChanged: (v) => setState(() => _printMethod = v),
-          onInvoicePrinterChanged: (v) => setState(() => _invoicePrinterUrl = v),
+          onInvoicePrinterChanged: (v) =>
+              setState(() => _invoicePrinterUrl = v),
         ),
       ],
     );
@@ -1792,7 +1868,8 @@ class _CategoryCard extends StatelessWidget {
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
-                        color: isDanger ? AppTheme.danger : AppTheme.textPrimary,
+                        color:
+                            isDanger ? AppTheme.danger : AppTheme.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 2),

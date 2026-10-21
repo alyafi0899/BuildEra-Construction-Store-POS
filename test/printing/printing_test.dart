@@ -15,6 +15,7 @@ import 'package:buildera/features/debts/models/debt_payment.dart';
 import 'package:buildera/shared/models/transaction.dart';
 import 'package:buildera/features/cashier/models/cart_item.dart';
 import 'package:buildera/printing/services/bluetooth_printer_service.dart';
+import 'package:buildera/core/utils/image_helper.dart';
 
 void main() {
   setUpAll(() async {
@@ -223,6 +224,53 @@ void main() {
     }
   });
 
+  test('QR raster upscales small QR images for usable thermal output', () {
+    final image = img.Image(width: 16, height: 16);
+    for (var y = 0; y < image.height; y++) {
+      for (var x = 0; x < image.width; x++) {
+        image.setPixelRgb(x, y, (x + y).isEven ? 0 : 255,
+            (x + y).isEven ? 0 : 255, (x + y).isEven ? 0 : 255);
+      }
+    }
+    final builder = EscPosBuilder(58)
+      ..imageRaster(
+        Uint8List.fromList(img.encodePng(image)),
+        maxWidthDots: 384,
+        maxHeightDots: 288,
+        marginDots: 8,
+        allowUpscale: true,
+      );
+    final bytes = builder.build();
+    final headerIndex = _indexOfBytes(bytes, [0x1D, 0x76, 0x30, 0x00]);
+
+    expect(headerIndex, isNonNegative);
+    expect(bytes[headerIndex + 4], 36);
+    expect(
+      bytes[headerIndex + 6] + (bytes[headerIndex + 7] << 8),
+      288,
+    );
+    expect(bytes.length, greaterThan(10 * 1024));
+  });
+
+  test('QR image processing preserves lossless PNG data', () {
+    final source = img.Image(width: 32, height: 32);
+    for (var y = 0; y < source.height; y++) {
+      for (var x = 0; x < source.width; x++) {
+        source.setPixelRgb(x, y, (x + y).isEven ? 0 : 255,
+            (x + y).isEven ? 0 : 255, (x + y).isEven ? 0 : 255);
+      }
+    }
+
+    final processed = ImageHelper.processQrImage(
+      Uint8List.fromList(img.encodeJpg(source, quality: 95)),
+    );
+    final decoded = img.decodeImage(processed);
+
+    expect(processed.take(8), [137, 80, 78, 71, 13, 10, 26, 10]);
+    expect(decoded?.width, 32);
+    expect(decoded?.height, 32);
+  });
+
   test('receipt appends logo and QR raster data to its single ESC/POS job', () {
     final image = img.Image(width: 4, height: 4);
     final pngBytes = Uint8List.fromList(img.encodePng(image));
@@ -346,7 +394,8 @@ void main() {
       ),
       _bluetoothProfile(),
     );
-    expect(_receiptTextLines(withCustomer.bytes!), contains('Plg   : Nama Pelanggan'));
+    expect(_receiptTextLines(withCustomer.bytes!),
+        contains('Plg   : Nama Pelanggan'));
   });
 
   test('Debit and Transfer Bank receipts include store bank accounts', () {
@@ -396,9 +445,11 @@ void main() {
       _bluetoothProfile(),
     );
 
-    expect(_receiptTextLines(withQris.bytes!), contains('Scan QRIS untuk membayar'));
+    expect(_receiptTextLines(withQris.bytes!),
+        contains('Scan QRIS untuk membayar'));
     expect(_indexOfBytes(withQris.bytes!, [0x1D, 0x76, 0x30]), isNonNegative);
-    expect(_receiptTextLines(withoutQris.bytes!), isNot(contains('Scan QRIS untuk membayar')));
+    expect(_receiptTextLines(withoutQris.bytes!),
+        isNot(contains('Scan QRIS untuk membayar')));
     expect(_indexOfBytes(withoutQris.bytes!, [0x1D, 0x76, 0x30]), -1);
   });
 
@@ -1067,7 +1118,8 @@ ReceiptDocument _debtReceipt({
     'payments': paymentHistory,
   };
   if (qrisBytes != null) metadata['qrisBytes'] = qrisBytes;
-  return ReceiptDocument(title: 'STRUK TAGIHAN', lines: const [], metadata: metadata);
+  return ReceiptDocument(
+      title: 'STRUK TAGIHAN', lines: const [], metadata: metadata);
 }
 
 int _indexOfBytes(List<int> bytes, List<int> sequence) {
