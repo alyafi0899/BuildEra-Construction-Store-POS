@@ -76,6 +76,74 @@ void main() {
     expect(transport.pairedReadCount, greaterThanOrEqualTo(2));
     debugDefaultTargetPlatformOverride = null;
   });
+
+  testWidgets('warns when Bluetooth is selected without a printer',
+      (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    await _openPrintingSettings(
+      tester,
+      printerTransport: 'bluetooth',
+      printMethod: 'pdf',
+    );
+
+    expect(
+        find.text('Pilih printer Bluetooth terlebih dahulu'), findsOneWidget);
+    expect(
+      find.textContaining('Bluetooth thermal mencetak langsung di Android'),
+      findsOneWidget,
+    );
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('warns when Android RAW is paired with unsupported transport',
+      (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    await _openPrintingSettings(
+      tester,
+      printerTransport: 'usb',
+      printMethod: 'raw',
+    );
+
+    expect(
+      find.text(
+        'Peringatan: Mode RAW di Android hanya didukung untuk Bluetooth atau '
+        'TCP dengan desain Fast Raw.',
+      ),
+      findsOneWidget,
+    );
+    debugDefaultTargetPlatformOverride = null;
+  });
+}
+
+Future<void> _openPrintingSettings(
+  WidgetTester tester, {
+  required String printerTransport,
+  required String printMethod,
+}) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: PrintingSettingsWidget(
+            widthCtrl: TextEditingController(text: '80'),
+            marginCtrl: TextEditingController(text: '4'),
+            useFastPrint: true,
+            autoCut: true,
+            printerTransport: printerTransport,
+            invoiceDesign: 'classic',
+            printMethod: printMethod,
+            onFastPrintChanged: (_) {},
+            onAutoCutChanged: (_) {},
+            onTransportChanged: (_) {},
+            onDesignChanged: (_) {},
+            onMethodChanged: (_) {},
+            onInvoicePrinterChanged: (_) {},
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
 }
 
 BluetoothPrinterService _service({

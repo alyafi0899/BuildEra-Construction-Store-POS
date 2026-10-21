@@ -157,9 +157,14 @@ class PrintingSettingsWidget extends StatelessWidget {
             Text(
               printMethod == 'raw'
                   ? 'Info: Mode Direct Raw diatur khusus untuk desain "Fast Raw" guna menjamin kecepatan dan kejelasan.'
-                  : (invoiceDesign == 'fast'
-                      ? 'Tips: Mode Fast menggunakan font monospaced. Sangat jelas untuk struk belanja.'
-                      : 'Tips: Mode Classic/Modern menggunakan PDF. Lebih rapi namun memerlukan driver yang mendukung grafik.'),
+                  : switch (invoiceDesign) {
+                      'fast' =>
+                        'Fast Raw memakai jalur ESC/POS native jika transport mendukungnya.',
+                      'modern' =>
+                        'Modern mencetak PDF dengan tata letak bersih; driver perlu mendukung grafik.',
+                      _ =>
+                        'Classic mencetak PDF dengan tata letak standar melalui printer sistem.',
+                    },
               style: const TextStyle(
                   fontSize: 12,
                   color: AppTheme.textSecondary,
@@ -201,13 +206,24 @@ class PrintingSettingsWidget extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               printMethod == 'raw'
-                  ? 'Peringatan: Gunakan Direct Raw hanya untuk printer USB/Bluetooth. Bypasses PDF rendering.'
-                  : 'Info: Standard PDF akan merender struk sebagai dokumen. Gunakan mode "Print as image" di driver jika hasil blank.',
+                  ? 'Direct Raw melewati PDF. Jalur yang tersedia bergantung pada platform dan tipe koneksi.'
+                  : 'Standard PDF merender struk sebagai dokumen dan memakai printer/driver sistem.',
               style: const TextStyle(
                   fontSize: 12,
                   color: AppTheme.textSecondary,
                   fontStyle: FontStyle.italic),
             ),
+            if (defaultTargetPlatform == TargetPlatform.android &&
+                printMethod == 'raw' &&
+                printerTransport != 'bluetooth' &&
+                !(printerTransport == 'tcp' && invoiceDesign == 'fast')) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Peringatan: Mode RAW di Android hanya didukung untuk '
+                'Bluetooth atau TCP dengan desain Fast Raw.',
+                style: TextStyle(fontSize: 12, color: Colors.deepOrange),
+              ),
+            ],
             const Divider(height: 40),
             const Row(
               children: [
@@ -228,29 +244,35 @@ class PrintingSettingsWidget extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  SwitchListTile.adaptive(
-                    value: useFastPrint,
-                    onChanged: onFastPrintChanged,
-                    title: const Text('Mode Cetak Cepat (Native)',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 14)),
-                    subtitle: const Text(
-                        'Gunakan font bawaan printer untuk cetak lebih cepat. Lewati dialog sistem.',
-                        style: TextStyle(fontSize: 12)),
-                    activeTrackColor: AppTheme.accent,
-                    contentPadding: EdgeInsets.zero,
+                  Material(
+                    type: MaterialType.transparency,
+                    child: SwitchListTile.adaptive(
+                      value: useFastPrint,
+                      onChanged: onFastPrintChanged,
+                      title: const Text('Mode Cetak Cepat (Native)',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 14)),
+                      subtitle: const Text(
+                          'Gunakan font bawaan printer untuk cetak lebih cepat. Lewati dialog sistem.',
+                          style: TextStyle(fontSize: 12)),
+                      activeTrackColor: AppTheme.accent,
+                      contentPadding: EdgeInsets.zero,
+                    ),
                   ),
-                  SwitchListTile.adaptive(
-                    value: autoCut,
-                    onChanged: onAutoCutChanged,
-                    title: const Text('Potong Kertas Otomatis',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 14)),
-                    subtitle: const Text(
-                        'Matikan jika printer tidak memiliki pemotong otomatis.',
-                        style: TextStyle(fontSize: 12)),
-                    activeTrackColor: AppTheme.accent,
-                    contentPadding: EdgeInsets.zero,
+                  Material(
+                    type: MaterialType.transparency,
+                    child: SwitchListTile.adaptive(
+                      value: autoCut,
+                      onChanged: onAutoCutChanged,
+                      title: const Text('Potong Kertas Otomatis',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 14)),
+                      subtitle: const Text(
+                          'Matikan jika printer tidak memiliki pemotong otomatis.',
+                          style: TextStyle(fontSize: 12)),
+                      activeTrackColor: AppTheme.accent,
+                      contentPadding: EdgeInsets.zero,
+                    ),
                   ),
                   if (useFastPrint) ...[
                     const Divider(height: 24),
@@ -266,6 +288,7 @@ class PrintingSettingsWidget extends StatelessWidget {
                           child: DropdownButtonFormField<String>(
                             initialValue: printerTransport,
                             isDense: true,
+                            isExpanded: true,
                             decoration: const InputDecoration(
                               contentPadding: EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 8),
@@ -292,6 +315,24 @@ class PrintingSettingsWidget extends StatelessWidget {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      switch (printerTransport) {
+                        'usb' =>
+                          'USB raw tersedia melalui spooler Windows; USB ESC/POS Android belum didukung.',
+                        'bluetooth' =>
+                          'Bluetooth thermal mencetak langsung di Android; di Windows gunakan spooler printer.',
+                        'tcp' =>
+                          'Network/Wi-Fi memakai TCP raw untuk invoice/piutang dengan desain Fast Raw.',
+                        _ =>
+                          'System mencetak PDF melalui dialog atau layanan cetak perangkat.',
+                      },
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     Row(
@@ -331,6 +372,17 @@ class PrintingSettingsWidget extends StatelessWidget {
                             ),
                           ),
                         ),
+                        if (printerTransport == 'bluetooth' &&
+                            (invoicePrinterUrl?.trim().isEmpty ?? true)) ...[
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Pilih printer Bluetooth terlebih dahulu',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.deepOrange,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                     if (printerTransport == 'bluetooth' &&
