@@ -700,6 +700,24 @@ void main() {
     expect(transport.writeCount, 2);
   });
 
+  test('Bluetooth printer reconnects only if the saved printer is disconnected',
+      () async {
+    final transport = _FakeBluetoothPrinterTransport();
+    final service = BluetoothPrinterService(
+      transport: transport,
+      permissionCheck: () async {},
+    );
+
+    await Future.wait([
+      service.connectPrinterIfNeeded('printer-1'),
+      service.connectPrinterIfNeeded('printer-1'),
+    ]);
+    await service.connectPrinterIfNeeded('printer-1');
+
+    expect(transport.connectCount, 1);
+    expect(transport.disconnectCount, 1);
+  });
+
   test('Bluetooth print throws after one failed retry', () async {
     final transport =
         _FakeBluetoothPrinterTransport(writeResults: [false, false]);

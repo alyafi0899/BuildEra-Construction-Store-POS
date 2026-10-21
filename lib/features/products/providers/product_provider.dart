@@ -489,21 +489,26 @@ final filteredProductsProvider = Provider<List<Product>>((ref) {
         if (!matchSearch) return false;
         if (category != null && p.category != category) return false;
         if (filters.stock == 'in' && p.stock <= 10) return false;
-        if (filters.stock == 'low' && (!p.isLowStock || p.stock <= 0))
+        if (filters.stock == 'low' && (!p.isLowStock || p.stock <= 0)) {
           return false;
+        }
         if (filters.stock == 'out' && p.stock > 0) return false;
         if (filters.supplier == 'paid' &&
-            p.financials.supplierPaymentStatus != PaymentStatus.paid)
+            p.financials.supplierPaymentStatus != PaymentStatus.paid) {
           return false;
+        }
         if (filters.supplier == 'unpaid' &&
-            p.financials.supplierPaymentStatus != PaymentStatus.unpaid)
+            p.financials.supplierPaymentStatus != PaymentStatus.unpaid) {
           return false;
+        }
         if (filters.shipping == 'paid' &&
-            p.financials.shippingPaymentStatus != PaymentStatus.paid)
+            p.financials.shippingPaymentStatus != PaymentStatus.paid) {
           return false;
+        }
         if (filters.shipping == 'unpaid' &&
-            p.financials.shippingPaymentStatus != PaymentStatus.unpaid)
+            p.financials.shippingPaymentStatus != PaymentStatus.unpaid) {
           return false;
+        }
         return true;
       }).toList();
     },

@@ -79,6 +79,7 @@ class BluetoothPrinterService {
   final BluetoothPrinterTransport _transport;
   final Future<void> Function()? _permissionCheck;
   String? _connectedAddress;
+  Future<void>? _connectionAttempt;
 
   Future<List<BluetoothInfo>> getPairedPrinters() async {
     await _ensureBluetoothPermission();
@@ -115,6 +116,33 @@ class BluetoothPrinterService {
     _connectedAddress = address;
   }
 
+  Future<void> connectPrinterIfNeeded(String address) async {
+    if (address.isEmpty) {
+      throw StateError('Alamat printer Bluetooth belum dipilih.');
+    }
+    if (_connectedAddress == address && await _transport.connectionStatus) {
+      return;
+    }
+
+    final pendingAttempt = _connectionAttempt;
+    if (pendingAttempt != null) {
+      await pendingAttempt;
+      if (_connectedAddress == address && await _transport.connectionStatus) {
+        return;
+      }
+    }
+
+    final attempt = connectPrinter(address);
+    _connectionAttempt = attempt;
+    try {
+      await attempt;
+    } finally {
+      if (identical(_connectionAttempt, attempt)) {
+        _connectionAttempt = null;
+      }
+    }
+  }
+
   Future<void> printReceipt({
     required String address,
     required ReceiptDocument receipt,
@@ -137,7 +165,7 @@ class BluetoothPrinterService {
 
   Future<void> _writeWithReconnect(String address, List<int> bytes) async {
     if (_connectedAddress != address || !await _transport.connectionStatus) {
-      await connectPrinter(address);
+      await connectPrinterIfNeeded(address);
     }
 
     if (await _tryWrite(bytes)) return;
@@ -145,7 +173,7 @@ class BluetoothPrinterService {
     _connectedAddress = null;
     var retrySucceeded = false;
     try {
-      await connectPrinter(address);
+      await connectPrinterIfNeeded(address);
       retrySucceeded = await _tryWrite(bytes);
     } catch (_) {
       _connectedAddress = null;

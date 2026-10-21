@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
 import 'features/settings/providers/settings_provider.dart';
+import 'features/settings/models/store_settings.dart';
 import 'core/utils/responsive_breakpoints.dart';
 import 'shared/widgets/sidebar.dart';
 import 'features/cashier/presentation/pages/cashier_page.dart';
@@ -29,6 +30,7 @@ import 'features/debts/providers/debt_repository.dart';
 import 'features/auth/presentation/widgets/auth_gate.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'features/subscription/providers/subscription_provider.dart';
+import 'printing/services/bluetooth_printer_service.dart';
 import 'core/sync/services/local_database.dart';
 import 'core/sync/providers/sync_provider.dart';
 import 'core/providers/navigation_provider.dart';
@@ -314,7 +316,8 @@ class MainShell extends ConsumerStatefulWidget {
   ConsumerState<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends ConsumerState<MainShell> {
+class _MainShellState extends ConsumerState<MainShell>
+    with WidgetsBindingObserver {
   final _pages = [
     const CashierPage(),
     const ProductsPage(),
@@ -330,9 +333,34 @@ class _MainShellState extends ConsumerState<MainShell> {
     const PurchaseHistoryPage(),
   ];
 
+  String? _autoConnectAddress;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _autoConnectAddress = null;
+      _connectConfiguredBluetoothPrinter(ref.read(settingsProvider));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final idx = ref.watch(navigationIndexProvider);
+    final navigation = ref.read(navigationIndexProvider.notifier);
+    final settings = ref.watch(settingsProvider);
+    _connectConfiguredBluetoothPrinter(settings);
     final width = MediaQuery.sizeOf(context).width;
     final responsiveSize = ResponsiveBreakpoints.classify(width);
     final isPhone = responsiveSize == ResponsiveSize.phone;
@@ -375,42 +403,76 @@ class _MainShellState extends ConsumerState<MainShell> {
             ],
           );
 
-    return Scaffold(
-      backgroundColor: AppTheme.bg,
-      resizeToAvoidBottomInset: isPhone,
-      body: SafeArea(
-        top: true,
-        bottom: false,
-        child: shell,
+    final canPop = Navigator.of(context).canPop() || !navigation.canGoBack;
+    return PopScope<Object?>(
+      canPop: canPop,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && navigation.canGoBack) {
+          navigation.goBack();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppTheme.bg,
+        resizeToAvoidBottomInset: isPhone,
+        body: SafeArea(
+          top: true,
+          bottom: false,
+          child: shell,
+        ),
+        bottomNavigationBar: isPhone
+            ? NavigationBar(
+                selectedIndex: _phoneDestinationIndex(idx),
+                onDestinationSelected: (destination) {
+                  if (destination == 4) {
+                    _showMoreDestinations(context, ref, idx);
+                    return;
+                  }
+                  const destinations = [0, 1, 2, 3];
+                  ref
+                      .read(navigationIndexProvider.notifier)
+                      .setIndex(destinations[destination]);
+                },
+                destinations: const [
+                  NavigationDestination(
+                      icon: Icon(Icons.point_of_sale_rounded),
+                      label: 'Kasir'),
+                  NavigationDestination(
+                      icon: Icon(Icons.inventory_2_rounded),
+                      label: 'Produk'),
+                  NavigationDestination(
+                      icon: Icon(Icons.receipt_long_rounded),
+                      label: 'Transaksi'),
+                  NavigationDestination(
+                      icon: Icon(Icons.account_balance_wallet_rounded),
+                      label: 'Piutang'),
+                  NavigationDestination(
+                      icon: Icon(Icons.more_horiz_rounded),
+                      label: 'Lainnya'),
+                ],
+              )
+            : null,
       ),
-      bottomNavigationBar: isPhone
-          ? NavigationBar(
-              selectedIndex: _phoneDestinationIndex(idx),
-              onDestinationSelected: (destination) {
-                if (destination == 4) {
-                  _showMoreDestinations(context, ref, idx);
-                  return;
-                }
-                const destinations = [0, 1, 2, 3];
-                ref
-                    .read(navigationIndexProvider.notifier)
-                    .setIndex(destinations[destination]);
-              },
-              destinations: const [
-                NavigationDestination(
-                    icon: Icon(Icons.point_of_sale_rounded), label: 'Kasir'),
-                NavigationDestination(
-                    icon: Icon(Icons.inventory_2_rounded), label: 'Produk'),
-                NavigationDestination(
-                    icon: Icon(Icons.receipt_long_rounded), label: 'Transaksi'),
-                NavigationDestination(
-                    icon: Icon(Icons.account_balance_wallet_rounded),
-                    label: 'Piutang'),
-                NavigationDestination(
-                    icon: Icon(Icons.more_horiz_rounded), label: 'Lainnya'),
-              ],
-            )
-          : null,
+    );
+  }
+
+  void _connectConfiguredBluetoothPrinter(StoreSettings settings) {
+    if (kIsWeb ||
+        !Platform.isAndroid ||
+        settings.isLoading ||
+        settings.printerTransport != 'bluetooth') {
+      _autoConnectAddress = null;
+      return;
+    }
+
+    final address = settings.invoicePrinterUrl?.trim();
+    if (address == null || address.isEmpty || address == _autoConnectAddress) {
+      return;
+    }
+    _autoConnectAddress = address;
+    BluetoothPrinterService().connectPrinterIfNeeded(address).catchError(
+      (Object error) {
+        debugPrint('Auto-connect printer gagal: $error');
+      },
     );
   }
 

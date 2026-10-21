@@ -292,8 +292,9 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
           _barcode.text = newBarcode;
         });
       } else {
-        if (mounted)
+        if (mounted) {
           showError(context, 'Gagal membuat barcode unik. Silakan coba lagi.');
+        }
       }
     } catch (e) {
       if (mounted) showError(context, 'Error saat membuat barcode: $e');
@@ -1010,8 +1011,9 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                         onChanged: (_) => _updateCalculatedCost(),
                         validator: (v) {
                           if (v == null || v.isEmpty) return 'Wajib diisi';
-                          if (Formatters.parseQuantity(v) <= 0)
+                          if (Formatters.parseQuantity(v) <= 0) {
                             return 'Format salah';
+                          }
                           return null;
                         },
                       ),
@@ -1211,10 +1213,12 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                               decimal: true),
                                       onChanged: (_) => _updateCalculatedCost(),
                                       validator: (v) {
-                                        if (v == null || v.isEmpty)
+                                        if (v == null || v.isEmpty) {
                                           return 'Wajib diisi';
-                                        if (Formatters.parseQuantity(v) <= 0)
+                                        }
+                                        if (Formatters.parseQuantity(v) <= 0) {
                                           return 'Format salah';
+                                        }
                                         return null;
                                       },
                                     ),
@@ -1425,9 +1429,12 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                               final val = Formatters.parsePrice(v ?? '');
                               if (val == 0 &&
                                   (v ?? '').isNotEmpty &&
-                                  (v ?? '') != '0') return 'Format salah';
-                              if (val == 0 && (v ?? '').isEmpty)
+                                  (v ?? '') != '0') {
+                                return 'Format salah';
+                              }
+                              if (val == 0 && (v ?? '').isEmpty) {
                                 return 'Wajib diisi';
+                              }
                               return null;
                             },
                           ),
@@ -1492,8 +1499,9 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                     final cost =
                                         Formatters.parsePrice(_costPrice.text);
                                     if (sell <= 0) return 'Wajib diisi';
-                                    if (sell < cost)
+                                    if (sell < cost) {
                                       return 'Harga jual di bawah modal';
+                                    }
                                     return null;
                                   },
                                 ),
@@ -1529,9 +1537,12 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                     final val = Formatters.parsePrice(v ?? '');
                                     if (val == 0 &&
                                         (v ?? '').isNotEmpty &&
-                                        (v ?? '') != '0') return 'Format salah';
-                                    if (val == 0 && (v ?? '').isEmpty)
+                                        (v ?? '') != '0') {
+                                      return 'Format salah';
+                                    }
+                                    if (val == 0 && (v ?? '').isEmpty) {
                                       return 'Wajib diisi';
+                                    }
                                     return null;
                                   },
                                 ),
@@ -1610,8 +1621,9 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                           final cost = Formatters.parsePrice(
                                               _costPrice.text);
                                           if (sell <= 0) return 'Wajib diisi';
-                                          if (sell < cost)
+                                          if (sell < cost) {
                                             return 'Harga jual di bawah modal';
+                                          }
                                           return null;
                                         },
                                       ),
