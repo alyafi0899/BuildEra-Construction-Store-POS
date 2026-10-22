@@ -6,6 +6,16 @@ export interface GoogleServiceAccount {
   private_key: string;
 }
 
+export class ServiceAccountConfigError extends Error {
+  code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = "ServiceAccountConfigError";
+    this.code = code;
+  }
+}
+
 export class GooglePlayApiError extends Error {
   status: number;
   reason: string | null;
@@ -21,6 +31,11 @@ export class GooglePlayApiError extends Error {
     this.reason = reason;
     this.sanitizedBody = sanitizedBody;
   }
+}
+
+export function maskToken(token?: string | null): string {
+  if (!token) return "<none>";
+  return token.length > 8 ? `${token.slice(0, 8)}...` : token;
 }
 
 function redactSensitiveBody(bodyText: string): string {
@@ -76,15 +91,102 @@ export function parseGooglePlayApiError(status: number, bodyText: string): Googl
   return new GooglePlayApiError(status, reason ?? sanitized, sanitized);
 }
 
-let cachedAccessToken: { token: string; expiresAt: number } | null = null;
+export function parseServiceAccountInput(rawInput: string): GoogleServiceAccount {
+  if (!rawInput || !rawInput.trim()) {
+    throw new ServiceAccountConfigError(
+      "server_config_missing",
+      "Google Service Account configuration is missing"
+    );
+  }
 
-export async function getGoogleAccessToken(serviceAccountJson: string): Promise<string> {
+  let str = rawInput.trim();
+  if (!str.startsWith("{")) {
+    try {
+      str = atob(str);
+    } catch {
+      throw new ServiceAccountConfigError(
+        "server_config_json",
+        "Failed to decode Base64 Google Service Account secret"
+      );
+    }
+  }
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(str);
+  } catch {
+    throw new ServiceAccountConfigError(
+      "server_config_json",
+      "Failed to parse Google Service Account JSON"
+    );
+  }
+
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    typeof parsed.client_email !== "string" ||
+    typeof parsed.private_key !== "string" ||
+    !parsed.client_email ||
+    !parsed.private_key
+  ) {
+    throw new ServiceAccountConfigError(
+      "server_config_json",
+      "Google Service Account JSON is missing client_email or private_key"
+    );
+  }
+
+  return {
+    type: parsed.type,
+    client_email: parsed.client_email,
+    private_key: parsed.private_key.replace(/\\n/g, "\n"),
+  };
+}
+
+export function resolveServiceAccountEnv(env: Record<string, string | undefined>): GoogleServiceAccount {
+  const b64 = env.GOOGLE_SERVICE_ACCOUNT_JSON_B64;
+  if (b64 && b64.trim()) {
+    return parseServiceAccountInput(b64);
+  }
+
+  const json = env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (json && json.trim()) {
+    return parseServiceAccountInput(json);
+  }
+
+  throw new ServiceAccountConfigError(
+    "server_config_missing",
+    "Missing GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_JSON_B64 environment variable"
+  );
+}
+
+let cachedAccessToken: { token: string; email: string; expiresAt: number } | null = null;
+
+export async function getGoogleAccessToken(serviceAccountJsonOrEnv: string | Record<string, string | undefined> | GoogleServiceAccount): Promise<string> {
+  let sa: GoogleServiceAccount;
+
+  if (typeof serviceAccountJsonOrEnv === "string") {
+    sa = parseServiceAccountInput(serviceAccountJsonOrEnv);
+  } else if (
+    typeof serviceAccountJsonOrEnv === "object" &&
+    serviceAccountJsonOrEnv !== null &&
+    typeof (serviceAccountJsonOrEnv as any).client_email === "string" &&
+    typeof (serviceAccountJsonOrEnv as any).private_key === "string"
+  ) {
+    const saObj = serviceAccountJsonOrEnv as GoogleServiceAccount;
+    sa = {
+      type: saObj.type,
+      client_email: saObj.client_email,
+      private_key: saObj.private_key.replace(/\\n/g, "\n"),
+    };
+  } else {
+    sa = resolveServiceAccountEnv(serviceAccountJsonOrEnv as Record<string, string | undefined>);
+  }
+
   const nowSec = Math.floor(Date.now() / 1000);
-  if (cachedAccessToken && cachedAccessToken.expiresAt > nowSec + 60) {
+  if (cachedAccessToken && cachedAccessToken.expiresAt > nowSec + 60 && cachedAccessToken.email === sa.client_email) {
     return cachedAccessToken.token;
   }
 
-  const sa: GoogleServiceAccount = JSON.parse(serviceAccountJson);
   const privateKey = sa.private_key.replace(/\\n/g, "\n");
   const importedKey = await importPKCS8(privateKey, "RS256");
 
@@ -118,6 +220,7 @@ export async function getGoogleAccessToken(serviceAccountJson: string): Promise<
 
   cachedAccessToken = {
     token: token.toString(),
+    email: sa.client_email,
     expiresAt: nowSec + expiresIn,
   };
 

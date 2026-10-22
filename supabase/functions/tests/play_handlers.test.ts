@@ -140,10 +140,15 @@ const baseSubscription = (overrides: Record<string, any> = {}): any => ({
   ...overrides,
 });
 
+const dummySa = {
+  client_email: "test@example.com",
+  private_key: "-----BEGIN PRIVATE KEY-----\\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC...\\n-----END PRIVATE KEY-----",
+};
+
 const baseEnv = {
   SUPABASE_URL: "https://supabase.invalid",
   SUPABASE_SERVICE_ROLE_KEY: "service-key",
-  GOOGLE_SERVICE_ACCOUNT_JSON: "{}",
+  GOOGLE_SERVICE_ACCOUNT_JSON: JSON.stringify(dummySa),
   ANDROID_PACKAGE_NAME: "com.solutivostudio.caltax",
   PLAY_RTDN_TOKEN: "rtdn-secret",
   RECONCILE_SECRET: "reconcile-secret",
@@ -192,18 +197,44 @@ Deno.test("verify rejects missing auth and invalid product before Play access", 
   const supabase = new MockSupabase();
   const google = googleFor();
   const deps = { supabase, google, env: baseEnv };
-  assertEquals(
-    (await handleVerify(verifyRequest(undefined, ""), deps)).status,
-    401,
+
+  const resAuth = await handleVerify(verifyRequest(undefined, ""), deps);
+  assertEquals(resAuth.status, 401);
+  assertEquals((await resAuth.json()).code, "unauthorized");
+
+  const resProd = await handleVerify(
+    verifyRequest({ purchaseToken: "t", productId: "other" }),
+    deps,
   );
-  assertEquals(
-    (await handleVerify(
-      verifyRequest({ purchaseToken: "t", productId: "other" }),
-      deps,
-    )).status,
-    400,
-  );
+  assertEquals(resProd.status, 400);
+  assertEquals((await resProd.json()).code, "bad_request");
   assertEquals(supabase.rpcCalls.length, 0);
+});
+
+Deno.test("verify handles raw JSON, Base64 secret, and malformed secret correctly", async () => {
+  const supabase = new MockSupabase();
+  const google = googleFor();
+
+  // Test Base64 secret
+  const b64Env = {
+    ...baseEnv,
+    GOOGLE_SERVICE_ACCOUNT_JSON: "",
+    GOOGLE_SERVICE_ACCOUNT_JSON_B64: btoa(JSON.stringify(dummySa)),
+  };
+  const b64Res = await handleVerify(verifyRequest(), { supabase, google, env: b64Env });
+  assertEquals(b64Res.status, 200);
+
+  // Test missing secret
+  const missingEnv = { ...baseEnv, GOOGLE_SERVICE_ACCOUNT_JSON: "", GOOGLE_SERVICE_ACCOUNT_JSON_B64: "" };
+  const missingRes = await handleVerify(verifyRequest(), { supabase, google, env: missingEnv });
+  assertEquals(missingRes.status, 500);
+  assertEquals((await missingRes.json()).code, "server_config_missing");
+
+  // Test malformed JSON secret
+  const malformedEnv = { ...baseEnv, GOOGLE_SERVICE_ACCOUNT_JSON: "{ invalid json " };
+  const malformedRes = await handleVerify(verifyRequest(), { supabase, google, env: malformedEnv });
+  assertEquals(malformedRes.status, 500);
+  assertEquals((await malformedRes.json()).code, "server_config_json");
 });
 
 Deno.test("verify persists a bound subscription and returns mapped entitlement", async () => {
@@ -410,7 +441,37 @@ Deno.test("verify maps invalid Play tokens to 400 and transient Play failures to
       400,
       `Expected Google ${status} to map to HTTP 400`,
     );
+    const body = await invalid.json();
+    const expectedCode = status === 410 ? "google_token_invalid" : "bad_request";
+    assertEquals(body.code, expectedCode);
   }
+
+  // Check package mismatch
+  const pkgMismatch = await handleVerify(verifyRequest(), {
+    supabase: new MockSupabase(),
+    google: googleFor(undefined, {
+      subscription: async () => {
+        throw new GooglePlayApiError(400, "purchaseTokenMismatch", "purchaseTokenMismatch");
+      },
+    }),
+    env: baseEnv,
+  });
+  assertEquals(pkgMismatch.status, 400);
+  assertEquals((await pkgMismatch.json()).code, "google_package_mismatch");
+
+  // Check google auth error
+  const googleAuth = await handleVerify(verifyRequest(), {
+    supabase: new MockSupabase(),
+    google: googleFor(undefined, {
+      subscription: async () => {
+        throw new GooglePlayApiError(401, "unauthorized", "unauthorized");
+      },
+    }),
+    env: baseEnv,
+  });
+  assertEquals(googleAuth.status, 500);
+  assertEquals((await googleAuth.json()).code, "google_auth");
+
   for (const status of [409, 429, 500, 503]) {
     const transient = await handleVerify(verifyRequest(), {
       supabase: new MockSupabase(),
@@ -430,6 +491,7 @@ Deno.test("verify maps invalid Play tokens to 400 and transient Play failures to
       503,
       `Expected Google ${status} to map to HTTP 503`,
     );
+    assertEquals((await transient.json()).code, "google_unavailable");
   }
 });
 

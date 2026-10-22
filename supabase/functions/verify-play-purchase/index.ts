@@ -5,6 +5,9 @@ import {
   getGoogleAccessToken,
   getSubscriptionV2,
   GooglePlayApiError,
+  parseServiceAccountInput,
+  ServiceAccountConfigError,
+  maskToken,
 } from "../_shared/google_play.ts";
 import {
   mapSubscriptionState,
@@ -44,7 +47,8 @@ export async function handleVerify(
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Missing Auth" }), {
+      console.error("[verify-play-purchase] [code: unauthorized] Missing Auth header");
+      return new Response(JSON.stringify({ error: "Missing Auth", code: "unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -53,12 +57,24 @@ export async function handleVerify(
     const env = deps.env ?? Deno.env.toObject();
     const supabaseUrl = env.SUPABASE_URL ?? "";
     const supabaseServiceKey = env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-    const saJson = env.GOOGLE_SERVICE_ACCOUNT_JSON ?? "";
+    const saJsonInput = env.GOOGLE_SERVICE_ACCOUNT_JSON_B64 || env.GOOGLE_SERVICE_ACCOUNT_JSON || "";
     const packageName = env.ANDROID_PACKAGE_NAME ?? "";
 
-    if (!saJson || !packageName) {
+    if (!saJsonInput || !packageName) {
+      console.error("[verify-play-purchase] [code: server_config_missing] Missing Google Service Account JSON or ANDROID_PACKAGE_NAME");
       return new Response(
-        JSON.stringify({ error: "Server Configuration Error" }),
+        JSON.stringify({ error: "Server Configuration Error", code: "server_config_missing" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    try {
+      parseServiceAccountInput(saJsonInput);
+    } catch (saErr: any) {
+      const code = saErr?.code ?? "server_config_json";
+      console.error(`[verify-play-purchase] [code: ${code}] Invalid service account JSON:`, saErr?.message);
+      return new Response(
+        JSON.stringify({ error: "Server Configuration Error", code }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -69,7 +85,8 @@ export async function handleVerify(
     const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
 
     if (userError || !userData.user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      console.error("[verify-play-purchase] [code: unauthorized] JWT user verification failed");
+      return new Response(JSON.stringify({ error: "Unauthorized", code: "unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -80,7 +97,8 @@ export async function handleVerify(
     const { purchaseToken, productId } = body;
 
     if (!purchaseToken || !productId || !VALID_PRODUCT_IDS.has(productId)) {
-      return new Response(JSON.stringify({ error: "Invalid product or purchase parameters" }), {
+      console.error(`[verify-play-purchase] [code: bad_request] Invalid purchase parameters. Product: ${productId}, token: ${maskToken(purchaseToken)}`);
+      return new Response(JSON.stringify({ error: "Invalid product or purchase parameters", code: "bad_request" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -93,14 +111,15 @@ export async function handleVerify(
       .maybeSingle();
 
     if (existingPurchases && existingPurchases.user_id && existingPurchases.user_id !== userId) {
+      console.error(`[verify-play-purchase] [code: bound_other_user] Token ${maskToken(purchaseToken)} already bound to user ${maskToken(existingPurchases.user_id)}, requested by ${maskToken(userId)}`);
       return new Response(
-        JSON.stringify({ error: "Purchase token bound to another user" }),
+        JSON.stringify({ error: "Purchase token bound to another user", code: "bound_other_user" }),
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const google = deps.google ?? { getAccessToken: getGoogleAccessToken, getSubscriptionV2, acknowledge: acknowledgeSubscription };
-    const accessToken = await google.getAccessToken!(saJson);
+    const accessToken = await google.getAccessToken!(saJsonInput);
     const playSub = await google.getSubscriptionV2!({
       packageName,
       token: purchaseToken,
@@ -111,7 +130,8 @@ export async function handleVerify(
     const matchingLineItem = pickLineItem(playSub, productId);
 
     if (!matchingLineItem) {
-      return new Response(JSON.stringify({ error: "Product ID mismatch" }), {
+      console.error(`[verify-play-purchase] [code: product_mismatch] Product ID mismatch for product: ${productId}, token: ${maskToken(purchaseToken)}`);
+      return new Response(JSON.stringify({ error: "Product ID mismatch", code: "product_mismatch" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -122,14 +142,16 @@ export async function handleVerify(
 
     if (extId) {
       if (extId !== userId) {
+        console.error(`[verify-play-purchase] [code: not_bound] extId ${maskToken(extId)} does not match userId ${maskToken(userId)}, token: ${maskToken(purchaseToken)}`);
         return new Response(
-          JSON.stringify({ error: "Purchase not bound to current user" }),
+          JSON.stringify({ error: "Purchase not bound to current user", code: "not_bound" }),
           { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
     } else if (boundUser.userId && boundUser.userId !== userId) {
+      console.error(`[verify-play-purchase] [code: not_bound] boundUser ${maskToken(boundUser.userId)} does not match userId ${maskToken(userId)}, token: ${maskToken(purchaseToken)}`);
       return new Response(
-        JSON.stringify({ error: "Purchase not bound to current user" }),
+        JSON.stringify({ error: "Purchase not bound to current user", code: "not_bound" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -236,13 +258,14 @@ export async function handleVerify(
 
     if (applyError) {
       if (applyError.code === "P0409" || applyError.message?.includes("P0409")) {
+        console.error(`[verify-play-purchase] [code: bound_other_user] RPC P0409 conflict for token ${maskToken(purchaseToken)}`);
         return new Response(
-          JSON.stringify({ error: "Purchase token bound to another user" }),
+          JSON.stringify({ error: "Purchase token bound to another user", code: "bound_other_user" }),
           { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      console.error(`Apply RPC Error for user ${userId.substring(0, 8)}...:`, applyError.message);
-      return new Response(JSON.stringify({ error: "Failed to persist entitlement" }), {
+      console.error(`[verify-play-purchase] [code: db_persist] Apply RPC Error for user ${maskToken(userId)}:`, applyError.message);
+      return new Response(JSON.stringify({ error: "Failed to persist entitlement", code: "db_persist" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -282,32 +305,68 @@ export async function handleVerify(
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {
+    if (err instanceof ServiceAccountConfigError) {
+      console.error(`[verify-play-purchase] [code: ${err.code}] Service account config error: ${err.message}`);
+      return new Response(
+        JSON.stringify({ error: "Server Configuration Error", code: err.code }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     if (err instanceof GooglePlayApiError) {
       const status = err.status;
-      if ([400, 404, 410].includes(status)) {
-        return new Response(JSON.stringify({ error: "Purchase verification failed" }), {
+      const reason = err.reason ?? "";
+      const sanitized = err.sanitizedBody;
+
+      if (
+        reason.includes("purchaseTokenMismatch") ||
+        reason.includes("applicationNotFound") ||
+        sanitized.includes("purchaseTokenMismatch") ||
+        sanitized.includes("applicationNotFound")
+      ) {
+        console.error(`[verify-play-purchase] [code: google_package_mismatch] [googleStatus: ${status}] Google package or token mismatch: ${reason}`);
+        return new Response(
+          JSON.stringify({ error: "Purchase verification failed", code: "google_package_mismatch" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (status === 410 || reason.includes("purchaseTokenNoLongerValid") || reason.includes("subscriptionNoLongerAvailable")) {
+        console.error(`[verify-play-purchase] [code: google_token_invalid] [googleStatus: ${status}] Google token invalid: ${reason}`);
+        return new Response(
+          JSON.stringify({ error: "Purchase verification failed", code: "google_token_invalid" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if ([400, 404].includes(status)) {
+        console.error(`[verify-play-purchase] [code: bad_request] [googleStatus: ${status}] Google Play API error: ${reason}`);
+        return new Response(JSON.stringify({ error: "Purchase verification failed", code: "bad_request" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
       if ([401, 403].includes(status)) {
-        console.error("Google Play auth error:", err.reason ?? err.message);
-        return new Response(JSON.stringify({ error: "Google Play authorization failed" }), {
+        console.error(`[verify-play-purchase] [code: google_auth] [googleStatus: ${status}] Google Play auth error: ${reason}`);
+        return new Response(JSON.stringify({ error: "Google Play authorization failed", code: "google_auth" }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
       if ([409, 429].includes(status) || status >= 500 || !status) {
-        return new Response(JSON.stringify({ error: "Service temporarily unavailable" }), {
+        console.error(`[verify-play-purchase] [code: google_unavailable] [googleStatus: ${status}] Google Play temporary error: ${reason}`);
+        return new Response(JSON.stringify({ error: "Service temporarily unavailable", code: "google_unavailable" }), {
           status: 503,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
     }
 
-    console.error("Verification Exception:", err?.message ?? "Unknown error");
+    console.error("[verify-play-purchase] [code: internal] Verification Exception:", err?.message ?? "Unknown error");
     return new Response(
-      JSON.stringify({ error: "Verification process error" }),
+      JSON.stringify({ error: "Verification process error", code: "internal" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
