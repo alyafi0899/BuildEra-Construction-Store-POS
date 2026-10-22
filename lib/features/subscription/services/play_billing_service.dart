@@ -229,7 +229,9 @@ class PlayBillingService {
   }
 
   /// Restores previous active purchases
-  Future<void> restorePurchases() async {
+  Future<void> restorePurchases({
+    Duration? timeout,
+  }) async {
     if (!_isAvailable) return;
     try {
       await _iap.restorePurchases();

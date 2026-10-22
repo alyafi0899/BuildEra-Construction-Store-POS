@@ -1,0 +1,5 @@
+GOOGLE_SERVICE_ACCOUNT_JSON = '{"type":"service_account",...}'
+ANDROID_PACKAGE_NAME = 'com.solutivostudio.caltax'
+PLAY_RTDN_TOKEN = '<secret-rtdn-token>'
+RECONCILE_SECRET = '<secret-reconcile-token>'
+   
