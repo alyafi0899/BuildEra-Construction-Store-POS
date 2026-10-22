@@ -64,12 +64,22 @@ supabase secrets set \
 
 ## Deployment
 
-Push database migrations first, then deploy the Play functions and the existing Xendit webhook:
+Push database migrations first, then deploy the Play functions, diagnostic function, and the existing Xendit webhook:
 
 ```sh
 supabase db push
-supabase functions deploy verify-play-purchase play-rtdn reconcile-play-subscriptions xendit-webhook
+supabase functions deploy verify-play-purchase play-rtdn reconcile-play-subscriptions play-billing-diagnose xendit-webhook
 ```
+
+To run diagnostic checks against the deployed environment:
+
+```sh
+curl -X POST \
+  'https://<project-ref>.supabase.co/functions/v1/play-billing-diagnose' \
+  -H 'x-reconcile-secret: <RECONCILE_SECRET>'
+```
+
+For detailed troubleshooting instructions, error codes, and PowerShell secret setup, see [internal/play-billing-troubleshooting.md](internal/play-billing-troubleshooting.md).
 
 The repository's handler tests can be run with Deno once its remote import graph is cached. `--cached-only` prevents network access while tests execute:
 
