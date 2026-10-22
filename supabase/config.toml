@@ -30,3 +30,8 @@ entrypoint = "./functions/play-rtdn/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/reconcile-play-subscriptions/index.ts"
+
+[functions.play-billing-diagnose]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/play-billing-diagnose/index.ts"
