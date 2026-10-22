@@ -119,9 +119,9 @@ void main() {
     await initialize(service);
 
     var restored = false;
-    final restore = service
-        .restorePurchases(timeout: const Duration(seconds: 2))
-        .then((_) => restored = true);
+    final restoreFuture = service.waitForRestore(timeout: const Duration(seconds: 2));
+    await service.restorePurchases();
+    final restore = restoreFuture.then((_) => restored = true);
     await Future<void>.delayed(Duration.zero);
     expect(restored, isFalse);
 

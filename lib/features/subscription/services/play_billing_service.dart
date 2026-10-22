@@ -12,6 +12,29 @@ typedef PlayPurchaseVerifier = Future<Map<String, dynamic>> Function({
   required String productId,
 });
 
+sealed class RestoreSummary {
+  const RestoreSummary();
+}
+
+class RestoreSuccess extends RestoreSummary {
+  const RestoreSuccess();
+}
+
+class RestoreNothingFound extends RestoreSummary {
+  const RestoreNothingFound();
+}
+
+class RestoreVerifyFailed extends RestoreSummary {
+  final String? code;
+  final String message;
+
+  const RestoreVerifyFailed({this.code, required this.message});
+}
+
+class RestoreTimedOut extends RestoreSummary {
+  const RestoreTimedOut();
+}
+
 class PlayBillingService {
   static const String monthlyProductId = 'buildera_monthly';
   static const String yearlyProductId = 'buildera_yearly';
@@ -28,6 +51,9 @@ class PlayBillingService {
   PurchaseDetails? _activePurchaseDetails;
   String? _userId;
 
+  String? _lastFailedToken;
+  String? _lastFailedProductId;
+
   bool _isAvailable = false;
   List<ProductDetails> _products = [];
   String? _lastError;
@@ -37,6 +63,7 @@ class PlayBillingService {
   String? get lastError => _lastError;
   bool get isVerifying => _activeVerificationTokens.isNotEmpty;
   PurchaseDetails? get activePurchaseDetails => _activePurchaseDetails;
+  bool get hasLastFailedToken => _lastFailedToken != null && _lastFailedProductId != null;
 
   static const String androidApplicationId = 'com.solutivostudio.caltax';
 
@@ -181,26 +208,52 @@ class PlayBillingService {
     }
   }
 
-  /// Restores previous active purchases
-  Future<void> restorePurchases({
-    Duration timeout = const Duration(seconds: 20),
+  /// Waits for all running/scheduled verifications from restore to settle
+  Future<RestoreSummary> waitForRestore({
+    Duration timeout = const Duration(seconds: 90),
   }) async {
-    if (!_isAvailable) return;
     final waiter = _RestoreWaiter();
     _restoreWaiter = waiter;
     try {
-      await _iap.restorePurchases();
-      await waiter.completer.future.timeout(timeout, onTimeout: () {});
-    } catch (e) {
-      _lastError = e.toString();
-      debugPrint('Error restoring Play Store purchases: $e');
-      rethrow;
+      final summary = await waiter.completer.future.timeout(
+        timeout,
+        onTimeout: () => const RestoreTimedOut(),
+      );
+      return summary;
     } finally {
       if (identical(_restoreWaiter, waiter)) {
         _restoreWaiter = null;
       }
       waiter.dispose();
     }
+  }
+
+  /// Restores previous active purchases
+  Future<void> restorePurchases() async {
+    if (!_isAvailable) return;
+    try {
+      await _iap.restorePurchases();
+      _restoreWaiter?.checkNoPurchasesAfterDelay();
+    } catch (e) {
+      _lastError = e.toString();
+      debugPrint('Error restoring Play Store purchases: $e');
+      rethrow;
+    }
+  }
+
+  /// Manually retries verification for the last failed token
+  Future<bool> retryLastFailedVerification() async {
+    final token = _lastFailedToken;
+    final productId = _lastFailedProductId;
+    if (token == null || productId == null) return false;
+
+    final pending = _pendingVerifications[token];
+    if (pending != null) {
+      _verificationAttempts[token] = 0;
+      unawaited(_verifyPurchaseOnce(token));
+      return true;
+    }
+    return false;
   }
 
   /// Handles stream updates for purchases
@@ -214,6 +267,10 @@ class PlayBillingService {
     VoidCallback onCancelled,
     void Function(String error) onError,
   ) {
+    if (purchaseDetailsList.isNotEmpty) {
+      _restoreWaiter?.markPurchaseSeen();
+    }
+
     for (final purchase in purchaseDetailsList) {
       switch (purchase.status) {
         case PurchaseStatus.pending:
@@ -324,23 +381,21 @@ class PlayBillingService {
           await _completePurchaseSafely(pending.purchase);
         }
         _clearPendingVerification(token);
-        if (pending.purchase.status == PurchaseStatus.restored) {
-          _restoreWaiter?.recordResult();
-        }
+        _restoreWaiter?.recordSuccess();
         return;
       }
 
       final isFinalFailure = _handleVerificationFailure(
         token,
         pending,
-        PlayVerifyException(
+        const PlayVerifyException(
           message: 'Gagal memverifikasi langganan Google Play pada server.',
         ),
         attempt,
       );
       if (isFinalFailure &&
           pending.purchase.status == PurchaseStatus.restored) {
-        _restoreWaiter?.recordResult();
+        _restoreWaiter?.recordFailure(message: 'Gagal memverifikasi langganan pada server.');
       }
     } catch (error) {
       if (_pendingVerifications[token] != pending) return;
@@ -348,7 +403,9 @@ class PlayBillingService {
           _handleVerificationFailure(token, pending, error, attempt);
       if (isFinalFailure &&
           pending.purchase.status == PurchaseStatus.restored) {
-        _restoreWaiter?.recordResult();
+        final code = error is PlayVerifyException ? error.code : null;
+        final msg = error is PlayVerifyException ? error.message : error.toString();
+        _restoreWaiter?.recordFailure(code: code, message: msg);
       }
     } finally {
       _activeVerificationTokens.remove(token);
@@ -361,11 +418,26 @@ class PlayBillingService {
     Object error,
     int attempt,
   ) {
-    final isPermanent = error is PlayVerifyException &&
-        const {400, 403, 409}.contains(error.statusCode);
+    bool isPermanent = false;
+    String? code;
+    String message = error.toString();
+
+    if (error is PlayVerifyException) {
+      isPermanent = error.isPermanent;
+      code = error.code;
+      message = error.message;
+    } else {
+      isPermanent = const {400, 403, 409}.contains(
+        error is PlayVerifyException ? error.statusCode : null,
+      );
+    }
+
     if (isPermanent || attempt >= _retryDelays.length + 1) {
-      pending.onError('Gagal memverifikasi transaksi: $error');
+      _lastFailedToken = token;
+      _lastFailedProductId = pending.purchase.productID;
+      pending.onError(message);
       _clearPendingVerification(token);
+      _restoreWaiter?.recordFailure(code: code, message: message);
       return true;
     }
 
@@ -399,6 +471,8 @@ class PlayBillingService {
     _pendingVerifications.clear();
     _verifyingTokens.clear();
     _activePurchaseDetails = null;
+    _lastFailedToken = null;
+    _lastFailedProductId = null;
   }
 
   void dispose() {
@@ -427,13 +501,35 @@ class _PendingVerification {
 }
 
 class _RestoreWaiter {
-  final Completer<void> completer = Completer<void>();
+  final Completer<RestoreSummary> completer = Completer<RestoreSummary>();
   Timer? _settleTimer;
+  bool _hasSeenPurchases = false;
 
-  void recordResult() {
+  void markPurchaseSeen() {
+    _hasSeenPurchases = true;
     _settleTimer?.cancel();
-    _settleTimer = Timer(const Duration(milliseconds: 400), () {
-      if (!completer.isCompleted) completer.complete();
+  }
+
+  void recordSuccess() {
+    _settleTimer?.cancel();
+    if (!completer.isCompleted) {
+      completer.complete(const RestoreSuccess());
+    }
+  }
+
+  void recordFailure({String? code, required String message}) {
+    _settleTimer?.cancel();
+    if (!completer.isCompleted) {
+      completer.complete(RestoreVerifyFailed(code: code, message: message));
+    }
+  }
+
+  void checkNoPurchasesAfterDelay() {
+    _settleTimer?.cancel();
+    _settleTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (!_hasSeenPurchases && !completer.isCompleted) {
+        completer.complete(const RestoreNothingFound());
+      }
     });
   }
 

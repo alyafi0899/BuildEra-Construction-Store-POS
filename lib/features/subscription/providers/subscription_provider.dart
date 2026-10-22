@@ -259,30 +259,57 @@ class SubscriptionNotifier extends Notifier<AsyncValue<Subscription?>> {
     }
   }
 
-  Future<bool> restorePlayStorePurchases() async {
+  Future<RestoreSummary> restorePlayStorePurchases() async {
+    final user = ref.read(authStateProvider).value;
+    if (user == null) return const RestoreNothingFound();
+
+    final service = ref.read(playBillingServiceProvider);
+    ref.read(billingUiStateProvider.notifier).setVerifying('Memeriksa riwayat langganan...');
+
+    try {
+      final restoreFuture = service.waitForRestore(timeout: const Duration(seconds: 90));
+      await service.restorePurchases();
+      final summary = await restoreFuture;
+
+      if (summary is RestoreSuccess) {
+        await refresh(rethrowOnError: true);
+        await ref.read(entitlementProvider.notifier).refresh();
+        ref.read(billingUiStateProvider.notifier).setSuccess('Langganan dipulihkan');
+      } else if (summary is RestoreNothingFound) {
+        ref.read(billingUiStateProvider.notifier).reset();
+      } else if (summary is RestoreVerifyFailed) {
+        ref.read(billingUiStateProvider.notifier).setError(summary.message);
+      } else if (summary is RestoreTimedOut) {
+        ref.read(billingUiStateProvider.notifier).setVerifying('Verifikasi masih berjalan, coba lagi sebentar lagi');
+      }
+
+      return summary;
+    } catch (error) {
+      final msg = error is PlayVerifyException
+          ? error.message
+          : 'Gagal memulihkan pembelian: $error';
+      ref.read(billingUiStateProvider.notifier).setError(msg);
+      return RestoreVerifyFailed(message: msg);
+    }
+  }
+
+  Future<bool> retryLastFailedVerification() async {
     final user = ref.read(authStateProvider).value;
     if (user == null) return false;
-    ref.read(billingUiStateProvider.notifier).setVerifying('Memeriksa riwayat langganan...');
+
+    ref.read(billingUiStateProvider.notifier).setVerifying('Memeriksa ulang verifikasi...');
     final service = ref.read(playBillingServiceProvider);
     try {
-      await service.restorePurchases();
-      final subscription = await refresh(rethrowOnError: true);
-      await ref.read(entitlementProvider.notifier).refresh();
-      final isActive =
-          subscription?.isPremiumAt(TrustedTimeHelper.nowUtc()) ?? false;
-      if (isActive) {
-        ref
-            .read(billingUiStateProvider.notifier)
-            .setSuccess('Langganan dipulihkan');
-      } else {
-        ref.read(billingUiStateProvider.notifier).reset();
+      final success = await service.retryLastFailedVerification();
+      if (success) {
+        await refresh(rethrowOnError: true);
+        await ref.read(entitlementProvider.notifier).refresh();
       }
-      return isActive;
+      return success;
     } catch (error) {
-      ref
-          .read(billingUiStateProvider.notifier)
-          .setError('Gagal memulihkan pembelian: $error');
-      rethrow;
+      final msg = error is PlayVerifyException ? error.message : '$error';
+      ref.read(billingUiStateProvider.notifier).setError(msg);
+      return false;
     }
   }
 

@@ -13,6 +13,7 @@ void main() {
 
   Future<void> startServer({
     required int status,
+    Map<String, dynamic>? body,
     Duration delay = Duration.zero,
   }) async {
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -23,7 +24,7 @@ void main() {
       request.response
         ..statusCode = status
         ..headers.contentType = ContentType.json
-        ..write(jsonEncode({'error': 'server error'}));
+        ..write(jsonEncode(body ?? {'error': 'server error'}));
       try {
         await request.response.close();
       } on SocketException {
@@ -56,32 +57,40 @@ void main() {
   }
 
   test('maps 409 FunctionException to account binding message', () async {
-    await startServer(status: 409);
+    await startServer(status: 409, body: {'error': 'bound_other_user', 'code': 'bound_other_user'});
 
     final error = await invokeAndCapture();
 
     expect(error.statusCode, 409);
-    expect(error.message, 'Pembelian ini terikat ke akun toko lain.');
+    expect(error.code, 'bound_other_user');
+    expect(error.isPermanent, isTrue);
+    expect(error.message, contains('Pembelian ini terikat ke akun toko lain'));
+    expect(error.message, contains('dikembalikan otomatis oleh Google dalam 3 hari'));
   });
 
   test('maps 400 FunctionException to verification message', () async {
-    await startServer(status: 400);
+    await startServer(status: 400, body: {'error': 'bad_request', 'code': 'bad_request'});
 
     final error = await invokeAndCapture();
 
     expect(error.statusCode, 400);
-    expect(error.message, 'Pembelian tidak dapat diverifikasi. Hubungi developer.');
+    expect(error.code, 'bad_request');
+    expect(error.isPermanent, isTrue);
+    expect(error.message, contains('Pembelian tidak dapat diverifikasi'));
+    expect(error.message, contains('dikembalikan otomatis oleh Google dalam 3 hari'));
   });
 
   test('maps 503 FunctionException to temporary service message', () async {
-    await startServer(status: 503);
+    await startServer(status: 503, body: {'error': 'google_unavailable', 'code': 'google_unavailable'});
 
     final error = await invokeAndCapture();
 
     expect(error.statusCode, 503);
+    expect(error.code, 'google_unavailable');
+    expect(error.isPermanent, isFalse);
     expect(
       error.message,
-      'Layanan verifikasi Google Play sedang tidak tersedia. Silakan coba lagi.',
+      contains('Layanan verifikasi Google Play sedang tidak tersedia'),
     );
   });
 
@@ -96,9 +105,11 @@ void main() {
       final error = await invokeAndCapture();
 
       expect(error.statusCode, 504);
+      expect(error.code, 'google_unavailable');
+      expect(error.isPermanent, isFalse);
       expect(
         error.message,
-        'Layanan verifikasi Google Play sedang tidak tersedia. Silakan coba lagi.',
+        contains('Layanan verifikasi Google Play sedang tidak tersedia'),
       );
       await Future<void>.delayed(const Duration(seconds: 1));
     },

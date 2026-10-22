@@ -108,6 +108,8 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
         : state.status == BillingUiStatus.success
             ? AppTheme.success
             : AppTheme.info;
+    final service = ref.watch(playBillingServiceProvider);
+
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 20),
@@ -117,33 +119,57 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
         border: Border.all(color: color.withValues(alpha: 0.35)),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (state.status == BillingUiStatus.pending ||
-              state.status == BillingUiStatus.verifying)
-            SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: color,
+          Row(
+            children: [
+              if (state.status == BillingUiStatus.pending ||
+                  state.status == BillingUiStatus.verifying)
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: color,
+                  ),
+                )
+              else
+                Icon(
+                  state.status == BillingUiStatus.error
+                      ? Icons.error_outline_rounded
+                      : Icons.check_circle_outline_rounded,
+                  color: color,
+                  size: 20,
+                ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  state.message ?? '',
+                  style: TextStyle(color: color, fontWeight: FontWeight.w600),
+                ),
               ),
-            )
-          else
-            Icon(
-              state.status == BillingUiStatus.error
-                  ? Icons.error_outline_rounded
-                  : Icons.check_circle_outline_rounded,
-              color: color,
-              size: 20,
-            ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              state.message ?? '',
-              style: TextStyle(color: color, fontWeight: FontWeight.w600),
-            ),
+            ],
           ),
+          if (state.status == BillingUiStatus.error && service.hasLastFailedToken) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () async {
+                  await ref
+                      .read(subscriptionStateProvider.notifier)
+                      .retryLastFailedVerification();
+                },
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: const Text('Coba verifikasi ulang'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.danger,
+                  textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -764,18 +790,25 @@ class _PricingSectionState extends ConsumerState<PricingSection> {
                         onPressed: () async {
                           final messenger = ScaffoldMessenger.of(context);
                           try {
-                            final isActive = await ref
+                            final summary = await ref
                                 .read(subscriptionStateProvider.notifier)
                                 .restorePlayStorePurchases();
                             if (mounted) {
+                              String msg;
+                              if (summary is RestoreSuccess) {
+                                msg = 'Langganan dipulihkan';
+                              } else if (summary is RestoreNothingFound) {
+                                msg = 'Tidak ada pembelian ditemukan di akun Google Play ini';
+                              } else if (summary is RestoreVerifyFailed) {
+                                msg = summary.message;
+                              } else if (summary is RestoreTimedOut) {
+                                msg = 'Verifikasi masih berjalan, coba lagi sebentar lagi';
+                              } else {
+                                msg = 'Tidak ada pembelian ditemukan di akun Google Play ini';
+                              }
+
                               messenger.showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    isActive
-                                        ? 'Langganan dipulihkan'
-                                        : 'Tidak ada langganan aktif untuk dipulihkan',
-                                  ),
-                                ),
+                                SnackBar(content: Text(msg)),
                               );
                             }
                           } catch (e) {
