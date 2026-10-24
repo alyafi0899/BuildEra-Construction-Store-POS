@@ -12,6 +12,8 @@ class TrustedTimeHelper {
   static DateTime? _maxSeenUtc;
   static bool _isInitialized = false;
 
+  static int get cachedOffsetMs => _cachedOffsetMs;
+
   /// Loads saved offset and last trusted timestamp from Hive into in-memory state.
   static Future<void> init(String uid) async {
     try {

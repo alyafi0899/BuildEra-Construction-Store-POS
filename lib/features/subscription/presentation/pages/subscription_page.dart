@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,7 @@ import '../../models/subscription.dart';
 import '../../providers/subscription_provider.dart';
 import '../../services/play_billing_service.dart';
 import '../widgets/subscription_agreement_dialog.dart';
+import '../widgets/subscription_diagnostics_dialog.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/trusted_time_helper.dart';
 import 'payment_gateway_page.dart';
@@ -23,13 +25,41 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
   bool _isConfirming = false;
   String? _tempMethod;
   PlanType? _tempPlan;
+  Timer? _expiryTimer;
 
   bool get _isAndroid => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
+  void _scheduleExpiryTimer() {
+    _expiryTimer?.cancel();
+    final entitlement = ref.read(entitlementProvider);
+    final validUntil = entitlement.validUntil;
+    if (validUntil != null) {
+      final now = TrustedTimeHelper.nowUtc();
+      final diff = validUntil.difference(now);
+      if (diff.isNegative) {
+        Future.microtask(() {
+          if (mounted) setState(() {});
+        });
+      } else {
+        _expiryTimer = Timer(diff, () {
+          if (mounted) setState(() {});
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _expiryTimer?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    _scheduleExpiryTimer();
     final subAsync = ref.watch(subscriptionStateProvider);
     final billingUiState = ref.watch(billingUiStateProvider);
+    final isPremium = ref.watch(entitlementProvider).isPremium;
 
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -80,10 +110,7 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
                 const SizedBox(height: 24),
                 if (_isAndroid) _buildGooglePlayHeaderBanner(),
                 const SizedBox(height: 32),
-                if (!(sub?.isPremiumAt(TrustedTimeHelper.nowUtc()) ?? false) ||
-                    (sub?.isBypassed != true &&
-                        sub?.expiresAt != null &&
-                        sub!.expiresAt!.toUtc().isBefore(TrustedTimeHelper.nowUtc())))
+                if (!isPremium)
                   PricingSection(
                     onUpgrade: (plan) => _handleUpgrade(context, ref, plan),
                     currentSub: sub,
@@ -340,18 +367,27 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
     );
   }
 
+  void _showDiagnosticsDialog(BuildContext context, dynamic sub) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => SubscriptionDiagnosticsDialog(
+        currentSub: sub is Subscription ? sub : null,
+      ),
+    );
+  }
+
   Widget _buildStatusCard(BuildContext context, dynamic sub) {
-    final nowUtc = TrustedTimeHelper.nowUtc();
-    final isPremium = sub is Subscription
-        ? sub.isPremiumAt(nowUtc)
-        : (sub?.isPremium ?? false);
+    final entitlement = ref.watch(entitlementProvider);
+    final isPremium = entitlement.isPremium;
     final statusText = isPremium
         ? 'AKTIF'
         : (sub?.status.toString().split('.').last.toUpperCase() ?? 'FREE');
     final color = isPremium ? AppTheme.success : AppTheme.textMuted;
 
-    return AppCard(
-      child: Row(
+    return GestureDetector(
+      onLongPress: () => _showDiagnosticsDialog(context, sub),
+      child: AppCard(
+        child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(12),
@@ -406,6 +442,7 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -630,8 +667,8 @@ class _PricingSectionState extends ConsumerState<PricingSection> {
 
   @override
   Widget build(BuildContext context) {
-    final isAlreadyYearly = widget.currentSub?.planType == PlanType.yearly &&
-        widget.currentSub?.isPremiumAt(TrustedTimeHelper.nowUtc()) == true;
+    final isPremium = ref.watch(entitlementProvider).isPremium;
+    final isAlreadyYearly = widget.currentSub?.planType == PlanType.yearly && isPremium;
 
     final productsAsync = _isAndroid ? ref.watch(playBillingProductsProvider) : null;
 

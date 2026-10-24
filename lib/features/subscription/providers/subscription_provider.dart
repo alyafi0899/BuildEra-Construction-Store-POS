@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/widgets.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -129,23 +130,28 @@ class SubscriptionNotifier extends Notifier<AsyncValue<Subscription?>> {
     _subscriptionChannel?.unsubscribe();
     _listeningUid = uid;
 
-    final client = ref.read(supabaseClientProvider);
-    _subscriptionChannel = client
-        .channel('public:subscriptions:$uid')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'subscriptions',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'user_id',
-            value: uid,
-          ),
-          callback: (payload) {
-            refresh();
-          },
-        )
-        .subscribe();
+    try {
+      final client = ref.read(supabaseClientProvider);
+      _subscriptionChannel = client
+          .channel('public:subscriptions:$uid')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'subscriptions',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'user_id',
+              value: uid,
+            ),
+            callback: (payload) {
+              refresh();
+              ref.read(entitlementProvider.notifier).refresh();
+            },
+          )
+          .subscribe();
+    } catch (e) {
+      debugPrint('Realtime channel listen notice: $e');
+    }
   }
 
   Future<Subscription?> refresh({bool rethrowOnError = false}) async {
@@ -155,15 +161,17 @@ class SubscriptionNotifier extends Notifier<AsyncValue<Subscription?>> {
       return null;
     }
 
-    // Keep previous state while revalidating in background
     try {
       final subscription = await _repository.getSubscription(user.uid);
-      state = AsyncValue.data(subscription ?? Subscription.free(user.uid));
+      if (ref.mounted) {
+        state = AsyncValue.data(subscription ?? Subscription.free(user.uid));
+      }
       return subscription;
     } catch (e, st) {
-      // Do not overwrite previous valid data with error
-      if (state.value == null) {
-        state = AsyncValue.error(e, st);
+      if (ref.mounted) {
+        if (state.value == null) {
+          state = AsyncValue.error(e, st);
+        }
       }
       if (rethrowOnError) rethrow;
       return null;
@@ -346,12 +354,21 @@ final billingUiStateProvider = NotifierProvider<BillingUiStateNotifier, BillingU
 
 final entitlementProvider = NotifierProvider<EntitlementNotifier, Entitlement>(EntitlementNotifier.new);
 
-class EntitlementNotifier extends Notifier<Entitlement> {
+class EntitlementNotifier extends Notifier<Entitlement> with WidgetsBindingObserver {
   Timer? _expiryTimer;
   Timer? _periodicTimer;
+  int _refreshGeneration = 0;
+  bool _needReRefresh = false;
+  Future<void>? _inFlightRefresh;
+  DateTime? _lastResumeRefreshTime;
+  static const Duration _minResumeInterval = Duration(seconds: 30);
 
   @override
   Entitlement build() {
+    try {
+      WidgetsBinding.instance.addObserver(this);
+    } catch (_) {}
+
     ref.listen(authStateProvider, (previous, next) {
       final user = next.value;
       if (user != null) {
@@ -365,16 +382,21 @@ class EntitlementNotifier extends Notifier<Entitlement> {
     ref.listen(subscriptionStateProvider, (previous, next) {
       next.when(
         data: (sub) {
-          _updateFromSubscription(sub, isFromRemote: true);
+          _updateFromSubscription(sub, generation: _refreshGeneration, isFromRemote: true);
         },
         error: (err, stack) {
-          _loadCachedSnapshotOrKeep();
+          if (!state.isResolved) {
+            _loadCachedSnapshotOrKeep();
+          }
         },
         loading: () {},
       );
     });
 
     ref.onDispose(() {
+      try {
+        WidgetsBinding.instance.removeObserver(this);
+      } catch (_) {}
       _cancelTimers();
     });
 
@@ -384,6 +406,27 @@ class EntitlementNotifier extends Notifier<Entitlement> {
     }
 
     return Entitlement.unresolved();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      final now = DateTime.now();
+      if (_lastResumeRefreshTime == null ||
+          now.difference(_lastResumeRefreshTime!) >= _minResumeInterval) {
+        _lastResumeRefreshTime = now;
+        _handleAppResumeRefresh();
+      }
+    }
+  }
+
+  Future<void> _handleAppResumeRefresh() async {
+    try {
+      await ref.read(subscriptionStateProvider.notifier).refresh();
+      await refresh();
+    } catch (e) {
+      debugPrint('Resume refresh notice: $e');
+    }
   }
 
   void _cancelTimers() {
@@ -401,7 +444,9 @@ class EntitlementNotifier extends Notifier<Entitlement> {
       final now = TrustedTimeHelper.nowUtc();
       final diff = validUntil.difference(now);
       if (diff.isNegative) {
-        Future.microtask(() => refresh());
+        // Requirement 1.3: Do not schedule immediate repeating microtasks when expired.
+        // Schedule a single refresh after 30 seconds minimum.
+        _expiryTimer = Timer(const Duration(seconds: 30), () => refresh());
       } else {
         _expiryTimer = Timer(diff, () => refresh());
       }
@@ -419,68 +464,146 @@ class EntitlementNotifier extends Notifier<Entitlement> {
   }
 
   Future<void> refresh() async {
+    if (_inFlightRefresh != null) {
+      _needReRefresh = true;
+      return _inFlightRefresh!;
+    }
+
+    final currentGen = ++_refreshGeneration;
+    final completer = Completer<void>();
+    _inFlightRefresh = completer.future;
+
+    try {
+      await _performRefresh(currentGen);
+    } finally {
+      completer.complete();
+      _inFlightRefresh = null;
+      if (_needReRefresh) {
+        _needReRefresh = false;
+        Future.microtask(() => refresh());
+      }
+    }
+  }
+
+  Future<void> _performRefresh(int generation) async {
+    if (!ref.mounted) return;
     final user = ref.read(authStateProvider).value;
     if (user == null) {
-      _cancelTimers();
-      state = Entitlement.free(source: EntitlementSource.offlineCache);
+      if (generation >= _refreshGeneration && ref.mounted) {
+        _cancelTimers();
+        state = Entitlement.free(source: EntitlementSource.offlineCache);
+      }
       return;
     }
 
     await TrustedTimeHelper.init(user.uid);
-    await _loadCachedSnapshotOrKeep();
+    if (!ref.mounted) return;
+
+    // Requirement 1.2 [PERUBAHAN A]: Only load cached snapshot on cold start before first fetch completes
+    if (!state.isResolved) {
+      await _loadCachedSnapshotOrKeep();
+      if (!ref.mounted) return;
+    }
 
     try {
       final client = ref.read(supabaseClientProvider);
       await TrustedTimeHelper.syncFromServer(client, user.uid);
+      if (!ref.mounted) return;
 
       final sub = await ref.read(subscriptionRepositoryProvider).getSubscription(user.uid);
-      await _updateFromSubscription(sub ?? Subscription.free(user.uid), isFromRemote: true);
+      if (!ref.mounted) return;
+
+      await _updateFromSubscription(
+        sub ?? Subscription.free(user.uid),
+        generation: generation,
+        isFromRemote: true,
+      );
     } catch (_) {
-      await _loadCachedSnapshotOrKeep();
+      if (generation >= _refreshGeneration && ref.mounted) {
+        await _loadCachedSnapshotOrKeep();
+      }
     }
   }
 
-  Future<void> _updateFromSubscription(Subscription? sub, {bool isFromRemote = false}) async {
+  Future<void> _updateFromSubscription(
+    Subscription? sub, {
+    int? generation,
+    bool isFromRemote = false,
+  }) async {
+    if (generation != null && generation < _refreshGeneration) {
+      // Skip stale updates from earlier requests
+      return;
+    }
+    if (!ref.mounted) return;
+
     final user = ref.read(authStateProvider).value;
     final uid = user?.uid;
     final nowServerUtc = TrustedTimeHelper.nowUtc();
 
     if (sub == null || !sub.isPremiumAt(nowServerUtc)) {
       final freeEntitlement = Entitlement.free(source: EntitlementSource.play);
-      state = freeEntitlement;
-      if (uid != null && isFromRemote) {
-        final map = freeEntitlement.toMap();
-        map['last_verified_at'] = nowServerUtc.toIso8601String();
-        map['cached_at'] = nowServerUtc.toIso8601String();
-        await LocalDatabase.setMetadata(uid, 'cached_entitlement', map);
+      if (ref.mounted) {
+        state = freeEntitlement;
       }
-      _scheduleTimers();
+      if (uid != null && isFromRemote) {
+        try {
+          final map = freeEntitlement.toMap();
+          map['last_verified_at'] = nowServerUtc.toIso8601String();
+          map['cached_at'] = nowServerUtc.toIso8601String();
+          await LocalDatabase.setMetadata(uid, 'cached_entitlement', map);
+        } catch (e) {
+          debugPrint('LocalDatabase cache write notice: $e');
+        }
+      }
+      if (ref.mounted) {
+        _scheduleTimers();
+      }
       return;
     }
 
     final source = sub.isBypassed ? EntitlementSource.bypass : EntitlementSource.play;
+
+    // Requirement 1.3 [PERUBAHAN C]: Grace period validUntil should use gracePeriodEndsAt
+    final isGrace = sub.isGracePeriodAt(nowServerUtc) || sub.status == SubscriptionStatus.grace;
+    DateTime? validUntil;
+    if (isGrace && sub.gracePeriodEndsAt != null) {
+      validUntil = sub.gracePeriodEndsAt;
+    } else {
+      validUntil = sub.expiresAt ?? sub.gracePeriodEndsAt;
+    }
+
     final premiumEntitlement = Entitlement.premium(
       source: source,
-      validUntil: sub.expiresAt ?? sub.gracePeriodEndsAt,
+      validUntil: validUntil,
       isTrial: sub.isTrial,
     );
 
-    state = premiumEntitlement;
-    if (uid != null && isFromRemote) {
-      final map = premiumEntitlement.toMap();
-      map['last_verified_at'] = nowServerUtc.toIso8601String();
-      map['cached_at'] = nowServerUtc.toIso8601String();
-      await LocalDatabase.setMetadata(uid, 'cached_entitlement', map);
+    if (ref.mounted) {
+      state = premiumEntitlement;
     }
-    _scheduleTimers();
+    if (uid != null && isFromRemote) {
+      try {
+        final map = premiumEntitlement.toMap();
+        map['last_verified_at'] = nowServerUtc.toIso8601String();
+        map['cached_at'] = nowServerUtc.toIso8601String();
+        await LocalDatabase.setMetadata(uid, 'cached_entitlement', map);
+      } catch (e) {
+        debugPrint('LocalDatabase cache write notice: $e');
+      }
+    }
+    if (ref.mounted) {
+      _scheduleTimers();
+    }
   }
 
   Future<void> _loadCachedSnapshotOrKeep() async {
+    if (!ref.mounted) return;
     final user = ref.read(authStateProvider).value;
     if (user == null) return;
 
     try {
       final rawMap = await LocalDatabase.getMetadata(user.uid, 'cached_entitlement');
+      if (!ref.mounted) return;
       if (rawMap != null && rawMap is Map) {
         final currentTrustedUtc = TrustedTimeHelper.nowUtc();
 
@@ -488,8 +611,10 @@ class EntitlementNotifier extends Notifier<Entitlement> {
           rawSnapshot: Map<String, dynamic>.from(rawMap),
           currentTrustedUtc: currentTrustedUtc,
         );
-        state = evaluated;
-        _scheduleTimers();
+        if (ref.mounted) {
+          state = evaluated;
+          _scheduleTimers();
+        }
       }
     } catch (e) {
       debugPrint('Entitlement snapshot read error: $e');
