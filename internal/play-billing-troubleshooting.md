@@ -1,6 +1,6 @@
 # Google Play Billing Troubleshooting & Operational Guide
 
-Panduan ini berisi langkah-langkah diagnostik, pengaturan secret yang aman, tabel kode error, dan query SQL untuk memeriksa kesehatan integrasi Google Play Billing pada proyek BuildEra.
+Panduan ini berisi langkah-langkah diagnostik, cara membaca panel diagnosa di aplikasi, pengujian License Testing, pengaturan secret yang aman, tabel kode error, dan query SQL untuk memeriksa kesehatan integrasi Google Play Billing pada proyek BuildEra.
 
 ---
 
@@ -19,7 +19,7 @@ Saat mengatur secret `GOOGLE_SERVICE_ACCOUNT_JSON` di PowerShell, penggunaan kut
 2. Jalankan perintah Supabase CLI untuk mengupload secret:
    ```powershell
    supabase secrets set --env-file .env.secrets
-   supabase functions deploy verify-play-purchase play-rtdn reconcile-play-subscriptions play-billing-diagnose
+   supabase functions deploy verify-play-purchase play-rtdn reconcile-play-subscriptions play-billing-diagnose sync-play-subscription
    ```
 3. Hapus atau pastikan file `.env.secrets` masuk ke `.gitignore`.
 
@@ -35,7 +35,7 @@ Saat mengatur secret `GOOGLE_SERVICE_ACCOUNT_JSON` di PowerShell, penggunaan kut
 
 ## 2. Tabel Kode Error, Arti, dan Cara Perbaikan
 
-Edge Function `verify-play-purchase` mengembalikan struktur error berseri:
+Edge Function `verify-play-purchase` dan `sync-play-subscription` mengembalikan struktur error berseri:
 ```json
 {
   "error": "Pesan deskriptif",
@@ -67,8 +67,8 @@ Endpoint ini melakukan pengecekan *read-only* tanpa membocorkan secret atau toke
 
 ### Cara Memanggil via `curl`:
 ```bash
-curl -X POST \
-  'https://<project-ref>.supabase.co/functions/v1/play-billing-diagnose' \
+curl.exe -X POST \
+  'https://xlkncjimgriwrxxpweue.supabase.co/functions/v1/play-billing-diagnose' \
   -H 'x-reconcile-secret: <RECONCILE_SECRET>' \
   -H 'Content-Type: application/json'
 ```
@@ -122,7 +122,34 @@ SELECT public.play_billing_health();
 
 ---
 
-## 5. Izin Service Account di Google Play Console
+## 5. Cara Membaca Panel Diagnosa Status pada Aplikasi Flutter
+
+Di aplikasi Flutter BuildEra:
+1. Buka halaman **Paket Langganan** (`SubscriptionPage`).
+2. Tekan-tahan (*long-press*) pada kartu status langganan utama (misal pada teks "Paket Bulanan AKTIF" / "Paket Gratis").
+3. Dialog **"Diagnosa Status Langganan"** akan terbuka dan menampilkan:
+   - **Database Status (DB)**: Status DB (`active`, `expired`, `grace`), `planType`, `expiresAt` (UTC & Lokal), `gracePeriodEndsAt`, `isBypassed`, `lastExternalId`.
+   - **Waktu Tepercaya (Trusted Time)**: Waktu server dipercaya vs jam perangkat, offset, dan hasil evaluasi `isPremiumAt`.
+   - **Entitlement (Single Source)**: `isResolved`, `isPremium`, `source`, `validUntil` (UTC & Lokal).
+   - **Riwayat Refresh**: Waktu dan status eksekusi refresh terakhir.
+4. Tombol **"SEGARKAN SEKARANG"**: Memicu refresh terserial dan fungsi `sync-play-subscription` secara *real-time*.
+
+---
+
+## 6. Catatan Perilaku License Testing Google Play (Sandbox)
+
+Saat melakukan pengujian dengan akun **License Testers** di Google Play Console:
+- Siklus waktu langganan **dipercepat secara otomatis oleh Google Play**:
+  - Langganan Bulanan (*Monthly*) berlaku selama **~5 menit** (bukan 1 bulan).
+  - Otomatis di-renew oleh Google Play maksimal **6 kali perpanjangan** (~30 menit total durasi pengujian).
+  - Setelah 6x perpanjangan, langganan sandbox **berakhir secara otomatis (`expired`)**.
+- **Perilaku Normal & Benar**:
+  - Selama masa aktif 5 menit pertama, perpanjangan, dan masa tenggang (*grace period*), badge di `SettingsPage` dan `SubscriptionPage` secara konsisten menampilkan **PREMIUM / AKTIF** dan seluruh fitur POS terbuka.
+  - Setelah 6x perpanjangan berakhir (~30 menit), langganan Google Play kedaluwarsa. Saat aplikasi dibuka kembali atau direfresh, status paket di aplikasi otomatis berubah menjadi **GRATIS** dan badge `SettingsPage` berubah menjadi **GRATIS**. Ini menandakan sinkronisasi siklus hidup berjalan 100% akurat.
+
+---
+
+## 7. Izin Service Account di Google Play Console
 
 Agar Edge Function dapat memverifikasi transaksi via Google Android Publisher API, email Service Account (`client_email` di JSON) harus didaftarkan di Google Play Console:
 
@@ -137,7 +164,7 @@ Agar Edge Function dapat memverifikasi transaksi via Google Android Publisher AP
 
 ---
 
-## 6. Cara Cancel / Refund Pesanan Uji di Play Console & License Testing
+## 8. Cara Cancel / Refund Pesanan Uji di Play Console & License Testing
 
 1. **Uji Coba Pembelian Tanpa Biaya (License Testing)**:
    - Di Google Play Console -> **Setup** -> **License testing**.
@@ -150,7 +177,7 @@ Agar Edge Function dapat memverifikasi transaksi via Google Android Publisher AP
 
 ---
 
-## 7. Peringatan Jendela Acknowledge 3 Hari
+## 9. Peringatan Jendela Acknowledge 3 Hari
 
 Google Play mewajibkan setiap transaksi langganan untuk di-**acknowledge** (diakui) dalam waktu **72 jam (3 hari)** sejak transaksi berhasil.
 - Jika transaksi tidak di-acknowledge oleh server/aplikasi dalam 3 hari, Google Play akan **membatalkan transaksi dan mengembalikan dana (*auto-refund*) secara otomatis** kepada pengguna.
