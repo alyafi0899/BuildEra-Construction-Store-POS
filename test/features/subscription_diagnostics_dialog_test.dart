@@ -34,6 +34,9 @@ class _MockSubscriptionRepository implements SubscriptionRepository {
       {'ok': true};
 
   @override
+  Future<Map<String, dynamic>?> syncPlaySubscription() async => {'ok': true};
+
+  @override
   Future<Map<String, dynamic>> createPaymentInvoice({
     required String userId,
     required PlanType plan,

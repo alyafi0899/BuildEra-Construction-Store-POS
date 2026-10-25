@@ -280,6 +280,7 @@ class SubscriptionNotifier extends Notifier<AsyncValue<Subscription?>> {
       final summary = await restoreFuture;
 
       if (summary is RestoreSuccess) {
+        await ref.read(entitlementProvider.notifier).syncPlaySubscriptionOnDemand(force: true);
         await refresh(rethrowOnError: true);
         await ref.read(entitlementProvider.notifier).refresh();
         ref.read(billingUiStateProvider.notifier).setSuccess('Langganan dipulihkan');
@@ -361,7 +362,37 @@ class EntitlementNotifier extends Notifier<Entitlement> with WidgetsBindingObser
   bool _needReRefresh = false;
   Future<void>? _inFlightRefresh;
   DateTime? _lastResumeRefreshTime;
+  DateTime? _lastSyncCallTime;
   static const Duration _minResumeInterval = Duration(seconds: 30);
+  static const Duration _minSyncInterval = Duration(seconds: 60);
+
+  Future<void> syncPlaySubscriptionOnDemand({bool force = false}) async {
+    final now = DateTime.now();
+    if (!force &&
+        _lastSyncCallTime != null &&
+        now.difference(_lastSyncCallTime!) < _minSyncInterval) {
+      return;
+    }
+    _lastSyncCallTime = now;
+
+    try {
+      await ref.read(subscriptionRepositoryProvider).syncPlaySubscription();
+      await refresh();
+    } catch (e) {
+      debugPrint('syncPlaySubscriptionOnDemand notice: $e');
+    }
+  }
+
+  void _checkAndTriggerNearExpirySync(Subscription? sub) {
+    if (sub == null) return;
+    final now = TrustedTimeHelper.nowUtc();
+    final isPlay = sub.source == 'play' || sub.playPurchaseToken != null;
+    if (isPlay && sub.expiresAt != null) {
+      if (sub.expiresAt!.isBefore(now.add(const Duration(hours: 1)))) {
+        unawaited(syncPlaySubscriptionOnDemand());
+      }
+    }
+  }
 
   @override
   Entitlement build() {
@@ -382,6 +413,7 @@ class EntitlementNotifier extends Notifier<Entitlement> with WidgetsBindingObser
     ref.listen(subscriptionStateProvider, (previous, next) {
       next.when(
         data: (sub) {
+          _checkAndTriggerNearExpirySync(sub);
           _updateFromSubscription(sub, generation: _refreshGeneration, isFromRemote: true);
         },
         error: (err, stack) {
@@ -422,7 +454,8 @@ class EntitlementNotifier extends Notifier<Entitlement> with WidgetsBindingObser
 
   Future<void> _handleAppResumeRefresh() async {
     try {
-      await ref.read(subscriptionStateProvider.notifier).refresh();
+      final sub = await ref.read(subscriptionStateProvider.notifier).refresh();
+      _checkAndTriggerNearExpirySync(sub);
       await refresh();
     } catch (e) {
       debugPrint('Resume refresh notice: $e');
@@ -446,9 +479,15 @@ class EntitlementNotifier extends Notifier<Entitlement> with WidgetsBindingObser
       if (diff.isNegative) {
         // Requirement 1.3: Do not schedule immediate repeating microtasks when expired.
         // Schedule a single refresh after 30 seconds minimum.
-        _expiryTimer = Timer(const Duration(seconds: 30), () => refresh());
+        _expiryTimer = Timer(const Duration(seconds: 30), () async {
+          await syncPlaySubscriptionOnDemand(force: true);
+          await refresh();
+        });
       } else {
-        _expiryTimer = Timer(diff, () => refresh());
+        _expiryTimer = Timer(diff, () async {
+          await syncPlaySubscriptionOnDemand(force: true);
+          await refresh();
+        });
       }
     }
 

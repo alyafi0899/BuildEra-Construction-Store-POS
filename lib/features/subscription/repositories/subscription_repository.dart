@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/subscription.dart';
 import '../models/subscription_history.dart';
@@ -96,6 +97,22 @@ class SubscriptionRepository {
       }
       rethrow;
     }
+  }
+
+  /// Calls the Supabase Edge Function sync-play-subscription (on-demand sync)
+  Future<Map<String, dynamic>?> syncPlaySubscription() async {
+    try {
+      final response = await _client.functions.invoke(
+        'sync-play-subscription',
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.status == 200 && response.data is Map) {
+        return response.data as Map<String, dynamic>;
+      }
+    } catch (e) {
+      debugPrint('SubscriptionRepository.syncPlaySubscription notice: $e');
+    }
+    return null;
   }
 
   PlayVerifyException _mapVerifyError(int status, [dynamic details]) {

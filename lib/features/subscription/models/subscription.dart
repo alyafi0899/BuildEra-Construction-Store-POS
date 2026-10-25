@@ -56,6 +56,8 @@ class Subscription {
   final DateTime? gracePeriodEndsAt;
   final bool isBypassed;
   final bool isTrial;
+  final String? source;
+  final String? playPurchaseToken;
 
   const Subscription({
     required this.userId,
@@ -68,6 +70,8 @@ class Subscription {
     this.gracePeriodEndsAt,
     this.isBypassed = false,
     this.isTrial = false,
+    this.source,
+    this.playPurchaseToken,
   });
 
   bool get isPremium => isPremiumAt(DateTime.now().toUtc());
@@ -159,6 +163,8 @@ class Subscription {
           map['is_bypassed']?.toString().toLowerCase() == 'true',
       isTrial: map['is_trial'] == true ||
           map['is_trial']?.toString().toLowerCase() == 'true',
+      source: map['source'] as String?,
+      playPurchaseToken: map['play_purchase_token'] as String?,
     );
   }
 

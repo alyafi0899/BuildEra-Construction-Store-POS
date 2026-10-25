@@ -29,6 +29,7 @@ class _SubscriptionDiagnosticsDialogState
 
     try {
       await ref.read(subscriptionStateProvider.notifier).refresh();
+      await ref.read(entitlementProvider.notifier).syncPlaySubscriptionOnDemand(force: true);
       await ref.read(entitlementProvider.notifier).refresh();
       if (mounted) {
         setState(() {
