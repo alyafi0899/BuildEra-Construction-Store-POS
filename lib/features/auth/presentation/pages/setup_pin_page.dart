@@ -26,6 +26,19 @@ class _SetupPinPageState extends ConsumerState<SetupPinPage> {
   }
 
   Future<void> _savePin() async {
+    final isLoaded = ref.read(settingsLoadedProvider);
+    final settings = ref.read(settingsProvider);
+
+    if (!isLoaded || settings.isLoading) {
+      showError(context, 'Pengaturan belum termuat, coba lagi sebentar');
+      return;
+    }
+
+    if ((settings.securityPin?.length ?? 0) >= 4) {
+      showError(context, 'PIN keamanan sudah diatur. Silakan gunakan menu Ubah PIN di Pengaturan.');
+      return;
+    }
+
     if (_pinCtrl.text.length < 4) {
       showError(context, 'PIN minimal 4 digit');
       return;
@@ -93,36 +106,39 @@ class _SetupPinPageState extends ConsumerState<SetupPinPage> {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: AppTheme.border),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.security_rounded, size: 64, color: AppTheme.accent),
-              const SizedBox(height: 24),
-              Text('Setel PIN Keamanan', style: Theme.of(context).textTheme.headlineMedium),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppTheme.danger.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.danger.withValues(alpha: 0.3)),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.warning_amber_rounded, color: AppTheme.danger, size: 24),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'PENTING: KHUSUS PEMILIK',
-                          style: TextStyle(
-                            color: AppTheme.danger,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.security_rounded, size: 64, color: AppTheme.accent),
+                const SizedBox(height: 24),
+                Text('Setel PIN Keamanan', style: Theme.of(context).textTheme.headlineMedium),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.danger.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.danger.withValues(alpha: 0.3)),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, color: AppTheme.danger, size: 24),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text(
+                              'PENTING: KHUSUS PEMILIK',
+                              style: TextStyle(
+                                color: AppTheme.danger,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
                     const SizedBox(height: 8),
                     const Text(
                       'PIN ini HANYA boleh diketahui oleh PEMILIK TOKO. '
@@ -191,6 +207,7 @@ class _SetupPinPageState extends ConsumerState<SetupPinPage> {
               ),
             ],
           ),
+        ),
         ),
       ),
     );

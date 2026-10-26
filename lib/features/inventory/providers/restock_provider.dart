@@ -202,9 +202,9 @@ class RestockRepository {
 // ── Providers ──────────────────────────────────────────────────────────────
 
 final restockRepositoryProvider = Provider<RestockRepository>((ref) {
-  final user = ref.watch(authStateProvider).value;
+  final uid = ref.watch(authStateProvider.select((a) => a.value?.uid));
   final client = ref.read(supabaseClientProvider);
-  return RestockRepository(user?.uid ?? 'unknown', client, ref);
+  return RestockRepository(uid ?? 'unknown', client, ref);
 });
 
 final restockHistoryProvider = StreamProvider<List<RestockRecord>>((ref) {

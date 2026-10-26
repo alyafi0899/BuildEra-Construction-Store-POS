@@ -289,9 +289,9 @@ class DebtRepository {
 // ── Providers ──────────────────────────────────────────────────────────────
 
 final debtRepositoryProvider = Provider<DebtRepository>((ref) {
-  final user = ref.watch(authStateProvider).value;
+  final uid = ref.watch(authStateProvider.select((a) => a.value?.uid));
   final client = ref.read(supabaseClientProvider);
-  return DebtRepository(user?.uid ?? 'unknown', client, ref);
+  return DebtRepository(uid ?? 'unknown', client, ref);
 });
 
 final customersProvider = StreamProvider<List<Customer>>((ref) {

@@ -208,8 +208,8 @@ class EntityRepository {
 // ── Providers ──────────────────────────────────────────────────────────────
 
 final entityRepositoryProvider = Provider<EntityRepository>((ref) {
-  final user = ref.watch(authStateProvider).value;
-  return EntityRepository(user?.uid ?? 'unknown', ref);
+  final uid = ref.watch(authStateProvider.select((a) => a.value?.uid));
+  return EntityRepository(uid ?? 'unknown', ref);
 });
 
 final suppliersProvider = StreamProvider<List<Supplier>>((ref) {

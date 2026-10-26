@@ -212,8 +212,8 @@ class BillPaymentRepository {
 }
 
 final billPaymentRepositoryProvider = Provider<BillPaymentRepository>((ref) {
-  final user = ref.watch(authStateProvider).value;
-  return BillPaymentRepository(user?.uid ?? 'unknown', ref);
+  final uid = ref.watch(authStateProvider.select((a) => a.value?.uid));
+  return BillPaymentRepository(uid ?? 'unknown', ref);
 });
 
 final billPaymentsProvider = StreamProvider<List<BillPayment>>((ref) {

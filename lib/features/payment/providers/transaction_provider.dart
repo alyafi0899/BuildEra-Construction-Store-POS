@@ -658,9 +658,9 @@ class _ProductAggregator {
 // ── Providers ──────────────────────────────────────────────────────────────
 
 final transactionRepositoryProvider = Provider<TransactionRepository>((ref) {
-  final user = ref.watch(authStateProvider).value;
+  final uid = ref.watch(authStateProvider.select((a) => a.value?.uid));
   final client = ref.read(supabaseClientProvider);
-  return TransactionRepository(user?.uid ?? 'unknown', client, ref);
+  return TransactionRepository(uid ?? 'unknown', client, ref);
 });
 
 final transactionsProvider = StreamProvider<List<Transaction>>((ref) {

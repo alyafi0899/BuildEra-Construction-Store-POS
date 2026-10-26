@@ -56,10 +56,10 @@ class SyncNotifier extends Notifier<SyncState> {
 
   @override
   SyncState build() {
-    final auth = ref.watch(authStateProvider).value;
+    final authUid = ref.watch(authStateProvider.select((a) => a.value?.uid));
     final isOnline = ref.watch(isOnlineProvider);
 
-    _uid = auth?.uid;
+    _uid = authUid;
 
     if (_uid != null) {
       _initQueue();

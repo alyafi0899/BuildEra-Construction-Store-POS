@@ -162,7 +162,7 @@ class BarcodeHistoryRepository {
 }
 
 final barcodeHistoryRepositoryProvider = Provider<BarcodeHistoryRepository>((ref) {
-  final user = ref.watch(authStateProvider).value;
+  final uid = ref.watch(authStateProvider.select((a) => a.value?.uid));
   final client = ref.read(supabaseClientProvider);
-  return BarcodeHistoryRepository(user?.uid ?? 'unknown', client, ref);
+  return BarcodeHistoryRepository(uid ?? 'unknown', client, ref);
 });

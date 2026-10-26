@@ -21,4 +21,17 @@ class AuthUser {
       displayName:     user.userMetadata?['display_name'] as String?,
     );
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is AuthUser &&
+        other.uid == uid &&
+        other.email == email &&
+        other.isEmailVerified == isEmailVerified &&
+        other.displayName == displayName;
+  }
+
+  @override
+  int get hashCode => Object.hash(uid, email, isEmailVerified, displayName);
 }

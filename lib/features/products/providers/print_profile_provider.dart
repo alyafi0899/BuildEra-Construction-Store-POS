@@ -12,7 +12,7 @@ class PrintProfilesNotifier extends Notifier<List<PrintProfile>> {
 
   @override
   List<PrintProfile> build() {
-    _uid = ref.watch(authStateProvider).value?.uid;
+    _uid = ref.watch(authStateProvider.select((a) => a.value?.uid));
     if (_uid != null) {
       _loadProfiles();
     }

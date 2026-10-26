@@ -105,8 +105,8 @@ class PurchaseRepository {
 // ── Providers ──────────────────────────────────────────────────────────────
 
 final purchaseRepositoryProvider = Provider<PurchaseRepository>((ref) {
-  final user = ref.watch(authStateProvider).value;
-  return PurchaseRepository(user?.uid ?? 'unknown', ref);
+  final uid = ref.watch(authStateProvider.select((a) => a.value?.uid));
+  return PurchaseRepository(uid ?? 'unknown', ref);
 });
 
 final purchasesProvider = StreamProvider<List<Purchase>>((ref) {

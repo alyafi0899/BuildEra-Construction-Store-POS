@@ -53,9 +53,9 @@ class InitialSyncState {
 class InitialSyncNotifier extends Notifier<InitialSyncState> {
   @override
   InitialSyncState build() {
-    final user = ref.watch(authStateProvider).value;
-    if (user != null) {
-      _loadSyncStatus(user.uid);
+    final uid = ref.watch(authStateProvider.select((a) => a.value?.uid));
+    if (uid != null) {
+      _loadSyncStatus(uid);
     }
     return InitialSyncState(isStatusLoaded: false, isInitialSyncDone: true);
   }

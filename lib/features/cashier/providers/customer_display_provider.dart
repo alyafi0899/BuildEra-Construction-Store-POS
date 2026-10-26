@@ -8,8 +8,8 @@ String? forcedUidForDisplay;
 
 final customerDisplayCartProvider = StreamProvider<CartState?>((ref) {
   final client = ref.watch(supabaseClientProvider);
-  final user = ref.watch(authStateProvider).value;
-  final uid = forcedUidForDisplay ?? user?.uid;
+  final authUid = ref.watch(authStateProvider.select((a) => a.value?.uid));
+  final uid = forcedUidForDisplay ?? authUid;
   
   if (uid == null) return Stream.value(null);
 

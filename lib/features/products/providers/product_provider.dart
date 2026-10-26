@@ -375,10 +375,10 @@ class ProductRepository {
 // ... (Rest of the file remains similar but uses Supabase where appropriate)
 
 final productRepositoryProvider = Provider<ProductRepository>((ref) {
-  final user = ref.watch(authStateProvider).value;
+  final uid = ref.watch(authStateProvider.select((a) => a.value?.uid));
   final client = ref.read(supabaseClientProvider);
   final historyRepo = ref.read(barcodeHistoryRepositoryProvider);
-  return ProductRepository(user?.uid ?? 'unknown', client, historyRepo, ref);
+  return ProductRepository(uid ?? 'unknown', client, historyRepo, ref);
 });
 
 enum ProductSortField {

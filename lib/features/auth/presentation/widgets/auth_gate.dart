@@ -64,8 +64,9 @@ class _AuthGateState extends ConsumerState<AuthGate> {
         }
 
         // --- STABILITY FIX: Wait for settings to load ---
+        final settingsLoaded = ref.watch(settingsLoadedProvider);
         final settings = ref.watch(settingsProvider);
-        if (settings.isLoading) {
+        if (!settingsLoaded || settings.isLoading) {
            return const SplashScreen(status: 'Memuat Pengaturan...');
         }
         

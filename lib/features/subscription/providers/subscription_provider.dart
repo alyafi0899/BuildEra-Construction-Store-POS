@@ -666,9 +666,9 @@ final isPremiumProvider = Provider<bool>((ref) {
 });
 
 final subscriptionHistoryProvider = FutureProvider<List<SubscriptionHistory>>((ref) async {
-  final user = ref.watch(authStateProvider).value;
-  if (user == null) return [];
-  return ref.read(subscriptionRepositoryProvider).getHistory(user.uid);
+  final uid = ref.watch(authStateProvider.select((a) => a.value?.uid));
+  if (uid == null) return [];
+  return ref.read(subscriptionRepositoryProvider).getHistory(uid);
 });
 
 class GatewayState {

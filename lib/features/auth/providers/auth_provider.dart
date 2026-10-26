@@ -57,7 +57,7 @@ class AuthNotifier extends StreamNotifier<model.AuthUser?> {
         ref.read(registrationCredentialsProvider.notifier).set(null);
       }
       return authUser;
-    });
+    }).distinct();
   }
 
   /// Manually force a user reload to check for email verification status

@@ -8,6 +8,15 @@ import '../models/store_settings.dart';
 import '../../../core/sync/services/local_database.dart';
 import '../../../core/utils/trusted_time_helper.dart';
 
+final settingsLoadedProvider = NotifierProvider<SettingsLoadedNotifier, bool>(SettingsLoadedNotifier.new);
+
+class SettingsLoadedNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void setLoaded(bool loaded) => state = loaded;
+}
+
 final settingsProvider =
     NotifierProvider<SettingsNotifier, StoreSettings>(SettingsNotifier.new);
 
@@ -15,25 +24,37 @@ class SettingsNotifier extends Notifier<StoreSettings> {
   String? _initializedUid;
   String? _settingsChannelUid;
   RealtimeChannel? _settingsChannel;
+  StoreSettings? _lastLoaded;
 
   @override
   StoreSettings build() {
-    final user = ref.watch(authStateProvider).value;
+    final authState = ref.watch(authStateProvider);
+    final user = authState.value;
+    final isExplicitLogout = authState.hasValue && user == null;
+
     if (user != null && _initializedUid != user.uid) {
       _initializedUid = user.uid;
+      _lastLoaded = null;
       Future.microtask(() {
+        ref.read(settingsLoadedProvider.notifier).setLoaded(false);
         _listenForRemoteSettings(user.uid);
         _loadSettings(user.uid);
       });
       return const StoreSettings(isLoading: true);
-    } else if (user == null) {
+    } else if (isExplicitLogout) {
       _initializedUid = null;
+      _lastLoaded = null;
       _settingsChannel?.unsubscribe();
       _settingsChannel = null;
       _settingsChannelUid = null;
+      Future.microtask(() {
+        ref.read(settingsLoadedProvider.notifier).setLoaded(false);
+      });
+      return const StoreSettings();
     }
+
     ref.onDispose(() => _settingsChannel?.unsubscribe());
-    return const StoreSettings();
+    return _lastLoaded ?? const StoreSettings();
   }
 
   SupabaseClient get _supabase => ref.read(supabaseClientProvider);
@@ -89,12 +110,12 @@ class SettingsNotifier extends Notifier<StoreSettings> {
     merged['logo_url'] = state.logoUrl;
     merged['qris_image_path'] = state.qrisImagePath;
     final settings = StoreSettings.fromMap(merged, isLoading: false);
+    _lastLoaded = settings;
     state = settings;
+    ref.read(settingsLoadedProvider.notifier).setLoaded(true);
     final box = await _getBox(uid);
     await box.put('store_settings', settings.toMap());
   }
-
-
 
   Future<void> _loadSettings(String uid) async {
     StoreSettings? cachedSettings;
@@ -107,7 +128,9 @@ class SettingsNotifier extends Notifier<StoreSettings> {
         cachedSettings = StoreSettings.fromMap(
           Map<String, dynamic>.from(cached as Map),
         );
-        state = cachedSettings.copyWith(isLoading: true);
+        _lastLoaded = cachedSettings.copyWith(isLoading: true);
+        state = _lastLoaded!;
+        ref.read(settingsLoadedProvider.notifier).setLoaded(true);
       }
     } catch (e) {
       debugPrint('Hive Load Error: $e');
@@ -156,7 +179,9 @@ class SettingsNotifier extends Notifier<StoreSettings> {
           }
 
           final settings = StoreSettings.fromMap(data, isLoading: false);
+          _lastLoaded = settings;
           state = settings;
+          ref.read(settingsLoadedProvider.notifier).setLoaded(true);
 
           final box = await _getBox(uid);
           await box.put('store_settings', settings.toMap());
@@ -172,7 +197,9 @@ class SettingsNotifier extends Notifier<StoreSettings> {
           }
 
           final settings = StoreSettings.fromMap(settingsMap, isLoading: false);
+          _lastLoaded = settings;
           state = settings;
+          ref.read(settingsLoadedProvider.notifier).setLoaded(true);
 
           final box = await _getBox(uid);
           await box.put('store_settings', settings.toMap());
@@ -209,7 +236,9 @@ class SettingsNotifier extends Notifier<StoreSettings> {
             fallbackData,
             isLoading: false,
           );
+          _lastLoaded = fallback;
           state = fallback;
+          ref.read(settingsLoadedProvider.notifier).setLoaded(true);
           try {
             final box = await _getBox(uid);
             await box.put('store_settings', fallback.toMap());
@@ -230,24 +259,34 @@ class SettingsNotifier extends Notifier<StoreSettings> {
     await _loadSettings(user.uid);
   }
 
+  @visibleForTesting
+  void applyTestSettings(String uid, StoreSettings settings) {
+    _initializedUid = uid;
+    _lastLoaded = settings;
+    state = settings;
+    ref.read(settingsLoadedProvider.notifier).setLoaded(true);
+  }
+
   Future<void> updateSettings(StoreSettings settings, {String? uid}) async {
     final targetUid = uid ?? ref.read(authStateProvider).value?.uid;
     if (targetUid == null) throw 'User session not found';
 
-    // 1. Update local Riverpod state IMMEDIATELY
-    state = settings.copyWith(isLoading: false);
+    final updated = settings.copyWith(isLoading: false);
+    _lastLoaded = updated;
+    state = updated;
+    ref.read(settingsLoadedProvider.notifier).setLoaded(true);
 
     // 2. Persist to local Hive Cache IMMEDIATELY
     try {
       final box = await _getBox(targetUid);
-      await box.put('store_settings', settings.toMap());
+      await box.put('store_settings', updated.toMap());
     } catch (e) {
       debugPrint('Hive Settings Cache Error: $e');
     }
 
     // 3. Persist to Remote (Supabase) - fail-soft on schema/network issues
     try {
-      final remoteSettings = settings.toMap()
+      final remoteSettings = updated.toMap()
         ..remove('logo_url')
         ..remove('qris_image_path');
       await _supabase.from('users').upsert({
