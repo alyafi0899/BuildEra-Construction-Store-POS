@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:collection/collection.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/common_widgets.dart';
@@ -795,15 +798,61 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
   late FocusNode _discountFocus;
   bool _showProfit = false;
 
+  String _formatQty(double qty) {
+    return qty % 1 == 0
+        ? qty.toInt().toString()
+        : qty.toStringAsFixed(5).replaceAll(RegExp(r'\.?0+$'), '');
+  }
+
+  String _formatPrice(double price) {
+    return NumberFormat.decimalPattern('id_ID').format(price.round());
+  }
+
+  String _formatDiscount(double value, DiscountType type) {
+    if (type == DiscountType.percentage) {
+      return value % 1 == 0
+          ? value.toInt().toString()
+          : value.toStringAsFixed(2).replaceAll(RegExp(r'\.?0+$'), '').replaceAll('.', ',');
+    } else {
+      return NumberFormat.decimalPattern('id_ID').format(value.round());
+    }
+  }
+
+  void _syncControllersFromModel(CartItem item) {
+    if (!_qtyFocus.hasFocus) {
+      final qStr = _formatQty(item.quantity);
+      if (Formatters.parseQuantity(_qtyCtrl.text) != item.quantity) {
+        _qtyCtrl.text = qStr;
+      }
+    }
+
+    if (!_priceFocus.hasFocus) {
+      final pStr = _formatPrice(item.soldPrice);
+      if (Formatters.parsePrice(_priceCtrl.text) != item.soldPrice) {
+        _priceCtrl.text = pStr;
+      }
+    }
+
+    if (!_discountFocus.hasFocus) {
+      final dStr = _formatDiscount(item.discountValue, item.discountType);
+      if (Formatters.parsePrice(_discountCtrl.text) != item.discountValue) {
+        _discountCtrl.text = dStr;
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
-    final item =
-        ref.read(cartProvider).items.firstWhere((i) => i.id == widget.itemId);
-    _qtyCtrl = TextEditingController(text: item.quantity.toString());
-    _priceCtrl = TextEditingController(text: item.soldPrice.toStringAsFixed(0));
-    _discountCtrl =
-        TextEditingController(text: item.discountValue.toStringAsFixed(0));
+    final item = ref.read(cartProvider).items.firstWhereOrNull((i) => i.id == widget.itemId);
+    final initQty = item?.quantity ?? 1.0;
+    final initPrice = item?.soldPrice ?? 0.0;
+    final initDisc = item?.discountValue ?? 0.0;
+    final discType = item?.discountType ?? DiscountType.fixed;
+
+    _qtyCtrl = TextEditingController(text: _formatQty(initQty));
+    _priceCtrl = TextEditingController(text: _formatPrice(initPrice));
+    _discountCtrl = TextEditingController(text: _formatDiscount(initDisc, discType));
 
     _qtyFocus = FocusNode(debugLabel: 'QtyFocus_${widget.itemId}');
     _priceFocus = FocusNode(debugLabel: 'PriceFocus_${widget.itemId}');
@@ -811,11 +860,66 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
 
     _qtyFocus.addListener(() {
       if (!_qtyFocus.hasFocus && mounted) {
-        final qty = Formatters.parseQuantity(_qtyCtrl.text);
-        if (qty <= 0) {
-          try {
-            ref.read(cartProvider.notifier).removeItem(widget.itemId);
-          } catch (_) {}
+        final rawText = _qtyCtrl.text.trim();
+        final currentItem = ref.read(cartProvider).items.firstWhereOrNull((i) => i.id == widget.itemId);
+        if (currentItem == null) return;
+
+        if (rawText.isEmpty) {
+          _qtyCtrl.text = _formatQty(currentItem.quantity);
+        } else {
+          final qty = Formatters.parseQuantity(rawText);
+          if (rawText == '0' || rawText == '0.0' || (qty == 0 && rawText.startsWith('0'))) {
+            try {
+              ref.read(cartProvider.notifier).removeItem(widget.itemId);
+            } catch (_) {}
+          } else if (qty > 0) {
+            ref.read(cartProvider.notifier).updateQuantity(widget.itemId, qty);
+          } else {
+            _qtyCtrl.text = _formatQty(currentItem.quantity);
+          }
+        }
+      }
+    });
+
+    _priceFocus.addListener(() {
+      if (!_priceFocus.hasFocus && mounted) {
+        final rawText = _priceCtrl.text.trim();
+        final currentItem = ref.read(cartProvider).items.firstWhereOrNull((i) => i.id == widget.itemId);
+        if (currentItem == null) return;
+
+        final parsed = Formatters.parsePrice(rawText);
+        if (rawText.isEmpty || parsed <= 0) {
+          final targetPrice = currentItem.soldPrice > 0 ? currentItem.soldPrice : currentItem.originalPrice;
+          _priceCtrl.text = _formatPrice(targetPrice);
+          if (currentItem.soldPrice != targetPrice) {
+            ref.read(cartProvider.notifier).updateSoldPrice(widget.itemId, targetPrice);
+          }
+        } else {
+          ref.read(cartProvider.notifier).updateSoldPrice(widget.itemId, parsed);
+          _priceCtrl.text = _formatPrice(parsed);
+        }
+      }
+    });
+
+    _discountFocus.addListener(() {
+      if (!_discountFocus.hasFocus && mounted) {
+        final rawText = _discountCtrl.text.trim();
+        final currentItem = ref.read(cartProvider).items.firstWhereOrNull((i) => i.id == widget.itemId);
+        if (currentItem == null) return;
+
+        if (rawText.isEmpty) {
+          _discountCtrl.text = '0';
+          ref.read(cartProvider.notifier).setItemDiscount(widget.itemId, 0, currentItem.discountType);
+        } else {
+          final parsed = Formatters.parsePrice(rawText);
+          if (currentItem.discountType == DiscountType.percentage) {
+            final clamped = parsed.clamp(0.0, 100.0);
+            ref.read(cartProvider.notifier).setItemDiscount(widget.itemId, clamped, DiscountType.percentage);
+            _discountCtrl.text = _formatDiscount(clamped, DiscountType.percentage);
+          } else {
+            ref.read(cartProvider.notifier).setItemDiscount(widget.itemId, parsed, DiscountType.fixed);
+            _discountCtrl.text = _formatPrice(parsed);
+          }
         }
       }
     });
@@ -930,31 +1034,13 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
 
     if (item == null) return const SizedBox.shrink();
 
-    final notifier = ref.read(cartProvider.notifier);
-
-    // Sync controllers if changed externally
-    if (!_qtyFocus.hasFocus) {
-      final qStr = item.quantity % 1 == 0
-          ? item.quantity.toInt().toString()
-          : item.quantity.toStringAsFixed(5).replaceAll(RegExp(r'\.?0+$'), '');
-      if (_qtyCtrl.text != qStr) {
-        _qtyCtrl.text = qStr;
+    ref.listen(cartProvider.select((s) => s.items.cast<CartItem?>().firstWhere((i) => i?.id == widget.itemId, orElse: () => null)), (prev, next) {
+      if (next != null) {
+        _syncControllersFromModel(next);
       }
-    }
+    });
 
-    final priceStr = item.soldPrice.toStringAsFixed(0);
-    if (_priceCtrl.text != priceStr) {
-      _priceCtrl.text = priceStr;
-      _priceCtrl.selection =
-          TextSelection.collapsed(offset: _priceCtrl.text.length);
-    }
-
-    final discountStr = item.discountValue.toStringAsFixed(0);
-    if (_discountCtrl.text != discountStr) {
-      _discountCtrl.text = discountStr;
-      _discountCtrl.selection =
-          TextSelection.collapsed(offset: _discountCtrl.text.length);
-    }
+    final notifier = ref.read(cartProvider.notifier);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1056,9 +1142,9 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                                   final q = item.quantity - 1;
                                   if (q >= 0) {
                                     notifier.updateQuantity(item.id, q);
-                                    _qtyCtrl.text = q % 1 == 0
-                                        ? q.toInt().toString()
-                                        : q.toString();
+                                    if (!_qtyFocus.hasFocus) {
+                                      _qtyCtrl.text = _formatQty(q);
+                                    }
                                   }
                                 }),
                             const SizedBox(width: 2),
@@ -1078,6 +1164,9 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                                     keyboardType:
                                         const TextInputType.numberWithOptions(
                                             decimal: true),
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.allow(RegExp(r'[\d.,]'))
+                                    ],
                                     style: const TextStyle(
                                         color: AppTheme.textPrimary,
                                         fontSize: 11,
@@ -1096,11 +1185,14 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                                       }
                                     },
                                     onSubmitted: (v) {
-                                      final qty = Formatters.parseQuantity(v);
-                                      if (qty > 0) {
-                                        notifier.updateQuantity(item.id, qty);
-                                      } else {
+                                      final raw = v.trim();
+                                      if (raw == '0' || raw == '0.0' || (Formatters.parseQuantity(v) == 0 && raw.startsWith('0'))) {
                                         notifier.removeItem(item.id);
+                                      } else {
+                                        final qty = Formatters.parseQuantity(v);
+                                        if (qty > 0) {
+                                          notifier.updateQuantity(item.id, qty);
+                                        }
                                       }
                                     },
                                   ),
@@ -1113,9 +1205,9 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                                 onTap: () {
                                   final q = item.quantity + 1;
                                   notifier.updateQuantity(item.id, q);
-                                  _qtyCtrl.text = q % 1 == 0
-                                      ? q.toInt().toString()
-                                      : q.toString();
+                                  if (!_qtyFocus.hasFocus) {
+                                    _qtyCtrl.text = _formatQty(q);
+                                  }
                                 }),
                           ],
                         ),
@@ -1137,12 +1229,15 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                                   'price_${item.id}_${item.selectedUnit.unitName}'),
                               controller: _priceCtrl,
                               focusNode: _priceFocus,
-                              initialValue: item.soldPrice.toStringAsFixed(0),
-                              onChanged: (v) => notifier.updateSoldPrice(
-                                  item.id,
-                                  Formatters.parsePrice(v) > 0
-                                      ? Formatters.parsePrice(v)
-                                      : item.originalPrice),
+                              initialValue: _formatPrice(item.soldPrice),
+                              onChanged: (v) {
+                                final p = Formatters.parsePrice(v);
+                                if (p > 0) {
+                                  notifier.updateSoldPrice(item.id, p);
+                                }
+                              },
+                              inputFormatters: [CurrencyInputFormatter()],
+                              keyboardType: TextInputType.number,
                               prefixText: 'Rp ',
                               isBare: true,
                             ),
@@ -1165,15 +1260,24 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                                   onChanged: (v) => notifier.setItemDiscount(
                                       item.id, v, item.discountType),
                                   child: _InlineTextField(
-                                    key: ValueKey('discount_${item.id}'),
+                                    key: ValueKey('discount_${item.id}_${item.discountType.name}'),
                                     controller: _discountCtrl,
                                     focusNode: _discountFocus,
-                                    initialValue:
-                                        item.discountValue.toStringAsFixed(0),
-                                    onChanged: (v) => notifier.setItemDiscount(
-                                        item.id,
-                                        Formatters.parsePrice(v),
-                                        item.discountType),
+                                    initialValue: _formatDiscount(item.discountValue, item.discountType),
+                                    onChanged: (v) {
+                                      final val = Formatters.parsePrice(v);
+                                      if (item.discountType == DiscountType.percentage) {
+                                        notifier.setItemDiscount(item.id, val.clamp(0.0, 100.0), DiscountType.percentage);
+                                      } else {
+                                        notifier.setItemDiscount(item.id, val, DiscountType.fixed);
+                                      }
+                                    },
+                                    inputFormatters: item.discountType == DiscountType.percentage
+                                        ? [FilteringTextInputFormatter.allow(RegExp(r'[\d.,]'))]
+                                        : [CurrencyInputFormatter()],
+                                    keyboardType: item.discountType == DiscountType.percentage
+                                        ? const TextInputType.numberWithOptions(decimal: true)
+                                        : TextInputType.number,
                                     isBare: true,
                                   ),
                                 ),
@@ -1201,8 +1305,14 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                                       value: DiscountType.percentage,
                                       child: Center(child: Text('%'))),
                                 ],
-                                onChanged: (v) => notifier.setItemDiscount(
-                                    item.id, item.discountValue, v!),
+                                onChanged: (v) {
+                                  if (v != null) {
+                                    notifier.setItemDiscount(item.id, item.discountValue, v);
+                                    if (!_discountFocus.hasFocus) {
+                                      _discountCtrl.text = _formatDiscount(item.discountValue, v);
+                                    }
+                                  }
+                                },
                               ),
                             ),
                           ],
@@ -1318,9 +1428,9 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                                 final q = item.quantity - 1;
                                 if (q >= 0) {
                                   notifier.updateQuantity(item.id, q);
-                                  _qtyCtrl.text = q % 1 == 0
-                                      ? q.toInt().toString()
-                                      : q.toString();
+                                  if (!_qtyFocus.hasFocus) {
+                                    _qtyCtrl.text = _formatQty(q);
+                                  }
                                 }
                               }),
                           const SizedBox(width: 2),
@@ -1340,6 +1450,9 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                                 keyboardType:
                                     const TextInputType.numberWithOptions(
                                         decimal: true),
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(RegExp(r'[\d.,]'))
+                                ],
                                 style: const TextStyle(
                                     color: AppTheme.textPrimary,
                                     fontSize: 11,
@@ -1358,11 +1471,14 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                                   }
                                 },
                                 onSubmitted: (v) {
-                                  final qty = Formatters.parseQuantity(v);
-                                  if (qty > 0) {
-                                    notifier.updateQuantity(item.id, qty);
-                                  } else {
+                                  final raw = v.trim();
+                                  if (raw == '0' || raw == '0.0' || (Formatters.parseQuantity(v) == 0 && raw.startsWith('0'))) {
                                     notifier.removeItem(item.id);
+                                  } else {
+                                    final qty = Formatters.parseQuantity(v);
+                                    if (qty > 0) {
+                                      notifier.updateQuantity(item.id, qty);
+                                    }
                                   }
                                 },
                               ),
@@ -1374,9 +1490,9 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                               onTap: () {
                                 final q = item.quantity + 1;
                                 notifier.updateQuantity(item.id, q);
-                                _qtyCtrl.text = q % 1 == 0
-                                    ? q.toInt().toString()
-                                    : q.toString();
+                                if (!_qtyFocus.hasFocus) {
+                                  _qtyCtrl.text = _formatQty(q);
+                                }
                               }),
                         ],
                       ),
@@ -1396,12 +1512,15 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                                 'price_${item.id}_${item.selectedUnit.unitName}'),
                             controller: _priceCtrl,
                             focusNode: _priceFocus,
-                            initialValue: item.soldPrice.toStringAsFixed(0),
-                            onChanged: (v) => notifier.updateSoldPrice(
-                                item.id,
-                                Formatters.parsePrice(v) > 0
-                                    ? Formatters.parsePrice(v)
-                                    : item.originalPrice),
+                            initialValue: _formatPrice(item.soldPrice),
+                            onChanged: (v) {
+                              final p = Formatters.parsePrice(v);
+                              if (p > 0) {
+                                notifier.updateSoldPrice(item.id, p);
+                              }
+                            },
+                            inputFormatters: [CurrencyInputFormatter()],
+                            keyboardType: TextInputType.number,
                             prefixText: 'Rp ',
                             isBare: true,
                           ),
@@ -1421,15 +1540,24 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                               onChanged: (v) => notifier.setItemDiscount(
                                   item.id, v, item.discountType),
                               child: _InlineTextField(
-                                key: ValueKey('discount_${item.id}'),
+                                key: ValueKey('discount_${item.id}_${item.discountType.name}'),
                                 controller: _discountCtrl,
                                 focusNode: _discountFocus,
-                                initialValue:
-                                    item.discountValue.toStringAsFixed(0),
-                                onChanged: (v) => notifier.setItemDiscount(
-                                    item.id,
-                                    Formatters.parsePrice(v),
-                                    item.discountType),
+                                initialValue: _formatDiscount(item.discountValue, item.discountType),
+                                onChanged: (v) {
+                                  final val = Formatters.parsePrice(v);
+                                  if (item.discountType == DiscountType.percentage) {
+                                    notifier.setItemDiscount(item.id, val.clamp(0.0, 100.0), DiscountType.percentage);
+                                  } else {
+                                    notifier.setItemDiscount(item.id, val, DiscountType.fixed);
+                                  }
+                                },
+                                inputFormatters: item.discountType == DiscountType.percentage
+                                    ? [FilteringTextInputFormatter.allow(RegExp(r'[\d.,]'))]
+                                    : [CurrencyInputFormatter()],
+                                keyboardType: item.discountType == DiscountType.percentage
+                                    ? const TextInputType.numberWithOptions(decimal: true)
+                                    : TextInputType.number,
                                 isBare: true,
                               ),
                             ),
@@ -1456,8 +1584,14 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
                                     value: DiscountType.percentage,
                                     child: Center(child: Text('%'))),
                               ],
-                              onChanged: (v) => notifier.setItemDiscount(
-                                  item.id, item.discountValue, v!),
+                              onChanged: (v) {
+                                if (v != null) {
+                                  notifier.setItemDiscount(item.id, item.discountValue, v);
+                                  if (!_discountFocus.hasFocus) {
+                                    _discountCtrl.text = _formatDiscount(item.discountValue, v);
+                                  }
+                                }
+                              },
                             ),
                           ),
                         ],
@@ -1849,6 +1983,8 @@ class _InlineTextField extends StatefulWidget {
   final bool isBare;
   final TextEditingController? controller;
   final FocusNode? focusNode;
+  final List<TextInputFormatter>? inputFormatters;
+  final TextInputType? keyboardType;
 
   const _InlineTextField({
     super.key,
@@ -1858,6 +1994,8 @@ class _InlineTextField extends StatefulWidget {
     this.isBare = false,
     this.controller,
     this.focusNode,
+    this.inputFormatters,
+    this.keyboardType,
   });
 
   @override
@@ -1879,12 +2017,9 @@ class _InlineTextFieldState extends State<_InlineTextField> {
     super.didUpdateWidget(oldWidget);
 
     final effectiveController = widget.controller ?? _controller;
-    final isFocused = FocusManager.instance.primaryFocus?.hasFocus ?? false;
+    final isFocused = widget.focusNode?.hasFocus ?? false;
     if (oldWidget.initialValue != widget.initialValue && !isFocused) {
       effectiveController.text = widget.initialValue;
-      effectiveController.selection = TextSelection.collapsed(
-        offset: effectiveController.text.length,
-      );
     }
   }
 
@@ -1899,16 +2034,16 @@ class _InlineTextFieldState extends State<_InlineTextField> {
   @override
   Widget build(BuildContext context) {
     final effectiveController = widget.controller ?? _controller;
+    final formatters = widget.inputFormatters ?? [CurrencyInputFormatter()];
+    final keyType = widget.keyboardType ?? TextInputType.number;
 
     if (widget.isBare) {
       return TextField(
         controller: effectiveController,
         focusNode: widget.focusNode,
-        onChanged: (v) {
-          widget.onChanged(v);
-        },
-        inputFormatters: [CurrencyInputFormatter()],
-        keyboardType: TextInputType.number,
+        onChanged: widget.onChanged,
+        inputFormatters: formatters,
+        keyboardType: keyType,
         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
         decoration: InputDecoration(
           isDense: true,
@@ -1928,11 +2063,9 @@ class _InlineTextFieldState extends State<_InlineTextField> {
       child: TextField(
         controller: effectiveController,
         focusNode: widget.focusNode,
-        onChanged: (v) {
-          widget.onChanged(v);
-        },
-        inputFormatters: [CurrencyInputFormatter()],
-        keyboardType: TextInputType.number,
+        onChanged: widget.onChanged,
+        inputFormatters: formatters,
+        keyboardType: keyType,
         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
         decoration: InputDecoration(
           isDense: true,

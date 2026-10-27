@@ -13,6 +13,8 @@ import '../../models/supplier.dart';
 import '../../models/shipping_service.dart';
 import '../../models/product_financials.dart';
 import '../../../../shared/widgets/premium_guard.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../../core/config/app_contacts.dart';
 
 class ExcelImportDialog extends ConsumerStatefulWidget {
   const ExcelImportDialog({super.key});
@@ -101,10 +103,65 @@ class _ExcelImportDialogState extends ConsumerState<ExcelImportDialog> {
                 children: [
                   const Icon(Icons.file_upload_outlined, color: AppTheme.accent),
                   const SizedBox(width: 12),
-                  Text('Import Produk dari Excel', style: Theme.of(context).textTheme.headlineMedium),
+                  Expanded(
+                    child: Text(
+                      'Import Produk dari Excel',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 20),
+              if (AppContacts.isConfigured(AppContacts.excelImportTemplateUrl)) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accent.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppTheme.accent.withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Belum punya template?',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Gunakan format ini agar impor berhasil.',
+                              style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          final uri = Uri.tryParse(AppContacts.excelImportTemplateUrl);
+                          if (uri == null) {
+                            showError(context, 'Link template tidak valid.');
+                            return;
+                          }
+                          if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+                              context.mounted) {
+                            showError(context, 'Tidak dapat mengunduh format Excel saat ini.');
+                          }
+                        },
+                        icon: const Icon(Icons.download_rounded, size: 16),
+                        label: const Text('Format Excel', style: TextStyle(fontSize: 12)),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
               const Text('Gunakan format kolom berikut di Excel Anda:'),
               const SizedBox(height: 12),
               Container(

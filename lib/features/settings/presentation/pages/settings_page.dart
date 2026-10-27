@@ -2001,6 +2001,15 @@ class SupportAndPrivacyDialog extends ConsumerWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
+                if (AppContacts.isConfigured(AppContacts.userManualUrl))
+                  FilledButton.icon(
+                    onPressed: () => openExternal(
+                      AppContacts.userManualUrl,
+                      'buku panduan',
+                    ),
+                    icon: const Icon(Icons.menu_book_rounded),
+                    label: const Text('Unduh Buku Panduan'),
+                  ),
                 FilledButton.icon(
                   onPressed: () => openExternal(
                     'mailto:${AppContacts.supportEmail}?subject=${Uri.encodeComponent('Permintaan Bantuan BuildEra')}',
