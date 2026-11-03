@@ -24,6 +24,7 @@ import '../../../payment/providers/transaction_provider.dart';
 import '../../../inventory/providers/restock_provider.dart';
 import '../../../inventory/providers/bill_payment_provider.dart';
 import 'manage_admins_page.dart';
+import '../../../../core/ads/providers/ads_provider.dart';
 import '../../../debts/providers/debt_repository.dart';
 import '../../../../core/localization/app_language.dart';
 import '../../../../core/localization/localization_provider.dart';
@@ -1546,6 +1547,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ),
           ),
         ),
+        const _AdPrivacySettingsTile(),
       ],
     );
   }
@@ -2114,6 +2116,37 @@ class _LocalTextField extends StatelessWidget {
         prefixIcon: prefixIcon,
       ),
       validator: validator,
+    );
+  }
+}
+
+class _AdPrivacySettingsTile extends ConsumerWidget {
+  const _AdPrivacySettingsTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final adsService = ref.watch(adsServiceProvider);
+
+    return FutureBuilder<bool>(
+      future: adsService.isPrivacyOptionsRequired(),
+      builder: (context, snapshot) {
+        if (snapshot.data != true) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: AppCard(
+            child: ListTile(
+              leading: const Icon(Icons.privacy_tip_rounded, color: AppTheme.accent),
+              title: const Text('Pengaturan Privasi Iklan', style: TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: const Text('Kelola persetujuan privasi iklan pribadi'),
+              trailing: ElevatedButton(
+                onPressed: () => adsService.showPrivacyOptionsForm(),
+                child: const Text('KELOLA PRIVASI'),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
