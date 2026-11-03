@@ -13,7 +13,7 @@ void main() {
     navigation.goBack();
     expect(container.read(navigationIndexProvider), 1);
     navigation.goBack();
-    expect(container.read(navigationIndexProvider), 0);
+    expect(container.read(navigationIndexProvider), AppPageIndices.home);
     expect(navigation.canGoBack, isFalse);
   });
 
@@ -22,7 +22,7 @@ void main() {
     addTearDown(container.dispose);
     final navigation = container.read(navigationIndexProvider.notifier);
 
-    navigation.setIndex(0);
+    navigation.setIndex(AppPageIndices.home);
 
     expect(navigation.canGoBack, isFalse);
   });

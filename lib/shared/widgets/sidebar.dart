@@ -17,6 +17,9 @@ class _NavItem {
 }
 
 const _navItems = [
+  // BERANDA
+  _NavItem(Icons.home_rounded, 'Beranda', 12, 'BERANDA'),
+
   // OPERASIONAL
   _NavItem(Icons.point_of_sale_rounded, 'Kasir', 0, 'OPERASIONAL'),
   _NavItem(Icons.local_shipping_rounded, 'Pembelian', 10, 'OPERASIONAL'),
@@ -39,6 +42,7 @@ const _navItems = [
 
 String _getNavItemLabel(_NavItem item, AppStrings strings) {
   switch (item.index) {
+    case 12: return strings.isEnglish ? 'Home' : 'Beranda';
     case 0: return strings.navCashier;
     case 1: return strings.navProducts;
     case 2: return strings.navTransactions;
@@ -55,6 +59,7 @@ String _getNavItemLabel(_NavItem item, AppStrings strings) {
 }
 
 String _getCategoryTitle(String cat, AppStrings strings) {
+  if (cat == 'BERANDA') return strings.isEnglish ? 'HOME' : 'BERANDA';
   if (cat == 'OPERASIONAL') return strings.isEnglish ? 'OPERATIONAL' : 'OPERASIONAL';
   if (cat == 'INVENTORI') return strings.isEnglish ? 'INVENTORY' : 'INVENTORI';
   if (cat == 'FINANSIAL') return strings.isEnglish ? 'FINANCIAL' : 'FINANSIAL';

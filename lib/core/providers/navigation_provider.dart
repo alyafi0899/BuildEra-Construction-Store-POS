@@ -1,12 +1,30 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+class AppPageIndices {
+  AppPageIndices._();
+
+  static const int cashier = 0;
+  static const int products = 1;
+  static const int transactions = 2;
+  static const int debts = 3;
+  static const int customers = 4;
+  static const int analytics = 5;
+  static const int barcodes = 6;
+  static const int settings = 7;
+  static const int bills = 8;
+  static const int customerDisplay = 9;
+  static const int purchase = 10;
+  static const int purchaseHistory = 11;
+  static const int home = 12;
+}
+
 class NavigationNotifier extends Notifier<int> {
   final List<int> _history = [];
 
   @override
   int build() {
     _history.clear();
-    return 0;
+    return AppPageIndices.home;
   }
 
   bool get canGoBack => _history.isNotEmpty;

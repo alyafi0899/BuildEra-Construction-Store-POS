@@ -28,6 +28,8 @@ import 'features/inventory/providers/restock_provider.dart';
 import 'features/payment/providers/transaction_provider.dart';
 import 'features/debts/providers/debt_repository.dart';
 import 'features/auth/presentation/widgets/auth_gate.dart';
+import 'features/home/presentation/pages/home_page.dart';
+import 'features/auth/providers/active_cashier_provider.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'features/subscription/providers/subscription_provider.dart';
 import 'printing/services/bluetooth_printer_service.dart';
@@ -331,6 +333,7 @@ class _MainShellState extends ConsumerState<MainShell>
     const CustomerDisplayPage(),
     const PurchasePage(),
     const PurchaseHistoryPage(),
+    const HomePage(),
   ];
 
   String? _autoConnectAddress;
@@ -352,6 +355,7 @@ class _MainShellState extends ConsumerState<MainShell>
     if (state == AppLifecycleState.resumed) {
       _autoConnectAddress = null;
       _connectConfiguredBluetoothPrinter(ref.read(settingsProvider));
+      ref.read(activeCashierProvider.notifier).touchActivity();
     }
   }
 
@@ -384,8 +388,10 @@ class _MainShellState extends ConsumerState<MainShell>
 
     final pageStack = Listener(
       behavior: HitTestBehavior.translucent,
-      onPointerDown: (_) =>
-          ref.read(sidebarCollapsedProvider.notifier).collapse(),
+      onPointerDown: (_) {
+        ref.read(sidebarCollapsedProvider.notifier).collapse();
+        ref.read(activeCashierProvider.notifier).touchActivity();
+      },
       child: IndexedStack(index: idx, children: _pages),
     );
 
@@ -427,21 +433,21 @@ class _MainShellState extends ConsumerState<MainShell>
                     _showMoreDestinations(context, ref, idx);
                     return;
                   }
-                  const destinations = [0, 1, 2, 3];
+                  const destinations = [AppPageIndices.home, AppPageIndices.cashier, AppPageIndices.products, AppPageIndices.debts];
                   ref
                       .read(navigationIndexProvider.notifier)
                       .setIndex(destinations[destination]);
                 },
                 destinations: const [
                   NavigationDestination(
+                      icon: Icon(Icons.home_rounded),
+                      label: 'Beranda'),
+                  NavigationDestination(
                       icon: Icon(Icons.point_of_sale_rounded),
                       label: 'Kasir'),
                   NavigationDestination(
                       icon: Icon(Icons.inventory_2_rounded),
                       label: 'Produk'),
-                  NavigationDestination(
-                      icon: Icon(Icons.receipt_long_rounded),
-                      label: 'Transaksi'),
                   NavigationDestination(
                       icon: Icon(Icons.account_balance_wallet_rounded),
                       label: 'Piutang'),
@@ -477,7 +483,7 @@ class _MainShellState extends ConsumerState<MainShell>
   }
 
   int _phoneDestinationIndex(int pageIndex) {
-    const destinations = [0, 1, 2, 3];
+    const destinations = [AppPageIndices.home, AppPageIndices.cashier, AppPageIndices.products, AppPageIndices.debts];
     final index = destinations.indexOf(pageIndex);
     return index < 0 ? 4 : index;
   }
@@ -487,14 +493,15 @@ class _MainShellState extends ConsumerState<MainShell>
     final settings = ref.read(settingsProvider);
 
     final allDestinations = <(int, String, IconData, bool)>[
-      (10, 'Pembelian', Icons.local_shipping_rounded, settings.enablePurchase),
-      (11, 'Riwayat Beli', Icons.history_edu_rounded, settings.enablePurchase),
-      (4, 'Pelanggan', Icons.people_rounded, settings.enableDebts),
-      (6, 'Label Barcode', Icons.qr_code_2_rounded, settings.enableBarcode),
-      (5, 'Analitik', Icons.bar_chart_rounded, settings.enableAnalytics),
-      (8, 'Tagihan', Icons.receipt_rounded, settings.enableBills),
-      (7, 'Pengaturan', Icons.settings_rounded, true),
-      (9, 'Tampilan Pelanggan', Icons.display_settings_rounded, true),
+      (AppPageIndices.transactions, 'Transaksi', Icons.receipt_long_rounded, settings.enableTransactions),
+      (AppPageIndices.purchase, 'Pembelian', Icons.local_shipping_rounded, settings.enablePurchase),
+      (AppPageIndices.purchaseHistory, 'Riwayat Beli', Icons.history_edu_rounded, settings.enablePurchase),
+      (AppPageIndices.customers, 'Pelanggan', Icons.people_rounded, settings.enableDebts),
+      (AppPageIndices.barcodes, 'Label Barcode', Icons.qr_code_2_rounded, settings.enableBarcode),
+      (AppPageIndices.analytics, 'Analitik', Icons.bar_chart_rounded, settings.enableAnalytics),
+      (AppPageIndices.bills, 'Tagihan', Icons.receipt_rounded, settings.enableBills),
+      (AppPageIndices.settings, 'Pengaturan', Icons.settings_rounded, true),
+      (AppPageIndices.customerDisplay, 'Tampilan Pelanggan', Icons.display_settings_rounded, true),
     ];
 
     final filtered = allDestinations.where((d) => d.$4).toList();
