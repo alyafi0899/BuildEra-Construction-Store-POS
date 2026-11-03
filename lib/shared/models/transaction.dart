@@ -76,6 +76,7 @@ class Transaction {
   final String invoiceNumber;
   final String? customerId; 
   final String? customerName;
+  final String? cashierId;
   final String? cashierName;
   final double subtotal; 
   final double itemDiscountTotal; 
@@ -99,6 +100,7 @@ class Transaction {
     required this.invoiceNumber,
     this.customerId,
     this.customerName,
+    this.cashierId,
     this.cashierName,
     required this.subtotal,
     required this.itemDiscountTotal,
@@ -124,6 +126,7 @@ class Transaction {
         invoiceNumber:      m['invoice_number'] as String,
         customerId:         m['customer_id'] as String?,
         customerName:       m['customer_name'] as String?,
+        cashierId:          m['cashier_id'] as String?,
         cashierName:        m['cashier_name'] as String?,
         subtotal:           (m['subtotal'] as num).toDouble(),
         itemDiscountTotal:  (m['item_discount_total'] as num? ?? 0).toDouble(),
@@ -148,6 +151,7 @@ class Transaction {
         'invoice_number':        invoiceNumber,
         'customer_id':           customerId,
         'customer_name':         customerName,
+        'cashier_id':            cashierId,
         'cashier_name':          cashierName,
         'subtotal':              subtotal,
         'item_discount_total':   itemDiscountTotal,

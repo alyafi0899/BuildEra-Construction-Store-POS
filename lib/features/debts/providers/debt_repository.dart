@@ -6,6 +6,8 @@ import '../models/customer.dart';
 import '../models/debt.dart';
 import '../models/debt_payment.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../auth/providers/active_cashier_provider.dart';
+import '../../settings/providers/settings_provider.dart';
 import '../../../core/sync/models/sync_task.dart';
 import '../../../core/sync/providers/sync_provider.dart';
 import '../../../core/sync/services/local_database.dart';
@@ -204,10 +206,26 @@ class DebtRepository {
     );
     await debtBox.put(debtId, updatedDebt.toMap());
 
+    final activeCashier = _ref.read(activeCashierProvider);
+    final activeCashierNotifier = _ref.read(activeCashierProvider.notifier);
+    final isMulti = activeCashierNotifier.isMultiCashierMode;
+    final settings = _ref.read(settingsProvider);
+
+    final cashierId = isMulti ? activeCashier.id : null;
+    final cashierName = isMulti
+        ? activeCashier.name
+        : (settings.ownerName.isEmpty ? 'Admin' : settings.ownerName);
+
     final payId = _uuid.v4();
     final payment = DebtPayment(
-      id: payId, debtId: debtId, customerId: customerId, 
-      amount: amount, createdAt: now, notes: notes,
+      id: payId,
+      debtId: debtId,
+      customerId: customerId,
+      amount: amount,
+      createdAt: now,
+      notes: notes,
+      cashierId: cashierId,
+      cashierName: cashierName,
     );
     await payBox.put(payId, payment.toMap());
 

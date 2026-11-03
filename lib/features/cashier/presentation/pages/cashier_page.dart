@@ -23,6 +23,8 @@ import 'scanner_page.dart';
 
 import '../../../../shared/widgets/product_detail_dialog.dart';
 import '../../../../core/localization/localization_provider.dart';
+import '../../../auth/providers/active_cashier_provider.dart';
+import '../widgets/cashier_selector_sheet.dart';
 
 class CashierPage extends ConsumerStatefulWidget {
   const CashierPage({super.key});
@@ -97,19 +99,59 @@ class _CashierPageState extends ConsumerState<CashierPage> {
     final category = ref.watch(productCategoryFilterProvider);
     final cart = ref.watch(cartProvider);
     final strings = ref.watch(appStringsProvider);
+    final activeCashier = ref.watch(activeCashierProvider);
+    final activeCashierNotifier = ref.read(activeCashierProvider.notifier);
+
+    if (activeCashierNotifier.isMultiCashierMode && !activeCashier.isSessionActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+          CashierSelectorSheet.show(context);
+        }
+      });
+    }
 
     Widget buildProductPanel({required bool compact}) => Column(
           children: [
             PageHeader(
               title: strings.cashierTitle,
               icon: Icons.point_of_sale_rounded,
-              actions: compact
-                  ? const []
-                  : [
-                      const SizedBox(width: 16),
-                      Text(Formatters.date(DateTime.now()),
-                          style: Theme.of(context).textTheme.bodyMedium),
-                    ],
+              actions: [
+                if (activeCashierNotifier.isMultiCashierMode) ...[
+                  InkWell(
+                    onTap: () async {
+                      activeCashierNotifier.endSession();
+                      await CashierSelectorSheet.show(context);
+                    },
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: AppTheme.accent.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: AppTheme.accent.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.person_pin_rounded, size: 14, color: AppTheme.accent),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Kasir: ${activeCashier.name}',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.accent),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.swap_horiz_rounded, size: 14, color: AppTheme.accent),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                if (!compact) ...[
+                  Text(Formatters.date(DateTime.now()),
+                      style: Theme.of(context).textTheme.bodyMedium),
+                ],
+              ],
             ),
             Container(
               padding: EdgeInsets.symmetric(

@@ -325,6 +325,7 @@ class SyncNotifier extends Notifier<SyncState> {
         'debt_payments',
         'transactions',
         'purchases',
+        'store_admins',
       ];
       const snapshotCollections = [
         'suppliers',

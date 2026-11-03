@@ -18,6 +18,8 @@ import '../../../settings/models/store_settings.dart';
 import 'package:printing/printing.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../shared/widgets/security_gate.dart';
+import '../../../auth/providers/active_cashier_provider.dart';
+import '../../../auth/providers/store_admins_provider.dart';
 import '../../../../core/sync/providers/initial_sync_provider.dart';
 
 class TransactionsPage extends ConsumerStatefulWidget {
@@ -34,6 +36,7 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
   final _searchFocus = FocusNode(); // New
   String _search = '';
   String? _methodFilter;
+  String? _cashierFilter;
   bool? _debtPaidFilter; // null = all, true = lunas, false = belum lunas
 
   @override
@@ -94,7 +97,9 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
                           }),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
+                      _buildCashierDropdown(),
+                      const SizedBox(width: 8),
                       _buildMethodDropdown(),
                     ],
                   ),
@@ -138,7 +143,10 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
                             .contains(_search.toLowerCase());
                     final matchMethod = _methodFilter == null ||
                         t.paymentMethod == _methodFilter;
-                    return matchSearch && matchMethod;
+                    final matchCashier = _cashierFilter == null ||
+                        t.cashierName == _cashierFilter ||
+                        t.cashierId == _cashierFilter;
+                    return matchSearch && matchMethod && matchCashier;
                   }).toList();
 
                   if (filtered.isEmpty) {
@@ -237,6 +245,47 @@ class _TransactionsPageState extends ConsumerState<TransactionsPage> {
                   ),
               ],
             ),
+    );
+  }
+
+  Widget _buildCashierDropdown() {
+    final admins = ref.watch(storeAdminsProvider).value ?? [];
+    final settings = ref.watch(settingsProvider);
+    final ownerName = settings.ownerName.isEmpty ? 'Pemilik' : settings.ownerName;
+
+    return Container(
+      width: 140,
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceAlt,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String?>(
+          value: _cashierFilter,
+          isExpanded: true,
+          hint: const Text('Semua Kasir', style: TextStyle(fontSize: 12)),
+          dropdownColor: AppTheme.surfaceAlt,
+          items: [
+            const DropdownMenuItem(
+              value: null,
+              child: Text('Semua Kasir', style: TextStyle(fontSize: 12)),
+            ),
+            DropdownMenuItem(
+              value: ownerName,
+              child: Text(ownerName, style: const TextStyle(fontSize: 12)),
+            ),
+            for (final admin in admins)
+              DropdownMenuItem(
+                value: admin.name,
+                child: Text(admin.name, style: const TextStyle(fontSize: 12)),
+              ),
+          ],
+          onChanged: (v) => setState(() => _cashierFilter = v),
+        ),
+      ),
     );
   }
 
@@ -449,6 +498,11 @@ class _TxDetailState extends ConsumerState<_TxDetail> {
                   const Spacer(),
                   IconButton(
                     onPressed: () async {
+                      final activeCashier = ref.read(activeCashierProvider);
+                      if (!activeCashier.canVoid) {
+                        showError(context, 'Kasir ini tidak memiliki izin melakukan void / hapus transaksi');
+                        return;
+                      }
                       final ok = await showConfirmDialog(context,
                           title: 'Hapus Transaksi',
                           content:

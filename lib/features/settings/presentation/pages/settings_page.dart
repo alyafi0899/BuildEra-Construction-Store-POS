@@ -23,6 +23,7 @@ import '../../../products/providers/product_provider.dart';
 import '../../../payment/providers/transaction_provider.dart';
 import '../../../inventory/providers/restock_provider.dart';
 import '../../../inventory/providers/bill_payment_provider.dart';
+import 'manage_admins_page.dart';
 import '../../../debts/providers/debt_repository.dart';
 import '../../../../core/localization/app_language.dart';
 import '../../../../core/localization/localization_provider.dart';
@@ -1461,69 +1462,91 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final hasPin =
         settings.securityPin != null && settings.securityPin!.length >= 4;
 
-    return AppCard(
-      child: Column(
-        children: [
-          ListTile(
-            leading: Icon(hasPin ? Icons.lock_rounded : Icons.lock_open_rounded,
-                color: hasPin ? AppTheme.success : AppTheme.warning),
-            title: Text(
-                hasPin ? 'PIN Keamanan Aktif' : 'PIN Keamanan Belum Diatur'),
-            subtitle: Text(hasPin
-                ? 'Gunakan PIN untuk membatasi akses fitur sensitif'
-                : 'Atur PIN agar data toko lebih aman'),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (hasPin)
-                  TextButton(
-                    onPressed: _showForgotPinDialog,
-                    child: const Text('LUPA PIN?',
-                        style: TextStyle(color: AppTheme.danger, fontSize: 12)),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppCard(
+          child: Column(
+            children: [
+              ListTile(
+                leading: Icon(hasPin ? Icons.lock_rounded : Icons.lock_open_rounded,
+                    color: hasPin ? AppTheme.success : AppTheme.warning),
+                title: Text(
+                    hasPin ? 'PIN Keamanan Aktif' : 'PIN Keamanan Belum Diatur'),
+                subtitle: Text(hasPin
+                    ? 'Gunakan PIN untuk membatasi akses fitur sensitif'
+                    : 'Atur PIN agar data toko lebih aman'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (hasPin)
+                      TextButton(
+                        onPressed: _showForgotPinDialog,
+                        child: const Text('LUPA PIN?',
+                            style: TextStyle(color: AppTheme.danger, fontSize: 12)),
+                      ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () => _showPinDialog(hasPin),
+                      child: Text(hasPin ? 'UBAH PIN' : 'BUAT PIN'),
+                    ),
+                  ],
+                ),
+              ),
+              if (hasPin) ...[
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      _buildPageLockToggle(
+                        label: 'Proteksi Halaman Analitik',
+                        subtitle: 'Minta PIN saat membuka dashboard analitik',
+                        value: settings.lockAnalyticsPage,
+                        onChanged: (v) => _updatePageLock(
+                            () => settings.copyWith(lockAnalyticsPage: v)),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildPageLockToggle(
+                        label: 'Proteksi Halaman Produk',
+                        subtitle: 'Minta PIN saat mengelola stok & harga produk',
+                        value: settings.lockProductsPage,
+                        onChanged: (v) => _updatePageLock(
+                            () => settings.copyWith(lockProductsPage: v)),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildPageLockToggle(
+                        label: 'Proteksi Halaman Inventory',
+                        subtitle: 'Minta PIN saat membuka halaman inventory',
+                        value: settings.lockInventoryPage,
+                        onChanged: (v) => _updatePageLock(
+                            () => settings.copyWith(lockInventoryPage: v)),
+                      ),
+                    ],
                   ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: () => _showPinDialog(hasPin),
-                  child: Text(hasPin ? 'UBAH PIN' : 'BUAT PIN'),
                 ),
               ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        AppCard(
+          child: ListTile(
+            leading: const Icon(Icons.people_alt_rounded, color: AppTheme.accent),
+            title: const Text('Kelola Admin / Kasir', style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: const Text('Atur daftar kasir, PIN, dan izin transaksi'),
+            trailing: ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ManageAdminsPage()),
+                );
+              },
+              child: const Text('KELOLA ADMIN'),
             ),
           ),
-          if (hasPin) ...[
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  _buildPageLockToggle(
-                    label: 'Proteksi Halaman Analitik',
-                    subtitle: 'Minta PIN saat membuka dashboard analitik',
-                    value: settings.lockAnalyticsPage,
-                    onChanged: (v) => _updatePageLock(
-                        () => settings.copyWith(lockAnalyticsPage: v)),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildPageLockToggle(
-                    label: 'Proteksi Halaman Produk',
-                    subtitle: 'Minta PIN saat mengelola stok & harga produk',
-                    value: settings.lockProductsPage,
-                    onChanged: (v) => _updatePageLock(
-                        () => settings.copyWith(lockProductsPage: v)),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildPageLockToggle(
-                    label: 'Proteksi Halaman Inventory',
-                    subtitle: 'Minta PIN saat membuka halaman inventory',
-                    value: settings.lockInventoryPage,
-                    onChanged: (v) => _updatePageLock(
-                        () => settings.copyWith(lockInventoryPage: v)),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
+        ),
+      ],
     );
   }
 
