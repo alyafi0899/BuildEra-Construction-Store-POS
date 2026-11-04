@@ -8,6 +8,29 @@ https://github.com/alyafi0899/BuildEra-Construction-Store-POS-Open-Source-Yall/r
 
 ---
 
+## 👥 Multi-Cashier & Admin Management System (New in v1.2.3)
+Manage multiple store cashiers with robust security and granular action permissions:
+- **Hash & Salt PIN Security**: Admin PINs are cryptographically hashed using PBKDF2-HMAC-SHA256 (20,000 iterations) with random 16-byte salts and constant-time verification.
+- **Auto-Lock Sessions**: Inactive sessions automatically lock after a configurable period (15 / 30 / 60 minutes) or upon closing the app.
+- **Granular Action Permissions**: Assign individual permissions to cashiers (`canEditPrice`, `canGiveDiscount`, `canVoid`). Disallowed actions are locked in real-time.
+- **Cashier Sales Attribution**: Active cashier names and IDs are snapshot onto every receipt and transaction record for accurate accountability.
+
+### 🗄️ Supabase Migration Setup
+To apply the multi-cashier database migration to your Supabase project:
+```bash
+supabase db push
+```
+Or run the migration file directly in the Supabase SQL Editor:
+`supabase/migrations/20261022000000_create_store_admins_table.sql`
+
+**Verification Queries**:
+```sql
+SELECT count(*) FROM public.store_admins;
+SELECT column_name FROM information_schema.columns WHERE table_name = 'transactions' AND column_name = 'cashier_id';
+```
+
+---
+
 ## 🔒 Advanced Security System (New in v1.2.0)
 Security is no longer an afterthought. BuildEra now features a multi-layered protection system:
 - **Enforced PIN Setup**: New users are required to configure a Security PIN immediately after registration/verification to protect sensitive store data.
@@ -75,5 +98,5 @@ BuildEra is now rigorously optimized for older hardware (Old POS PCs/Monitors) c
 ---
 
 **Developed by**: **Al Yafi**
-- **Version**: 1.2.0 (High-Performance Stable)
-- **Status**: Production Ready for Windows Desktop
+- **Version**: 1.2.3 (Multi-Cashier & AdMob Release)
+- **Status**: Production Ready

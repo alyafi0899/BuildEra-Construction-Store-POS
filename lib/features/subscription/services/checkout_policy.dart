@@ -27,6 +27,7 @@ class CheckoutPolicy {
     required Entitlement entitlement,
     required List<Transaction> todayTransactions,
     required DateTime currentJakartaTime,
+    int bonusTransactions = 0,
   }) {
     // 1. Premium users have unlimited checkout capabilities
     if (entitlement.isPremium) {
@@ -43,20 +44,22 @@ class CheckoutPolicy {
     }
 
     // 3. Check daily transactions limit
-    final maxDaily = entitlement.maxTransactionsPerDay;
-    if (maxDaily != null) {
+    final baseMaxDaily = entitlement.maxTransactionsPerDay;
+    if (baseMaxDaily != null) {
+      final effectiveMax = baseMaxDaily + bonusTransactions;
+
       // Filter transactions that occurred on the same Asia/Jakarta day
       final countToday = todayTransactions.where((t) {
         final tJakarta = t.createdAt.toUtc().add(const Duration(hours: 7));
         return TrustedTimeHelper.isSameJakartaDay(tJakarta, currentJakartaTime);
       }).length;
 
-      final remaining = maxDaily - countToday;
+      final remaining = effectiveMax - countToday;
 
       if (remaining <= 0) {
         return CheckoutPolicyResult(
           allowed: false,
-          reason: 'Limit $maxDaily Transaksi Hari Ini',
+          reason: 'Limit $effectiveMax Transaksi Hari Ini',
           remainingDailyTransactions: 0,
         );
       }

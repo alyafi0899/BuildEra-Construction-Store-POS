@@ -5,6 +5,15 @@ class EntitlementConfig {
   /// Maximum allowed transactions per day for the free tier
   static const int freeMaxTransactionsPerDay = 10;
 
+  /// Reward bonus transactions granted per ad
+  static const int rewardBonusTransactions = 10;
+
+  /// Duration of reward bonus (6 hours)
+  static const Duration rewardBonusDuration = Duration(hours: 6);
+
+  /// Maximum reward claims allowed per calendar day
+  static const int maxRewardsPerDay = 3;
+
   /// Offline grace period tolerance for active paid entitlements (72 hours)
   static const int offlineToleranceHours = 72;
 

@@ -14,7 +14,8 @@ import '../../providers/cart_focus_provider.dart';
 import 'payment_dialog.dart';
 import '../../../subscription/providers/subscription_provider.dart';
 import '../../../subscription/services/checkout_policy.dart';
-import '../../../subscription/presentation/pages/subscription_page.dart';
+import '../../../subscription/providers/bonus_quota_provider.dart';
+import '../../../../core/ads/presentation/widgets/reward_ad_dialog.dart';
 import '../../../../core/utils/trusted_time_helper.dart';
 import '../../../../shared/models/transaction.dart';
 import '../../../../core/localization/localization_provider.dart';
@@ -622,6 +623,7 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
               final entitlement = ref.watch(entitlementProvider);
               final cart = ref.watch(cartProvider);
               final transactionsAsync = ref.watch(transactionsProvider);
+              final bonusQuota = ref.watch(bonusQuotaProvider);
               final todayTransactions =
                   transactionsAsync.value ?? <Transaction>[];
               final nowJakarta = TrustedTimeHelper.nowJakarta();
@@ -631,6 +633,7 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
                 entitlement: entitlement,
                 todayTransactions: todayTransactions,
                 currentJakartaTime: nowJakarta,
+                bonusTransactions: bonusQuota.activeBonusAmount,
               );
 
               final error = policyResult.allowed ? null : policyResult.reason;
@@ -639,7 +642,19 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (entitlement.isFree &&
+                  if (bonusQuota.isActive) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text(
+                        'Bonus +10 aktif sampai ${Formatters.time(bonusQuota.expiresAtUtc?.toLocal() ?? DateTime.now())}',
+                        style: const TextStyle(
+                          color: AppTheme.success,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ] else if (entitlement.isFree &&
                       policyResult.allowed &&
                       remainingQuota <= 3) ...[
                     Padding(
@@ -659,14 +674,10 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
                       padding: const EdgeInsets.only(bottom: 6),
                       child: InkWell(
                         onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => const SubscriptionPage()),
-                          );
+                          LimitReachedSheet.show(context);
                         },
                         child: Text(
-                          '$error — Klik untuk Upgrade',
+                          '$error — Klik untuk Opsi Tambahan / Upgrade',
                           style: const TextStyle(
                             color: AppTheme.danger,
                             fontSize: 11,
@@ -682,7 +693,11 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
                     height: 52,
                     child: ElevatedButton.icon(
                       onPressed: (isEmpty || error != null)
-                          ? null
+                          ? () {
+                              if (error != null) {
+                                LimitReachedSheet.show(context);
+                              }
+                            }
                           : () async {
                               final resolvedEntitlement = await ref
                                   .read(entitlementProvider.notifier)
@@ -693,35 +708,20 @@ class _CartTotalsSectionState extends ConsumerState<_CartTotalsSection> {
                                   await repo.getAllTransactions();
                               final currentJakartaTime =
                                   TrustedTimeHelper.nowJakarta();
+                              final currentBonusQuota =
+                                  ref.read(bonusQuotaProvider);
 
                               final check = CheckoutPolicy.canCheckout(
                                 cart: cart,
                                 entitlement: resolvedEntitlement,
                                 todayTransactions: allTransactions,
                                 currentJakartaTime: currentJakartaTime,
+                                bonusTransactions: currentBonusQuota.activeBonusAmount,
                               );
 
                               if (!check.allowed) {
                                 if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(check.reason ??
-                                          'Limit transaksi tercapai.'),
-                                      backgroundColor: AppTheme.danger,
-                                      action: SnackBarAction(
-                                        label: 'UPGRADE',
-                                        textColor: Colors.white,
-                                        onPressed: () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                                builder: (_) =>
-                                                    const SubscriptionPage()),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  );
+                                  LimitReachedSheet.show(context);
                                 }
                                 return;
                               }

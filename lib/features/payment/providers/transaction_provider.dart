@@ -17,6 +17,7 @@ import '../../debts/providers/debt_repository.dart';
 import '../../debts/models/debt.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../subscription/providers/bonus_quota_provider.dart';
 import '../../../core/sync/models/sync_task.dart';
 import '../../subscription/providers/subscription_provider.dart';
 import '../../subscription/services/checkout_policy.dart';
@@ -166,12 +167,14 @@ class TransactionRepository {
     final entitlement = await _ref.read(entitlementProvider.notifier).ensureResolved();
     final allTransactions = await getAllTransactions();
     final currentJakartaTime = TrustedTimeHelper.nowJakarta();
+    final bonusQuota = _ref.read(bonusQuotaProvider);
 
     final policyResult = CheckoutPolicy.canCheckout(
       cart: cart,
       entitlement: entitlement,
       todayTransactions: allTransactions,
       currentJakartaTime: currentJakartaTime,
+      bonusTransactions: bonusQuota.activeBonusAmount,
     );
 
     if (!policyResult.allowed) {
