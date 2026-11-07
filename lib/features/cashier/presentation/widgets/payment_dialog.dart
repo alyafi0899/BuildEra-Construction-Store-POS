@@ -431,20 +431,18 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
       // Header
       _header(context),
 
-      // Body — 3-column horizontal layout
+      // Body — 2-column horizontal layout
       Flexible(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            if (constraints.maxWidth < 850) {
+            if (constraints.maxWidth < 800) {
               return SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _orderSummary(context, cart),
-                    const Divider(height: 32),
-                    _methodSection(context),
-                    const Divider(height: 32),
+                    const Divider(height: 28),
                     _paymentPanel(context, cart, change),
                   ],
                 ),
@@ -456,7 +454,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Expanded(
-                    flex: 3,
+                    flex: 4,
                     child: Scrollbar(
                       controller: _scrollController,
                       thumbVisibility: true,
@@ -469,15 +467,7 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
                   ),
                   const VerticalDivider(width: 1, color: AppTheme.border),
                   Expanded(
-                    flex: 2,
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
-                      child: _methodSection(context),
-                    ),
-                  ),
-                  const VerticalDivider(width: 1, color: AppTheme.border),
-                  Expanded(
-                    flex: 4,
+                    flex: 5,
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.all(24),
                       child: _paymentPanel(context, cart, change),
@@ -499,76 +489,75 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Metode Pembayaran',
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(color: AppTheme.accent)),
-        const SizedBox(height: 16),
-        ...AppConstants.paymentMethods.map((m) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _methodTileWide(context, m),
-            )),
-      ],
-    );
-  }
-
-  Widget _methodTileWide(BuildContext context, String m) {
-    final active = _method == m;
-    return InkWell(
-      onTap: () => setState(() {
-        _method = m;
-        if (_method != AppConstants.paymentCash &&
-            _method != AppConstants.paymentPiutang) {
-          _amountCtrl.clear();
-        }
-      }),
-      borderRadius: BorderRadius.circular(12),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: active ? AppTheme.accent : AppTheme.surfaceAlt,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-              color: active ? AppTheme.accent : AppTheme.border, width: 1.5),
-          boxShadow: active
-              ? [
-                  BoxShadow(
-                      color: AppTheme.accent.withValues(alpha: 0.2),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4))
-                ]
-              : null,
+        Text(
+          'Metode Pembayaran',
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(color: AppTheme.accent),
         ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color:
-                    active ? Colors.white.withValues(alpha: 0.2) : AppTheme.bg,
-                borderRadius: BorderRadius.circular(8),
+        const SizedBox(height: 10),
+        DropdownButtonFormField<String>(
+          initialValue: _method,
+          isExpanded: true,
+          dropdownColor: AppTheme.surfaceAlt,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: AppTheme.surfaceAlt,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppTheme.border),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppTheme.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppTheme.accent, width: 2),
+            ),
+          ),
+          items: AppConstants.paymentMethods.map((m) {
+            return DropdownMenuItem<String>(
+              value: m,
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Icon(_icon(m), size: 18, color: AppTheme.accent),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    m,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
               ),
-              child: Icon(_icon(m),
-                  color: active ? Colors.white : AppTheme.textSecondary,
-                  size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(m,
-                  style: TextStyle(
-                    color: active ? Colors.white : AppTheme.textPrimary,
-                    fontWeight: active ? FontWeight.w900 : FontWeight.w600,
-                    fontSize: 14,
-                  )),
-            ),
-            if (active)
-              const Icon(Icons.check_circle_rounded,
-                  color: Colors.white, size: 20),
-          ],
+            );
+          }).toList(),
+          onChanged: (v) {
+            if (v != null) {
+              setState(() {
+                _method = v;
+                if (_method != AppConstants.paymentCash &&
+                    _method != AppConstants.paymentPiutang) {
+                  _amountCtrl.clear();
+                }
+              });
+            }
+          },
         ),
-      ),
+      ],
     );
   }
 
@@ -697,6 +686,8 @@ class _PaymentDialogState extends ConsumerState<PaymentDialog> {
     final finalTotal = cart.total + _shippingFee;
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _methodSection(context),
+      const SizedBox(height: 16),
       if (_method == AppConstants.paymentCash ||
           _method == AppConstants.paymentPiutang) ...[
         if (_method == AppConstants.paymentPiutang) ...[
